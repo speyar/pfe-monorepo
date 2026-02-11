@@ -10,13 +10,22 @@
         "typescript": "5.9.2",
       },
     },
+    "packages/github-api": {
+      "name": "@packages/github-api",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@pfe-monorepo/typescript-config": "workspace:*",
+      },
+    },
     "packages/typescript-config": {
-      "name": "@repo/typescript-config",
+      "name": "@pfe-monorepo/typescript-config",
       "version": "0.0.0",
     },
   },
   "packages": {
-    "@repo/typescript-config": ["@repo/typescript-config@workspace:packages/typescript-config"],
+    "@packages/github-api": ["@packages/github-api@workspace:packages/github-api"],
+
+    "@pfe-monorepo/typescript-config": ["@pfe-monorepo/typescript-config@workspace:packages/typescript-config"],
 
     "prettier": ["prettier@3.8.1", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-UOnG6LftzbdaHZcKoPFtOcCKztrQ57WkHDeRD9t/PTQtmT0NHSeWWepj6pS0z/N7+08BHFDQVUrfmfMRcZwbMg=="],
 
