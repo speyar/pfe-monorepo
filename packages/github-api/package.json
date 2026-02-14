@@ -1,9 +1,31 @@
 {
-  "name": "@packages/github-api",
+  "name": "@pfe-monorepo/github-api",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
-  "description": "",
+  "description": "GitHub API primitives for agent packages",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@octokit/app": "^16.1.0",
+    "@octokit/rest": "^22.0.0"
+  },
   "devDependencies": {
-    "@pfe-monorepo/typescript-config": "workspace:*"
+    "@pfe-monorepo/typescript-config": "workspace:*",
+    "vitest": "^3.2.4"
   }
 }
