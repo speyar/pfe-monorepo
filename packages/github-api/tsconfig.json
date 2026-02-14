@@ -1,4 +1,10 @@
 {
   "extends": "@pfe-monorepo/typescript-config/base.json",
-  "exclude": ["node_modules","dist"]
+  "compilerOptions": {
+    "types": ["node"],
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
