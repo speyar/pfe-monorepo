@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "@pfe-monorepo/typescript-config": "workspace:*"
+  },
+  "dependencies": {
+    "@vercel/sandbox": "^1.5.0"
   }
 }
