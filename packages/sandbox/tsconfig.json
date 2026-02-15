@@ -1,4 +1,7 @@
 {
   "extends": "@pfe-monorepo/typescript-config/base.json",
+  "compilerOptions": {
+    "types": ["bun"]
+  },
   "exclude": ["node_modules", "dist"]
 }
