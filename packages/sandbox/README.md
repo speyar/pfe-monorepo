@@ -27,9 +27,13 @@ API-first sandbox management library with a process-local singleton manager, pro
 ## Usage
 
 ```ts
-import { SandboxManager, type SandboxProvider, type SandboxStore } from "@packages/sandbox";
+import {
+  SandboxManager,
+  VercelSandboxProvider,
+  type SandboxStore,
+} from "@packages/sandbox";
 
-const provider: SandboxProvider = /* your Vercel adapter */ null as never;
+const provider = new VercelSandboxProvider();
 const store: SandboxStore = /* your DB adapter */ null as never;
 
 const manager = SandboxManager.getInstance({ provider, store });
@@ -44,6 +48,19 @@ const sandbox = await manager.createSandbox({
 await manager.runCommand({ sandboxId: sandbox.id, command: "npm test" });
 ```
 
+## Vercel adapter
+
+- Class: `VercelSandboxProvider`
+- SDK package: `@vercel/sandbox`
+- Auth modes:
+  - Recommended: `VERCEL_OIDC_TOKEN` (Vercel-managed flow)
+  - Access token mode: provide `token`, `projectId`, `teamId` together (constructor or env vars)
+- Supported env vars for token mode fallback:
+  - `VERCEL_TOKEN`
+  - `VERCEL_PROJECT_ID`
+  - `VERCEL_TEAM_ID`
+- `runCommand({ detached: true })` is intentionally rejected in current generic contract because manager result type is synchronous (`stdout`, `stderr`, `exitCode`).
+
 ## Error handling
 
 - Manager normalizes operation errors into typed `SandboxError` derivatives.
@@ -52,5 +69,5 @@ await manager.runCommand({ sandboxId: sandbox.id, command: "npm test" });
 
 ## Notes
 
-- This package intentionally does not include a concrete Vercel/Cloudflare adapter implementation yet.
+- `VercelSandboxProvider` is now included as the first concrete adapter.
 - Adapter implementations should map provider-native states into `SandboxLifecycleState` and preserve provider metadata.
