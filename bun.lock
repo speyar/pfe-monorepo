@@ -17,6 +17,13 @@
         "@pfe-monorepo/typescript-config": "workspace:*",
       },
     },
+    "packages/sandbox": {
+      "name": "@packages/sandbox",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@pfe-monorepo/typescript-config": "workspace:*",
+      },
+    },
     "packages/typescript-config": {
       "name": "@pfe-monorepo/typescript-config",
       "version": "0.0.0",
@@ -24,6 +31,8 @@
   },
   "packages": {
     "@packages/github-api": ["@packages/github-api@workspace:packages/github-api"],
+
+    "@packages/sandbox": ["@packages/sandbox@workspace:packages/sandbox"],
 
     "@pfe-monorepo/typescript-config": ["@pfe-monorepo/typescript-config@workspace:packages/typescript-config"],
 
