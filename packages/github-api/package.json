@@ -4,6 +4,7 @@
   "type": "module",
   "description": "",
   "devDependencies": {
-    "@pfe-monorepo/typescript-config": "workspace:*"
+    "@pfe-monorepo/typescript-config": "workspace:*",
+    "vitest": "catalog:"
   }
 }

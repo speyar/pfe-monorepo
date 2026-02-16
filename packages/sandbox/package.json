@@ -13,7 +13,7 @@
   "devDependencies": {
     "@pfe-monorepo/typescript-config": "workspace:*",
     "@types/bun": "^1.3.9",
-    "vitest": "^3.0.0"
+    "vitest": "catalog:"
   },
   "dependencies": {
     "@vercel/sandbox": "^1.5.0"
