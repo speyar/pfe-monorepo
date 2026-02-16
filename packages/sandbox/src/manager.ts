@@ -17,6 +17,7 @@ import {
 } from "./errors";
 import type { SandboxProvider } from "./provider";
 import type { SandboxStore } from "./store";
+import { sleep } from "./helpers";
 
 export interface SandboxManagerLogger {
   info(message: string, context?: Record<string, unknown>): void;
@@ -127,7 +128,9 @@ export class SandboxManager {
     );
   }
 
-  public async createSandbox(input: CreateSandboxInput): Promise<ManagedSandbox> {
+  public async createSandbox(
+    input: CreateSandboxInput,
+  ): Promise<ManagedSandbox> {
     await this.init();
 
     const sandbox = await this.executeWithRetry(
@@ -178,7 +181,9 @@ export class SandboxManager {
     return sandbox;
   }
 
-  public async extendTimeout(input: ExtendTimeoutInput): Promise<ManagedSandbox> {
+  public async extendTimeout(
+    input: ExtendTimeoutInput,
+  ): Promise<ManagedSandbox> {
     await this.init();
 
     const sandbox = await this.executeWithRetry(
@@ -218,7 +223,10 @@ export class SandboxManager {
         ]);
       }
 
-      await this.reconcileOnInit(providerActiveSandboxes, persistedActiveSandboxes);
+      await this.reconcileOnInit(
+        providerActiveSandboxes,
+        persistedActiveSandboxes,
+      );
       this.initialized = true;
       this.logger.info("SandboxManager initialized", {
         activeCount: providerActiveSandboxes.length,
@@ -338,7 +346,11 @@ export class SandboxManager {
   ): Promise<T> {
     let lastError: unknown;
 
-    for (let attempt = 1; attempt <= this.retryPolicy.maxAttempts; attempt += 1) {
+    for (
+      let attempt = 1;
+      attempt <= this.retryPolicy.maxAttempts;
+      attempt += 1
+    ) {
       try {
         return await operation();
       } catch (error) {
@@ -364,20 +376,32 @@ export class SandboxManager {
     throw this.normalizeOperationError(lastError, operationName);
   }
 
-  private normalizeOperationError(error: unknown, operationName: string): Error {
+  private normalizeOperationError(
+    error: unknown,
+    operationName: string,
+  ): Error {
     if (error instanceof SandboxError) {
       return error;
     }
 
     const status = (error as { status?: number })?.status;
     const message =
-      error instanceof Error ? error.message : `Unknown failure in ${operationName}`;
+      error instanceof Error
+        ? error.message
+        : `Unknown failure in ${operationName}`;
 
     if (status === 408) {
-      return new TimeoutError(`Timeout while trying to ${operationName}.`, error);
+      return new TimeoutError(
+        `Timeout while trying to ${operationName}.`,
+        error,
+      );
     }
 
-    return new SandboxError(`Failed to ${operationName}: ${message}`, "OPERATION_FAILED", error);
+    return new SandboxError(
+      `Failed to ${operationName}: ${message}`,
+      "OPERATION_FAILED",
+      error,
+    );
   }
 
   private calculateDelay(attempt: number): number {
@@ -386,10 +410,4 @@ export class SandboxManager {
     const jitter = Math.floor(Math.random() * 100);
     return capped + jitter;
   }
-}
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }

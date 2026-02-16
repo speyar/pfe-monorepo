@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import type {
   CreateSandboxInput,
@@ -111,7 +111,9 @@ class FakeStore implements SandboxStore {
     return this.persisted.find((item) => item.id === sandboxId) ?? null;
   }
 
-  async listByStates(states: SandboxLifecycleState[]): Promise<ManagedSandbox[]> {
+  async listByStates(
+    states: SandboxLifecycleState[],
+  ): Promise<ManagedSandbox[]> {
     return this.persisted.filter((item) => states.includes(item.state));
   }
 
@@ -135,22 +137,32 @@ describe("SandboxManager", () => {
 
   it("initializes once and lists provider active sandboxes", async () => {
     const provider = new FakeProvider();
-    provider.sandboxes = [createSandboxFixture({ id: "sb-1", state: "running" })];
+    provider.sandboxes = [
+      createSandboxFixture({ id: "sb-1", state: "running" }),
+    ];
 
     const manager = SandboxManager.getInstance({ provider });
     await manager.init();
     await manager.init();
 
     expect(provider.listCalls).toBe(1);
-    expect(manager.listActiveSandboxes().map((item) => item.id)).toEqual(["sb-1"]);
+    expect(manager.listActiveSandboxes().map((item) => item.id)).toEqual([
+      "sb-1",
+    ]);
   });
 
   it("reconciles provider and persisted active sandboxes on init", async () => {
     const provider = new FakeProvider();
-    provider.sandboxes = [createSandboxFixture({ id: "provider-1", state: "running" })];
+    provider.sandboxes = [
+      createSandboxFixture({ id: "provider-1", state: "running" }),
+    ];
 
     const store = new FakeStore([
-      createSandboxFixture({ id: "provider-1", state: "running", ownerId: "u-1" }),
+      createSandboxFixture({
+        id: "provider-1",
+        state: "running",
+        ownerId: "u-1",
+      }),
       createSandboxFixture({ id: "persisted-only", state: "running" }),
     ]);
 
@@ -160,7 +172,8 @@ describe("SandboxManager", () => {
     expect(store.upserts.map((item) => item.id)).toContain("provider-1");
     expect(
       store.stateChanges.some(
-        (item) => item.sandboxId === "persisted-only" && item.state === "stopped",
+        (item) =>
+          item.sandboxId === "persisted-only" && item.state === "stopped",
       ),
     ).toBe(true);
 
@@ -197,7 +210,9 @@ describe("SandboxManager", () => {
 
   it("returns cached sandbox when refresh=false", async () => {
     const provider = new FakeProvider();
-    provider.sandboxes = [createSandboxFixture({ id: "sb-cache", state: "running" })];
+    provider.sandboxes = [
+      createSandboxFixture({ id: "sb-cache", state: "running" }),
+    ];
 
     const manager = SandboxManager.getInstance({ provider });
     await manager.init();
@@ -213,7 +228,9 @@ describe("SandboxManager", () => {
     };
 
     const manager = SandboxManager.getInstance({ provider });
-    await expect(manager.createSandbox({})).rejects.toBeInstanceOf(SandboxError);
+    await expect(manager.createSandbox({})).rejects.toBeInstanceOf(
+      SandboxError,
+    );
   });
 });
 

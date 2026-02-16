@@ -8,11 +8,12 @@
   },
   "scripts": {
     "check-types": "tsc --noEmit",
-    "test": "bun test src/**/*.test.ts"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@pfe-monorepo/typescript-config": "workspace:*",
-    "@types/bun": "^1.3.9"
+    "@types/bun": "^1.3.9",
+    "vitest": "^3.0.0"
   },
   "dependencies": {
     "@vercel/sandbox": "^1.5.0"

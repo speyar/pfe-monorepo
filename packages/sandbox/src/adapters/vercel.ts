@@ -49,7 +49,9 @@ export class VercelSandboxProvider implements SandboxProvider {
     this.credentials = resolveCredentials(options.credentials);
   }
 
-  public async createSandbox(input: CreateSandboxInput): Promise<ManagedSandbox> {
+  public async createSandbox(
+    input: CreateSandboxInput,
+  ): Promise<ManagedSandbox> {
     try {
       const sandbox = await Sandbox.create({
         ...this.credentials,
@@ -89,7 +91,9 @@ export class VercelSandboxProvider implements SandboxProvider {
     }
   }
 
-  public async listSandboxes(input?: ListSandboxesInput): Promise<ManagedSandbox[]> {
+  public async listSandboxes(
+    input?: ListSandboxesInput,
+  ): Promise<ManagedSandbox[]> {
     try {
       const response = await Sandbox.list({
         ...this.credentials,
@@ -128,7 +132,9 @@ export class VercelSandboxProvider implements SandboxProvider {
     }
   }
 
-  public async extendTimeout(input: ExtendTimeoutInput): Promise<ManagedSandbox> {
+  public async extendTimeout(
+    input: ExtendTimeoutInput,
+  ): Promise<ManagedSandbox> {
     try {
       const sandbox = await Sandbox.get({
         ...this.credentials,
@@ -201,6 +207,7 @@ function resolveCredentials(
   return { token, projectId, teamId };
 }
 
+// TODO: we'll later have a unified way to access ENV variables, remember to edit this later
 function getEnv(name: string): string | undefined {
   const maybeProcess = globalThis as {
     process?: {
@@ -240,19 +247,17 @@ function mapLiveSandbox(
   };
 }
 
-function mapSandboxSummary(
-  sandbox: {
-    id: string;
-    status: VercelSandboxStatus;
-    createdAt: number;
-    updatedAt: number;
-    runtime: string;
-    timeout: number;
-    sourceSnapshotId?: string;
-    interactivePort?: number;
-    networkPolicy?: unknown;
-  },
-): ManagedSandbox {
+function mapSandboxSummary(sandbox: {
+  id: string;
+  status: VercelSandboxStatus;
+  createdAt: number;
+  updatedAt: number;
+  runtime: string;
+  timeout: number;
+  sourceSnapshotId?: string;
+  interactivePort?: number;
+  networkPolicy?: unknown;
+}): ManagedSandbox {
   return {
     id: sandbox.id,
     provider: "vercel",
@@ -298,11 +303,17 @@ function mapVercelError(error: unknown, operation: string): Error {
   if (error instanceof APIError) {
     const status = error.response.status;
     if (status === 401 || status === 403) {
-      return new AuthError(`Unauthorized to ${operation} in Vercel Sandbox.`, error);
+      return new AuthError(
+        `Unauthorized to ${operation} in Vercel Sandbox.`,
+        error,
+      );
     }
 
     if (status === 404) {
-      return new NotFoundError(`Sandbox resource not found while trying to ${operation}.`, error);
+      return new NotFoundError(
+        `Sandbox resource not found while trying to ${operation}.`,
+        error,
+      );
     }
 
     if (status === 408 || status === 504) {
@@ -310,7 +321,10 @@ function mapVercelError(error: unknown, operation: string): Error {
     }
 
     if (status === 429) {
-      return new RateLimitError(`Rate limited while trying to ${operation}.`, error);
+      return new RateLimitError(
+        `Rate limited while trying to ${operation}.`,
+        error,
+      );
     }
 
     return new SandboxError(
@@ -327,7 +341,10 @@ function mapVercelError(error: unknown, operation: string): Error {
 
     const message = error.message.toLowerCase();
     if (message.indexOf("oidc") >= 0 || message.indexOf("token") >= 0) {
-      return new AuthError(`Authentication error while trying to ${operation}.`, error);
+      return new AuthError(
+        `Authentication error while trying to ${operation}.`,
+        error,
+      );
     }
 
     return new SandboxError(
