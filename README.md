@@ -2,6 +2,11 @@
 
 This Turborepo starter is maintained by the Turborepo core team.
 
+## Workspace notes
+
+- `packages/github-api`: typed GitHub primitives used by future agent packages.
+	- See `packages/github-api/README.md` for API surface and usage.
+
 ## Using this example
 
 Run the following command:
