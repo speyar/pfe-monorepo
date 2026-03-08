@@ -1,7 +1,6 @@
 import { generateObject, type LanguageModel } from "ai";
 
 import type { ReviewRequest } from "../contracts/review-request";
-import type { ReviewResult } from "../contracts/review-result";
 import {
   buildReviewPrompt,
   DEFAULT_REVIEW_SYSTEM_PROMPT,
@@ -10,6 +9,7 @@ import { reviewResultSchema } from "../schema/review-result.schema";
 
 import { normalizeReviewRequest } from "./normalize-input";
 import { validateReviewResult } from "./validate-output";
+import { ReviewResult } from "../contracts/review-result";
 
 export interface RunReviewOptions {
   model: LanguageModel;

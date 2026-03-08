@@ -49,14 +49,3 @@ export {
   type SearchCodeInput,
   type SearchCodeMatch,
 } from "./tools/search-code";
-
-export {
-  type CreateReviewAgentOptions,
-  type ReviewAgent,
-  type RunReviewOptions,
-} from "./core/run-review";
-export {
-  DEFAULT_REVIEW_CONFIG,
-  type NormalizedReviewRequest,
-  type NormalizedReviewRequestConfig,
-} from "./core/normalize-input";

@@ -1,5 +1,4 @@
 import { z } from "zod";
-
 import { REVIEW_SEVERITIES, REVIEW_VERDICTS } from "../contracts/review-result";
 
 export const reviewFindingSchema = z.object({
