@@ -1,26 +1,31 @@
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createGitHubCopilotProvider } from "@ceira/github-sdk-provider";
 import type { LanguageModel } from "ai";
 
 import { ProviderConfigError } from "../errors/review-errors";
 
-export interface CreateGeminiReviewModelInput {
-  apiKey?: string;
+export interface CreateGitHubReviewModelInput {
+  githubToken?: string;
   model?: string;
+  useLoggedInUser?: boolean;
+  cliPath?: string;
 }
 
-export function createGeminiReviewModel(
-  input: CreateGeminiReviewModelInput = {},
+export function createGitHubReviewModel(
+  input: CreateGitHubReviewModelInput = {},
 ): LanguageModel {
-  const apiKey = input.apiKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!apiKey) {
+  const githubToken = process.env.COPILOT_GITHUB_TOKEN;
+
+  if (!githubToken && input.useLoggedInUser === false) {
     throw new ProviderConfigError(
-      "GOOGLE_GENERATIVE_AI_API_KEY is required to create Gemini review model.",
+      "Set COPILOT_GITHUB_TOKEN, or enable useLoggedInUser.",
     );
   }
 
-  const provider = createGoogleGenerativeAI({
-    apiKey,
+  const provider = createGitHubCopilotProvider({
+    githubToken,
+    useLoggedInUser: input.useLoggedInUser,
+    cliPath: input.cliPath,
   });
 
-  return provider(input.model ?? "gemini-2.0-flash");
+  return provider(input.model ?? "gpt-4.1");
 }
