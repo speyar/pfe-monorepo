@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
 import {
-  createGeminiReviewModel,
+  createGitHubReviewModel,
   runReview,
   type ReviewRequest,
 } from "../index";
@@ -26,7 +26,7 @@ function printUsage(): void {
     "Options:",
     "  --input <path>              Path to a ReviewRequest JSON file.",
     "  --file <path>               Path to a source file for ad-hoc review.",
-    "  --model <name>              Gemini model (default: gemini-2.0-flash).",
+    "  --model <name>              Copilot model (default: gpt-4.1).",
     "  --temperature <number>      Temperature between 0 and 2.",
     "  --max-output-tokens <int>   Max output tokens for model generation.",
     "  -h, --help                  Show this help message.",
@@ -192,7 +192,7 @@ async function main(): Promise<void> {
     : await loadRequest(args.inputPath ?? DEFAULT_INPUT_PATH);
 
   const result = await runReview(request, {
-    model: createGeminiReviewModel({ model: args.model }),
+    model: createGitHubReviewModel({ model: args.model }),
     temperature: args.temperature,
     maxOutputTokens: args.maxOutputTokens,
   });

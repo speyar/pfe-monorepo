@@ -1,0 +1,65 @@
+{
+  "repository": {
+    "owner": "acme",
+    "name": "demo-service",
+    "defaultBranch": "main"
+  },
+  "pullRequest": {
+    "number": 108,
+    "title": "Migrate review-agent provider from Gemini to GitHub Copilot",
+    "body": "Switches model provider, updates CLI/docs, and refreshes dependency graph.",
+    "baseSha": "1111111111111111111111111111111111111111",
+    "headSha": "2222222222222222222222222222222222222222",
+    "baseRef": "main",
+    "headRef": "feature/review-agent-copilot-migration"
+  },
+  "files": [
+    {
+      "path": "packages/review-agent/src/llm/provider.ts",
+      "status": "modified",
+      "language": "typescript",
+      "patch": "@@ -1,26 +1,31 @@\n-import { createGoogleGenerativeAI } from \"@ai-sdk/google\";\n+import { createGitHubCopilotProvider } from \"@ceira/github-sdk-provider\";\n import type { LanguageModel } from \"ai\";\n \n import { ProviderConfigError } from \"../errors/review-errors\";\n \n-export interface CreateGeminiReviewModelInput {\n-  apiKey?: string;\n+export interface CreateGitHubReviewModelInput {\n+  githubToken?: string;\n   model?: string;\n+  useLoggedInUser?: boolean;\n+  cliPath?: string;\n }\n \n-export function createGeminiReviewModel(\n-  input: CreateGeminiReviewModelInput = {},\n+export function createGitHubReviewModel(\n+  input: CreateGitHubReviewModelInput = {},\n ): LanguageModel {\n-  const apiKey = input.apiKey ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY;\n-  if (!apiKey) {\n+  const githubToken = process.env.COPILOT_GITHUB_TOKEN;\n+\n+  if (!githubToken && input.useLoggedInUser === false) {\n     throw new ProviderConfigError(\n-      \"GOOGLE_GENERATIVE_AI_API_KEY is required to create Gemini review model.\",\n+      \"Set COPILOT_GITHUB_TOKEN, or enable useLoggedInUser.\",\n     );\n   }\n \n-  const provider = createGoogleGenerativeAI({\n-    apiKey,\n+  const provider = createGitHubCopilotProvider({\n+    githubToken,\n+    useLoggedInUser: input.useLoggedInUser,\n+    cliPath: input.cliPath,\n   });\n \n-  return provider(input.model ?? \"gemini-2.0-flash\");\n+  return provider(input.model ?? \"gpt-4.1\");\n }"
+    },
+    {
+      "path": "packages/review-agent/src/scripts/review.ts",
+      "status": "modified",
+      "language": "typescript",
+      "patch": "@@ -2,7 +2,7 @@ import { readFile } from \"node:fs/promises\";\n import { basename, resolve } from \"node:path\";\n \n import {\n-  createGeminiReviewModel,\n+  createGitHubReviewModel,\n   runReview,\n   type ReviewRequest,\n } from \"../index\";\n@@ -26,7 +26,7 @@ function printUsage(): void {\n     \"Options:\",\n     \"  --input <path>              Path to a ReviewRequest JSON file.\",\n     \"  --file <path>               Path to a source file for ad-hoc review.\",\n-    \"  --model <name>              Gemini model (default: gemini-2.0-flash).\",\n+    \"  --model <name>              Copilot model (default: gpt-4.1).\",\n     \"  --temperature <number>      Temperature between 0 and 2.\",\n     \"  --max-output-tokens <int>   Max output tokens for model generation.\",\n     \"  -h, --help                  Show this help message.\",\n@@ -192,7 +192,7 @@ async function main(): Promise<void> {\n     : await loadRequest(args.inputPath ?? DEFAULT_INPUT_PATH);\n \n   const result = await runReview(request, {\n-    model: createGeminiReviewModel({ model: args.model }),\n+    model: createGitHubReviewModel({ model: args.model }),\n     temperature: args.temperature,\n     maxOutputTokens: args.maxOutputTokens,\n   });"
+    },
+    {
+      "path": "packages/review-agent/src/index.ts",
+      "status": "modified",
+      "language": "typescript",
+      "patch": "@@ -29,8 +29,8 @@ export {\n } from \"./errors/review-errors\";\n \n export {\n-  createGeminiReviewModel,\n-  type CreateGeminiReviewModelInput,\n+  createGitHubReviewModel,\n+  type CreateGitHubReviewModelInput,\n } from \"./llm/provider\";\n export { buildReviewPrompt, DEFAULT_REVIEW_SYSTEM_PROMPT } from \"./llm/prompts\";"
+    },
+    {
+      "path": "packages/review-agent/package.json",
+      "status": "modified",
+      "language": "json",
+      "patch": "@@ -21,8 +21,9 @@\n     \"review\": \"bun src/scripts/review.ts\"\n   },\n   \"dependencies\": {\n-    \"@ai-sdk/google\": \"^2.0.39\",\n-    \"ai\": \"^5.0.41\",\n+    \"@ceira/github-sdk-provider\": \"workspace:*\",\n+    \"@github/copilot\": \"^0.0.417\",\n+    \"ai\": \"^6.0.116\",\n     \"zod\": \"^4.1.8\"\n   },\n   \"devDependencies\": {"
+    },
+    {
+      "path": "packages/review-agent/README.md",
+      "status": "modified",
+      "language": "markdown",
+      "patch": "@@ -1,6 +1,6 @@\n # @pfe-monorepo/review-agent\n \n-Code-review-only agent package powered by Vercel AI SDK (Gemini provider).\n+Code-review-only agent package powered by Vercel AI SDK (GitHub Copilot provider).\n \n ## Scope\n \n@@ -14,13 +14,13 @@ This package intentionally does not include webhook handling, background jobs, p\n ```ts\n import {\n-  createGeminiReviewModel,\n+  createGitHubReviewModel,\n   createReviewAgent,\n   type ReviewRequest,\n } from \"@pfe-monorepo/review-agent\";\n \n-const model = createGeminiReviewModel({\n-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,\n+const model = createGitHubReviewModel({\n+  githubToken: process.env.COPILOT_GITHUB_TOKEN,\n });\n \n const agent = createReviewAgent({ model });\n@@ -50,7 +50,7 @@ Run with JSON input:\n \n ```powershell\n Set-Location packages/review-agent\n-$env:GOOGLE_GENERATIVE_AI_API_KEY=\"your_api_key\"\n+$env:COPILOT_GITHUB_TOKEN=\"your_github_token\"\n bun run review --input ./examples/review-input.json\n ```\n \n@@ -58,6 +58,6 @@ Run ad-hoc review from a file:\n \n ```powershell\n Set-Location packages/review-agent\n-$env:GOOGLE_GENERATIVE_AI_API_KEY=\"your_api_key\"\n+$env:COPILOT_GITHUB_TOKEN=\"your_github_token\"\n bun run review --file ./src/core/run-review.ts\n ```"
+    },
+    {
+      "path": "bun.lock",
+      "status": "modified",
+      "language": "text",
+      "patch": "@@ -44,8 +44,9 @@\n       \"name\": \"@pfe-monorepo/review-agent\",\n       \"version\": \"0.0.0\",\n       \"dependencies\": {\n-        \"@ai-sdk/google\": \"^2.0.39\",\n-        \"ai\": \"^5.0.41\",\n+        \"@ceira/github-sdk-provider\": \"workspace:*\",\n+        \"@github/copilot\": \"^0.0.417\",\n+        \"ai\": \"^6.0.116\",\n         \"zod\": \"^4.1.8\",\n       },\n       \"devDependencies\": {\n@@ -300,7 +299,7 @@\n \n     \"acorn\": [\"acorn@8.16.0\", \"\", { \"bin\": { \"acorn\": \"bin/acorn\" } }, \"sha512-UVJyE9MttOsBQIDKw1skb9nAwQuR5wuGD3+82K6JgJlm/Y+KI92oNsMNGZCYdDsVtRHSak0pcV5Dno5+4jh9sw==\"],\n \n-    \"ai\": [\"ai@5.0.150\", \"\", { \"dependencies\": { \"@ai-sdk/gateway\": \"2.0.55\", \"@ai-sdk/provider\": \"2.0.1\", \"@ai-sdk/provider-utils\": \"3.0.22\", \"@opentelemetry/api\": \"1.9.0\" }, \"peerDependencies\": { \"zod\": \"^3.25.76 || ^4.1.8\" } }, \"sha512-a1tY3kt6NVDKU3ZTdVWDu0RwHpwXCKG0qVzqDVI6kkwnlKFvQRJsq7mPYjI0YSWFkt5DjL/Aq9NrDY4FhgUTyQ==\"],\n+    \"ai\": [\"ai@6.0.116\", \"\", { \"dependencies\": { \"@ai-sdk/gateway\": \"3.0.66\", \"@ai-sdk/provider\": \"3.0.8\", \"@ai-sdk/provider-utils\": \"4.0.19\", \"@opentelemetry/api\": \"1.9.0\" }, \"peerDependencies\": { \"zod\": \"^3.25.76 || ^4.1.8\" } }, \"sha512-7yM+cTmyRLeNIXwt4Vj+mrrJgVQ9RMIW5WO0ydoLoYkewIvsMcvUmqS4j2RJTUXaF1HphwmSKUMQ/HypNRGOmA==\"],\n \n     \"any-promise\": [\"any-promise@1.3.0\", \"\", {}, \"sha512-7UvmKalWRt1wgjL1RrGxoSJW/0QZFIegpeGvZG9kjp8vrRu55XTHbwnqq2GpXm9uLbcuhxm3IqX9OB4MZR1b2A==\"],"
+    }
+  ],
+  "config": {
+    "maxFindings": 20,
+    "includeSuggestions": true,
+    "includeInfoFindings": false,
+    "focusAreas": ["correctness", "security", "performance", "maintainability"],
+    "maxPatchCharsPerFile": 12000
+  },
+  "metadata": {
+    "source": "local-big-smoke",
+    "note": "Bigger PR-like payload composed from real multi-file migration diffs"
+  }
+}

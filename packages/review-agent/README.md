@@ -1,6 +1,6 @@
 # @pfe-monorepo/review-agent
 
-Code-review-only agent package powered by Vercel AI SDK (Gemini provider).
+Code-review-only agent package powered by Vercel AI SDK (GitHub Copilot provider).
 
 ## Scope
 
@@ -14,13 +14,13 @@ This package intentionally does not include webhook handling, background jobs, p
 
 ```ts
 import {
-  createGeminiReviewModel,
+  createGitHubReviewModel,
   createReviewAgent,
   type ReviewRequest,
 } from "@pfe-monorepo/review-agent";
 
-const model = createGeminiReviewModel({
-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+const model = createGitHubReviewModel({
+  githubToken: process.env.COPILOT_GITHUB_TOKEN,
 });
 
 const agent = createReviewAgent({ model });
@@ -50,7 +50,7 @@ Run with JSON input:
 
 ```powershell
 Set-Location packages/review-agent
-$env:GOOGLE_GENERATIVE_AI_API_KEY="your_api_key"
+$env:COPILOT_GITHUB_TOKEN="your_github_token"
 bun run review --input ./examples/review-input.json
 ```
 
@@ -58,6 +58,6 @@ Run ad-hoc review from a file:
 
 ```powershell
 Set-Location packages/review-agent
-$env:GOOGLE_GENERATIVE_AI_API_KEY="your_api_key"
+$env:COPILOT_GITHUB_TOKEN="your_github_token"
 bun run review --file ./src/core/run-review.ts
 ```

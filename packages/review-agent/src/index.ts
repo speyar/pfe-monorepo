@@ -29,8 +29,8 @@ export {
 } from "./errors/review-errors";
 
 export {
-  createGeminiReviewModel,
-  type CreateGeminiReviewModelInput,
+  createGitHubReviewModel,
+  type CreateGitHubReviewModelInput,
 } from "./llm/provider";
 export { buildReviewPrompt, DEFAULT_REVIEW_SYSTEM_PROMPT } from "./llm/prompts";
 

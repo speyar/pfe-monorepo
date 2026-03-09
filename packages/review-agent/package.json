@@ -21,8 +21,9 @@
     "review": "bun src/scripts/review.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "^2.0.39",
-    "ai": "^5.0.41",
+    "@ceira/github-sdk-provider": "workspace:*",
+    "@github/copilot": "^0.0.417",
+    "ai": "^6.0.116",
     "zod": "^4.1.8"
   },
   "devDependencies": {
