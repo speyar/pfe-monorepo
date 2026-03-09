@@ -133,9 +133,10 @@ function parseArgs(argv: string[]): CliArgs {
 async function loadRequest(inputPath: string): Promise<ReviewRequest> {
   const absolutePath = resolve(process.cwd(), inputPath);
   const raw = await readFile(absolutePath, "utf8");
+  const jsonText = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
 
   try {
-    return JSON.parse(raw) as ReviewRequest;
+    return JSON.parse(jsonText) as ReviewRequest;
   } catch (error) {
     throw new Error(
       `Failed to parse JSON from ${absolutePath}: ${(error as Error).message}`,
