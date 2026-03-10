@@ -1,28 +1,12 @@
 import { normalizeGitHubError } from "./errors";
-import type { GitHubClient, GitHubOwnerRepo, RepositorySummary } from "./types";
+import { getGitHubClient } from "./lib/get-github-client";
 
-export const getRepository = async (
-  client: GitHubClient,
-  input: GitHubOwnerRepo
-): Promise<RepositorySummary> => {
+export const getRepositories = async (installationId: number) => {
   try {
-    const response = await client.rest.repos.get({
-      owner: input.owner,
-      repo: input.repo,
-    });
-
-    const data = response.data;
-
-    return {
-      id: data.id,
-      owner: data.owner.login,
-      name: data.name,
-      fullName: data.full_name,
-      private: data.private,
-      defaultBranch: data.default_branch,
-      htmlUrl: data.html_url,
-    };
+    const client = await getGitHubClient(Number(installationId));
+    const response = await client.rest.apps.listReposAccessibleToInstallation();
+    return response.data;
   } catch (error) {
-    throw normalizeGitHubError(error, "Failed to fetch repository");
+    throw normalizeGitHubError(error, "Failed to fetch repositories");
   }
 };

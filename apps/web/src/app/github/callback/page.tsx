@@ -1,4 +1,4 @@
-import { createGitHubAppClient } from "@pfe-monorepo/github-api";
+import { getGitHubClient, getRepositories } from "@pfe-monorepo/github-api";
 
 export default async function GithubCallbackPage({
   searchParams,
@@ -12,17 +12,13 @@ export default async function GithubCallbackPage({
     return <div>No installation id</div>;
   }
 
-  const github = await createGitHubAppClient({
-    appId: Number(process.env.GITHUB_APP_ID),
-    privateKey: process.env.GITHUB_PRIVATE_KEY!.replace(/\\n/g, "\n"),
-    installationId: Number(installationId),
-  });
-
-  const repos = await github.rest.apps.listReposAccessibleToInstallation();
+  const repos = await getRepositories(Number(installationId));
 
   return (
     <div>
-      Connected successfully. Repositories: {repos.data.repositories.length}
+      Connected successfully. Repositories:{" "}
+      {repos.repositories.map((repo) => repo.full_name).join(", ")}. Setup
+      action: {setupAction}
     </div>
   );
 }

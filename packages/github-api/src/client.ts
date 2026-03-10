@@ -1,7 +1,7 @@
 import { App } from "octokit";
 
 import { normalizeGitHubError } from "./errors";
-import type { CreateGitHubAppClientInput, GitHubClient } from "./types";
+import type { CreateGitHubAppClientInput } from "./types";
 
 export const createGitHubAppClient = async (
   input: CreateGitHubAppClientInput,
