@@ -8,4 +8,7 @@
  *
  * 🟢 You can import this file directly.
  */
+export type * from './models/User'
+export type * from './models/GithubInstallation'
+export type * from './models/Repository'
 export type * from './commonInputTypes'
