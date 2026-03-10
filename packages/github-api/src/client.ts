@@ -1,11 +1,11 @@
-import { App } from "@octokit/app";
+import { App } from "octokit";
 
 import { normalizeGitHubError } from "./errors";
 import type { CreateGitHubAppClientInput, GitHubClient } from "./types";
 
 export const createGitHubAppClient = async (
-  input: CreateGitHubAppClientInput
-): Promise<GitHubClient> => {
+  input: CreateGitHubAppClientInput,
+) => {
   try {
     const app = new App({
       appId: input.appId,
@@ -13,7 +13,9 @@ export const createGitHubAppClient = async (
     });
 
     const octokit = await app.getInstallationOctokit(input.installationId);
-    return octokit as GitHubClient;
+    const client = octokit;
+
+    return client;
   } catch (error) {
     throw normalizeGitHubError(error, "Failed to create GitHub App client");
   }

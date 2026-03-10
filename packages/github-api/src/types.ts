@@ -1,6 +1,6 @@
-import type { Octokit } from "@octokit/rest";
+import type { App } from "octokit";
 
-export type GitHubClient = Octokit;
+export type GitHubClient = Awaited<ReturnType<App["getInstallationOctokit"]>>;
 
 export type GitHubOwnerRepo = {
   owner: string;
@@ -39,7 +39,14 @@ export type PullRequestSummary = {
 
 export type PullRequestFile = {
   filename: string;
-  status: "added" | "removed" | "modified" | "renamed" | "copied" | "changed" | "unchanged";
+  status:
+    | "added"
+    | "removed"
+    | "modified"
+    | "renamed"
+    | "copied"
+    | "changed"
+    | "unchanged";
   additions: number;
   deletions: number;
   changes: number;

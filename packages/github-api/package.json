@@ -22,7 +22,8 @@
   },
   "dependencies": {
     "@octokit/app": "^16.1.0",
-    "@octokit/rest": "^22.0.0"
+    "@octokit/rest": "^22.0.0",
+    "octokit": "^5.0.5"
   },
   "devDependencies": {
     "@pfe-monorepo/typescript-config": "workspace:*",

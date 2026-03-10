@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@pfe-monorepo/github-api": ["../../packages/github-api/src/index.ts"]
     }
   },
   "include": [
