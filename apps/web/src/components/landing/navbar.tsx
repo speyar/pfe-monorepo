@@ -3,6 +3,7 @@
 import { UserButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { Button } from "../ui/button";
+import ConnectGithubButton from "../github/connect-github-button";
 
 export function Navbar() {
   const { user } = useUser();
@@ -15,6 +16,7 @@ export function Navbar() {
 
         <nav className="flex items-center gap-3 text-sm">
           <Link href="/dashboard">Dashboard</Link>
+          <ConnectGithubButton />
           {user ? (
             <UserButton />
           ) : (
