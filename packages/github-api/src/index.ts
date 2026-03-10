@@ -35,7 +35,7 @@ export type {
   PullRequestDiff,
   PullRequestFile,
   PullRequestSummary,
-  RepositorySummary,
+  Repository,
 } from "./types";
 
 export type {

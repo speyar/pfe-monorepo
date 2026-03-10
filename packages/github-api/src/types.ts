@@ -15,14 +15,15 @@ export type GitHubAppAuthInput = {
 
 export type CreateGitHubAppClientInput = GitHubAppAuthInput;
 
-export type RepositorySummary = {
+export type Repository = {
   id: number;
-  owner: string;
+  owner: { login: string };
   name: string;
-  fullName: string;
+  full_name: string;
+  html_url: string;
   private: boolean;
-  defaultBranch: string;
-  htmlUrl: string;
+  description?: string | null;
+  default_branch?: string;
 };
 
 export type PullRequestSummary = {
