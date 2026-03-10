@@ -13,6 +13,8 @@
     "@base-ui/react": "^1.2.0",
     "@clerk/nextjs": "^7.0.1",
     "@pfe-monorepo/github-api": "workspace:*",
+    "@prisma/adapter-pg": "^7.4.2",
+    "@prisma/client": "^7.4.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.577.0",
@@ -30,6 +32,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "babel-plugin-react-compiler": "1.0.0",
+    "prisma": "^7.4.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
