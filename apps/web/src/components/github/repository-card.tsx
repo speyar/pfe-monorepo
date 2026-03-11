@@ -44,10 +44,6 @@ export default function RepositoryCard({ repository }: RepositoryCardProps) {
           </div>
         </div>
 
-        <p className="mt-3 text-sm text-muted-foreground">
-          {repo.description?.trim() || "No description"}
-        </p>
-
         <div className="mt-4 flex justify-end border-t border-border/60 pt-4">
           <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
             <Button
