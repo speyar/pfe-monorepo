@@ -36,7 +36,6 @@ model Repository {
   name           String
   fullName       String
   private        Boolean
-  htmlUrl        String
   installationId Int
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt

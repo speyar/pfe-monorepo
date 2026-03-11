@@ -104,7 +104,6 @@ export const RepositoryScalarFieldEnum = {
   name: 'name',
   fullName: 'fullName',
   private: 'private',
-  htmlUrl: 'htmlUrl',
   installationId: 'installationId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'

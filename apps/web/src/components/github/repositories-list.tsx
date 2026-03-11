@@ -1,33 +1,52 @@
-import { Repository } from "@pfe-monorepo/github-api";
+"use client";
+
 import RepositoryCard from "./repository-card";
+import { useReposFilters } from "@/hooks/use-repos-filters";
+import { useRepos } from "@/data/repos/use-repos";
+import Pagination from "../filters/pagination";
+import ReposLoading from "./repos-loading";
+import EmptyState from "@/components/shared/empty-state";
+import ErrorCard from "@/components/error/error-card";
+import { FolderGit2 } from "lucide-react";
 
-type RepositoriesListProps = {
-  repositories: Repository[];
-};
+export default function RepositoriesList() {
+  const { page, limit, setPage } = useReposFilters();
+  const { data, isLoading, error } = useRepos(page, limit);
 
-export default function RepositoriesList({
-  repositories,
-}: RepositoriesListProps) {
+  if (error) {
+    return <ErrorCard title="Unable to load repositories" />;
+  }
+
+  if (!data || isLoading) {
+    return (
+      <section className="mx-auto w-full space-y-4 p-6">
+        <ReposLoading />
+      </section>
+    );
+  }
+
+  if (!isLoading && data.data.length === 0) {
+    return (
+      <EmptyState
+        icon={FolderGit2}
+        title="No repositories yet"
+        description="No repositories are linked to this installation yet."
+      />
+    );
+  }
+
   return (
-    <section className="mx-auto w-full max-w-4xl space-y-4 p-6">
-      <div className="space-y-1">
-        <h1 className="text-xl font-semibold">GitHub Connected</h1>
-        <p className="text-sm text-muted-foreground">
-          Found {repositories.length} accessible repositories
-        </p>
+    <section className="mx-auto w-full  space-y-4 p-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {data.data.map((repository) => (
+          <RepositoryCard key={repository.id} repository={repository} />
+        ))}
       </div>
-
-      {repositories.length === 0 ? (
-        <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
-          No repositories available for this installation.
-        </div>
-      ) : (
-        <div className="grid gap-3">
-          {repositories.map((repository) => (
-            <RepositoryCard key={repository.id} repository={repository} />
-          ))}
-        </div>
-      )}
+      <Pagination
+        page={page}
+        setPage={setPage}
+        totalPages={data.totalPages || 1}
+      />
     </section>
   );
 }
