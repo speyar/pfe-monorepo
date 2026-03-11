@@ -12,10 +12,7 @@ export default function GithubInstallSuccess() {
       </p>
 
       <div className="mt-6">
-        <Link
-          href="/dashboard"
-          className="px-4 py-2 bg-black text-white rounded"
-        >
+        <Link href="/" className="px-4 py-2 bg-black text-white rounded">
           continue
         </Link>
       </div>
