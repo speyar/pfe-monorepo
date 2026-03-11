@@ -1,6 +1,7 @@
 import fetcher from "@/lib/fetcher";
 import { Repository } from "@pfe-monorepo/github-api";
 import useSWR from "swr";
+import type { AppError } from "@/lib/error";
 
 type ReposData = {
   data: Repository[];
@@ -15,7 +16,7 @@ export function useRepos(page: number = 1, limit: number = 10) {
 
   const url = `/api/repos?${params.toString()}`;
 
-  return useSWR<ReposData>(url, fetcher, {
+  return useSWR<ReposData, AppError>(url, fetcher, {
     keepPreviousData: true,
   });
 }

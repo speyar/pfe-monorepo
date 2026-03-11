@@ -12,17 +12,15 @@ import { Button } from "@/components/ui/button";
 import { AppError } from "@/lib/error";
 
 type ErrorCardProps = {
-  error: AppError;
+  error?: AppError;
   title?: string;
-  actionLabel?: string;
-  actionHref?: string;
+  description?: string;
 };
 
 export default function ErrorCard({
   error,
   title = "Something went wrong",
-  actionLabel = "Go back home",
-  actionHref = "/",
+  description = "We encountered an error while processing your request.",
 }: ErrorCardProps) {
   return (
     <section className="mx-auto w-full max-w-4xl p-6">
@@ -32,21 +30,12 @@ export default function ErrorCard({
             <AlertTriangle className="size-5" aria-hidden="true" />
             {title}
           </CardTitle>
-          <CardDescription>
-            We could not complete this GitHub installation flow.
-          </CardDescription>
+          <CardDescription>{description}</CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-2">
-          <p className="text-sm">{error.message}</p>
-          <p className="text-xs text-muted-foreground">
-            Error code: {error.code}
-          </p>
+          <p className="text-sm">{error?.message}</p>
         </CardContent>
-
-        <CardFooter>
-          <Button render={<Link href={actionHref} />}>{actionLabel}</Button>
-        </CardFooter>
       </Card>
     </section>
   );

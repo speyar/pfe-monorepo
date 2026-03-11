@@ -16,7 +16,6 @@ export function Navbar() {
 
         <nav className="flex items-center gap-3 text-sm">
           <Link href="/repos">Repositories</Link>
-          <ConnectGithubButton />
           {user ? (
             <UserButton />
           ) : (
