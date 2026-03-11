@@ -1,7 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
 import { getRepositories } from "@pfe-monorepo/github-api";
 import prisma from "@/lib/db";
-import RepositoriesList from "@/components/github/repositories-list";
+import { toAppError } from "@/lib/error";
+import ErrorCard from "@/components/error/error-card";
+import { redirect } from "next/navigation";
+import { handleGithubInstallation } from "@/app/actions/github/handle-github-app-installation";
+import GithubInstallSuccess from "@/components/github/github-install-success";
 
 export default async function GithubCallbackPage({
   searchParams,
@@ -16,65 +19,49 @@ export default async function GithubCallbackPage({
   const hasValidInstallationId =
     Number.isInteger(installationId) && installationId > 0;
 
-  if (!hasValidInstallationId) {
-    return <RepositoriesList repositories={[]} />;
+  if (!hasValidInstallationId || setupAction !== "install") {
+    redirect("/");
   }
 
-  const repos = await getRepositories(installationId);
+  const existingInstallation = await prisma.githubInstallation.findUnique({
+    where: { installationId },
+  });
 
-  if (setupAction === "install") {
-    const { userId: clerkUserId } = await auth();
-
-    if (clerkUserId) {
-      const user = await prisma.user.findUnique({
-        where: { clerkUserId },
-        select: { id: true },
-      });
-
-      if (user) {
-        const accountLogin = repos.repositories[0]?.owner?.login ?? "unknown";
-
-        await prisma.$transaction(async (tx) => {
-          await tx.githubInstallation.upsert({
-            where: { installationId },
-            create: {
-              installationId,
-              accountLogin,
-              clerkUserId: user.id,
-            },
-            update: {
-              accountLogin,
-              clerkUserId: user.id,
-            },
-          });
-
-          for (const repo of repos.repositories) {
-            await tx.repository.upsert({
-              where: { repoId: repo.id },
-              create: {
-                repoId: repo.id,
-                name: repo.name,
-                fullName: repo.full_name,
-                private: repo.private,
-                installationId,
-              },
-              update: {
-                name: repo.name,
-                fullName: repo.full_name,
-                private: repo.private,
-                installationId,
-              },
-            });
-          }
-        });
-      } else {
-        console.warn("[github-callback] user not found in local db", {
-          clerkUserId,
-          installationId,
-        });
-      }
-    }
+  // Prevent accessing page if already installed
+  if (existingInstallation) {
+    redirect("/");
   }
 
-  return <RepositoriesList repositories={repos.repositories} />;
+  let repos: Awaited<ReturnType<typeof getRepositories>>;
+
+  try {
+    repos = await getRepositories(installationId);
+  } catch (error) {
+    const appError = toAppError(error, {
+      message: "Failed to fetch repositories for this installation",
+      code: "EXTERNAL_SERVICE_ERROR",
+      statusCode: 502,
+      details: { installationId },
+    });
+
+    return <ErrorCard title="Unable to fetch repositories" error={appError} />;
+  }
+
+  try {
+    await handleGithubInstallation({
+      installationId,
+      repositories: repos.repositories,
+    });
+  } catch (error) {
+    const appError = toAppError(error, {
+      message: "Failed to link GitHub installation",
+      code: "DATABASE_ERROR",
+      statusCode: 500,
+      details: { installationId },
+    });
+
+    return <ErrorCard title="Unable to link installation" error={appError} />;
+  }
+
+  return <GithubInstallSuccess />;
 }

@@ -92,7 +92,6 @@ export async function POST(req: NextRequest) {
   }
 
   const eventName = req.headers.get("x-github-event");
-  console.log("eventName", eventName);
   const deliveryId = req.headers.get("x-github-delivery");
   const signature = req.headers.get("x-hub-signature-256");
 
@@ -127,7 +126,6 @@ export async function POST(req: NextRequest) {
       case "installation_repositories": {
         const body = payload as InstallationRepositoriesPayload;
         const added = body.repositories_added ?? [];
-        console.log("added repos", added);
         const removed = body.repositories_removed ?? [];
         const installationId = getInstallationId(body.installation);
 
@@ -162,22 +160,16 @@ export async function POST(req: NextRequest) {
             });
           }
 
-          for (const repo of added) {
-            await tx.repository.upsert({
-              where: { repoId: repo.id },
-              create: {
+          if (added.length > 0) {
+            await tx.repository.createMany({
+              data: added.map((repo) => ({
                 repoId: repo.id,
                 name: repo.name,
                 fullName: repo.full_name,
                 private: repo.private,
                 installationId,
-              },
-              update: {
-                name: repo.name,
-                fullName: repo.full_name,
-                private: repo.private,
-                installationId,
-              },
+              })),
+              skipDuplicates: true,
             });
           }
 
@@ -263,22 +255,16 @@ export async function POST(req: NextRequest) {
                 });
               }
 
-              for (const repo of repositories) {
-                await tx.repository.upsert({
-                  where: { repoId: repo.id },
-                  create: {
+              if (repositories.length > 0) {
+                await tx.repository.createMany({
+                  data: repositories.map((repo) => ({
                     repoId: repo.id,
                     name: repo.name,
                     fullName: repo.full_name,
                     private: repo.private,
                     installationId,
-                  },
-                  update: {
-                    name: repo.name,
-                    fullName: repo.full_name,
-                    private: repo.private,
-                    installationId,
-                  },
+                  })),
+                  skipDuplicates: true,
                 });
               }
             });
