@@ -6,6 +6,7 @@ import {
   DEFAULT_REVIEW_SYSTEM_PROMPT,
 } from "../llm/prompts";
 import { reviewResultSchema } from "../schema/review-result.schema";
+import { runPrReviewWithRepositoryTools } from "../lib/agent/pr-review-agent";
 
 import { normalizeReviewRequest } from "./normalize-input";
 import { validateReviewResult } from "./validate-output";
@@ -17,6 +18,13 @@ export interface RunReviewOptions {
   temperature?: number;
   maxOutputTokens?: number;
   signal?: AbortSignal;
+  useRepositoryTools?: boolean;
+  repositoryRoot?: string;
+  maxToolSteps?: number;
+  readFileMaxBytes?: number;
+  searchMaxResults?: number;
+  listMaxDepth?: number;
+  listMaxEntries?: number;
 }
 
 export interface ReviewAgent {
@@ -29,6 +37,11 @@ export async function runReview(
   input: ReviewRequest,
   options: RunReviewOptions,
 ): Promise<ReviewResult> {
+  const useRepositoryTools = options.useRepositoryTools ?? true;
+  if (useRepositoryTools) {
+    return runPrReviewWithRepositoryTools(input, options);
+  }
+
   const normalizedRequest = normalizeReviewRequest(input);
   const startedAt = Date.now();
 

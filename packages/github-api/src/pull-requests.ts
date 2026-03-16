@@ -1,4 +1,5 @@
 import { normalizeGitHubError } from "./errors";
+import { getGitHubClient } from "./lib/get-github-client";
 import type {
   GitHubClient,
   GitHubOwnerRepo,
@@ -12,10 +13,11 @@ export type GetPullRequestInput = GitHubOwnerRepo & {
 };
 
 export const getPullRequest = async (
-  client: GitHubClient,
-  input: GetPullRequestInput
+  installationId: number,
+  input: GetPullRequestInput,
 ): Promise<PullRequestSummary> => {
   try {
+    const client = await getGitHubClient(installationId);
     const response = await client.rest.pulls.get({
       owner: input.owner,
       repo: input.repo,
@@ -41,10 +43,11 @@ export const getPullRequest = async (
 };
 
 export const listPullRequestFiles = async (
-  client: GitHubClient,
-  input: GetPullRequestInput
+  installationId: number,
+  input: GetPullRequestInput,
 ): Promise<PullRequestFile[]> => {
   try {
+    const client = await getGitHubClient(installationId);
     const response = await client.paginate(client.rest.pulls.listFiles, {
       owner: input.owner,
       repo: input.repo,
@@ -68,17 +71,20 @@ export const listPullRequestFiles = async (
 
 export const getPullRequestDiff = async (
   client: GitHubClient,
-  input: GetPullRequestInput
+  input: GetPullRequestInput,
 ): Promise<PullRequestDiff> => {
   try {
-    const response = await client.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
-      owner: input.owner,
-      repo: input.repo,
-      pull_number: input.pullRequestNumber,
-      headers: {
-        accept: "application/vnd.github.v3.diff",
+    const response = await client.request(
+      "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+      {
+        owner: input.owner,
+        repo: input.repo,
+        pull_number: input.pullRequestNumber,
+        headers: {
+          accept: "application/vnd.github.v3.diff",
+        },
       },
-    });
+    );
 
     return {
       repository: {

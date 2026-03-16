@@ -1,4 +1,5 @@
 import { normalizeGitHubError } from "./errors";
+import { getGitHubClient } from "./lib/get-github-client";
 import type { GitHubClient, GitHubOwnerRepo } from "./types";
 
 export type CreatePullRequestCommentInput = GitHubOwnerRepo & {
@@ -36,10 +37,11 @@ export type PullRequestCommentResult = {
 };
 
 export const createPullRequestComment = async (
-  client: GitHubClient,
-  input: CreatePullRequestCommentInput
+  installationId: number,
+  input: CreatePullRequestCommentInput,
 ): Promise<PullRequestCommentResult> => {
   try {
+    const client = await getGitHubClient(installationId);
     const response = await client.rest.issues.createComment({
       owner: input.owner,
       repo: input.repo,
@@ -59,10 +61,11 @@ export const createPullRequestComment = async (
 };
 
 export const createPullRequestReviewComment = async (
-  client: GitHubClient,
-  input: CreatePullRequestReviewCommentInput
+  installationId: number,
+  input: CreatePullRequestReviewCommentInput,
 ): Promise<PullRequestCommentResult> => {
   try {
+    const client = await getGitHubClient(installationId);
     const response = await client.rest.pulls.createReviewComment({
       owner: input.owner,
       repo: input.repo,
@@ -81,15 +84,19 @@ export const createPullRequestReviewComment = async (
       updatedAt: response.data.updated_at,
     };
   } catch (error) {
-    throw normalizeGitHubError(error, "Failed to create pull request review comment");
+    throw normalizeGitHubError(
+      error,
+      "Failed to create pull request review comment",
+    );
   }
 };
 
 export const updateComment = async (
-  client: GitHubClient,
-  input: UpdateCommentInput
+  installationId: number,
+  input: UpdateCommentInput,
 ): Promise<PullRequestCommentResult> => {
   try {
+    const client = await getGitHubClient(installationId);
     const response = await client.rest.issues.updateComment({
       owner: input.owner,
       repo: input.repo,
@@ -109,10 +116,11 @@ export const updateComment = async (
 };
 
 export const deleteComment = async (
-  client: GitHubClient,
-  input: DeleteCommentInput
+  installationId: number,
+  input: DeleteCommentInput,
 ): Promise<void> => {
   try {
+    const client = await getGitHubClient(installationId);
     await client.rest.issues.deleteComment({
       owner: input.owner,
       repo: input.repo,
@@ -124,10 +132,11 @@ export const deleteComment = async (
 };
 
 export const upsertPullRequestComment = async (
-  client: GitHubClient,
-  input: UpsertPullRequestCommentInput
+  installationId: number,
+  input: UpsertPullRequestCommentInput,
 ): Promise<PullRequestCommentResult> => {
   try {
+    const client = await getGitHubClient(installationId);
     const comments = await client.paginate(client.rest.issues.listComments, {
       owner: input.owner,
       repo: input.repo,
@@ -144,10 +153,10 @@ export const upsertPullRequestComment = async (
     });
 
     if (!matchingComment) {
-      return createPullRequestComment(client, input);
+      return createPullRequestComment(installationId, input);
     }
 
-    return updateComment(client, {
+    return updateComment(installationId, {
       owner: input.owner,
       repo: input.repo,
       commentId: matchingComment.id,
