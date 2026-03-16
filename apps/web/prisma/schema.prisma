@@ -40,4 +40,28 @@ model Repository {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
   installation   GithubInstallation @relation(fields: [installationId], references: [installationId])
+  reviews        Review[]
+}
+
+model Review {
+  id                  String       @id @default(cuid())
+  repoId              Int
+  prNumber            Int
+  prTitle             String
+  prUrl               String
+  review              String
+  status              ReviewStatus @default(completed)
+  reviewerClerkUserId String
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  repository          Repository?  @relation(fields: [repositoryId], references: [id])
+  repositoryId        String?
+
+  @@unique([repositoryId, prNumber])
+}
+
+enum ReviewStatus {
+  pending
+  completed
+  failed
 }

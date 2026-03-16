@@ -245,6 +245,7 @@ export type RepositoryWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"Repository"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Repository"> | Date | string
   installation?: Prisma.XOR<Prisma.GithubInstallationScalarRelationFilter, Prisma.GithubInstallationWhereInput>
+  reviews?: Prisma.ReviewListRelationFilter
 }
 
 export type RepositoryOrderByWithRelationInput = {
@@ -257,6 +258,7 @@ export type RepositoryOrderByWithRelationInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   installation?: Prisma.GithubInstallationOrderByWithRelationInput
+  reviews?: Prisma.ReviewOrderByRelationAggregateInput
 }
 
 export type RepositoryWhereUniqueInput = Prisma.AtLeast<{
@@ -272,6 +274,7 @@ export type RepositoryWhereUniqueInput = Prisma.AtLeast<{
   createdAt?: Prisma.DateTimeFilter<"Repository"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"Repository"> | Date | string
   installation?: Prisma.XOR<Prisma.GithubInstallationScalarRelationFilter, Prisma.GithubInstallationWhereInput>
+  reviews?: Prisma.ReviewListRelationFilter
 }, "id" | "repoId">
 
 export type RepositoryOrderByWithAggregationInput = {
@@ -313,6 +316,7 @@ export type RepositoryCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   installation: Prisma.GithubInstallationCreateNestedOneWithoutReposInput
+  reviews?: Prisma.ReviewCreateNestedManyWithoutRepositoryInput
 }
 
 export type RepositoryUncheckedCreateInput = {
@@ -324,6 +328,7 @@ export type RepositoryUncheckedCreateInput = {
   installationId: number
   createdAt?: Date | string
   updatedAt?: Date | string
+  reviews?: Prisma.ReviewUncheckedCreateNestedManyWithoutRepositoryInput
 }
 
 export type RepositoryUpdateInput = {
@@ -335,6 +340,7 @@ export type RepositoryUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   installation?: Prisma.GithubInstallationUpdateOneRequiredWithoutReposNestedInput
+  reviews?: Prisma.ReviewUpdateManyWithoutRepositoryNestedInput
 }
 
 export type RepositoryUncheckedUpdateInput = {
@@ -346,6 +352,7 @@ export type RepositoryUncheckedUpdateInput = {
   installationId?: Prisma.IntFieldUpdateOperationsInput | number
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  reviews?: Prisma.ReviewUncheckedUpdateManyWithoutRepositoryNestedInput
 }
 
 export type RepositoryCreateManyInput = {
@@ -433,6 +440,11 @@ export type RepositorySumOrderByAggregateInput = {
   installationId?: Prisma.SortOrder
 }
 
+export type RepositoryNullableScalarRelationFilter = {
+  is?: Prisma.RepositoryWhereInput | null
+  isNot?: Prisma.RepositoryWhereInput | null
+}
+
 export type RepositoryCreateNestedManyWithoutInstallationInput = {
   create?: Prisma.XOR<Prisma.RepositoryCreateWithoutInstallationInput, Prisma.RepositoryUncheckedCreateWithoutInstallationInput> | Prisma.RepositoryCreateWithoutInstallationInput[] | Prisma.RepositoryUncheckedCreateWithoutInstallationInput[]
   connectOrCreate?: Prisma.RepositoryCreateOrConnectWithoutInstallationInput | Prisma.RepositoryCreateOrConnectWithoutInstallationInput[]
@@ -479,6 +491,22 @@ export type BoolFieldUpdateOperationsInput = {
   set?: boolean
 }
 
+export type RepositoryCreateNestedOneWithoutReviewsInput = {
+  create?: Prisma.XOR<Prisma.RepositoryCreateWithoutReviewsInput, Prisma.RepositoryUncheckedCreateWithoutReviewsInput>
+  connectOrCreate?: Prisma.RepositoryCreateOrConnectWithoutReviewsInput
+  connect?: Prisma.RepositoryWhereUniqueInput
+}
+
+export type RepositoryUpdateOneWithoutReviewsNestedInput = {
+  create?: Prisma.XOR<Prisma.RepositoryCreateWithoutReviewsInput, Prisma.RepositoryUncheckedCreateWithoutReviewsInput>
+  connectOrCreate?: Prisma.RepositoryCreateOrConnectWithoutReviewsInput
+  upsert?: Prisma.RepositoryUpsertWithoutReviewsInput
+  disconnect?: Prisma.RepositoryWhereInput | boolean
+  delete?: Prisma.RepositoryWhereInput | boolean
+  connect?: Prisma.RepositoryWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.RepositoryUpdateToOneWithWhereWithoutReviewsInput, Prisma.RepositoryUpdateWithoutReviewsInput>, Prisma.RepositoryUncheckedUpdateWithoutReviewsInput>
+}
+
 export type RepositoryCreateWithoutInstallationInput = {
   id?: string
   repoId: number
@@ -487,6 +515,7 @@ export type RepositoryCreateWithoutInstallationInput = {
   private: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  reviews?: Prisma.ReviewCreateNestedManyWithoutRepositoryInput
 }
 
 export type RepositoryUncheckedCreateWithoutInstallationInput = {
@@ -497,6 +526,7 @@ export type RepositoryUncheckedCreateWithoutInstallationInput = {
   private: boolean
   createdAt?: Date | string
   updatedAt?: Date | string
+  reviews?: Prisma.ReviewUncheckedCreateNestedManyWithoutRepositoryInput
 }
 
 export type RepositoryCreateOrConnectWithoutInstallationInput = {
@@ -539,6 +569,66 @@ export type RepositoryScalarWhereInput = {
   updatedAt?: Prisma.DateTimeFilter<"Repository"> | Date | string
 }
 
+export type RepositoryCreateWithoutReviewsInput = {
+  id?: string
+  repoId: number
+  name: string
+  fullName: string
+  private: boolean
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  installation: Prisma.GithubInstallationCreateNestedOneWithoutReposInput
+}
+
+export type RepositoryUncheckedCreateWithoutReviewsInput = {
+  id?: string
+  repoId: number
+  name: string
+  fullName: string
+  private: boolean
+  installationId: number
+  createdAt?: Date | string
+  updatedAt?: Date | string
+}
+
+export type RepositoryCreateOrConnectWithoutReviewsInput = {
+  where: Prisma.RepositoryWhereUniqueInput
+  create: Prisma.XOR<Prisma.RepositoryCreateWithoutReviewsInput, Prisma.RepositoryUncheckedCreateWithoutReviewsInput>
+}
+
+export type RepositoryUpsertWithoutReviewsInput = {
+  update: Prisma.XOR<Prisma.RepositoryUpdateWithoutReviewsInput, Prisma.RepositoryUncheckedUpdateWithoutReviewsInput>
+  create: Prisma.XOR<Prisma.RepositoryCreateWithoutReviewsInput, Prisma.RepositoryUncheckedCreateWithoutReviewsInput>
+  where?: Prisma.RepositoryWhereInput
+}
+
+export type RepositoryUpdateToOneWithWhereWithoutReviewsInput = {
+  where?: Prisma.RepositoryWhereInput
+  data: Prisma.XOR<Prisma.RepositoryUpdateWithoutReviewsInput, Prisma.RepositoryUncheckedUpdateWithoutReviewsInput>
+}
+
+export type RepositoryUpdateWithoutReviewsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  repoId?: Prisma.IntFieldUpdateOperationsInput | number
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  fullName?: Prisma.StringFieldUpdateOperationsInput | string
+  private?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  installation?: Prisma.GithubInstallationUpdateOneRequiredWithoutReposNestedInput
+}
+
+export type RepositoryUncheckedUpdateWithoutReviewsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  repoId?: Prisma.IntFieldUpdateOperationsInput | number
+  name?: Prisma.StringFieldUpdateOperationsInput | string
+  fullName?: Prisma.StringFieldUpdateOperationsInput | string
+  private?: Prisma.BoolFieldUpdateOperationsInput | boolean
+  installationId?: Prisma.IntFieldUpdateOperationsInput | number
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+}
+
 export type RepositoryCreateManyInstallationInput = {
   id?: string
   repoId: number
@@ -557,6 +647,7 @@ export type RepositoryUpdateWithoutInstallationInput = {
   private?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  reviews?: Prisma.ReviewUpdateManyWithoutRepositoryNestedInput
 }
 
 export type RepositoryUncheckedUpdateWithoutInstallationInput = {
@@ -567,6 +658,7 @@ export type RepositoryUncheckedUpdateWithoutInstallationInput = {
   private?: Prisma.BoolFieldUpdateOperationsInput | boolean
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  reviews?: Prisma.ReviewUncheckedUpdateManyWithoutRepositoryNestedInput
 }
 
 export type RepositoryUncheckedUpdateManyWithoutInstallationInput = {
@@ -580,6 +672,35 @@ export type RepositoryUncheckedUpdateManyWithoutInstallationInput = {
 }
 
 
+/**
+ * Count Type RepositoryCountOutputType
+ */
+
+export type RepositoryCountOutputType = {
+  reviews: number
+}
+
+export type RepositoryCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  reviews?: boolean | RepositoryCountOutputTypeCountReviewsArgs
+}
+
+/**
+ * RepositoryCountOutputType without action
+ */
+export type RepositoryCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the RepositoryCountOutputType
+   */
+  select?: Prisma.RepositoryCountOutputTypeSelect<ExtArgs> | null
+}
+
+/**
+ * RepositoryCountOutputType without action
+ */
+export type RepositoryCountOutputTypeCountReviewsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.ReviewWhereInput
+}
+
 
 export type RepositorySelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -591,6 +712,8 @@ export type RepositorySelect<ExtArgs extends runtime.Types.Extensions.InternalAr
   createdAt?: boolean
   updatedAt?: boolean
   installation?: boolean | Prisma.GithubInstallationDefaultArgs<ExtArgs>
+  reviews?: boolean | Prisma.Repository$reviewsArgs<ExtArgs>
+  _count?: boolean | Prisma.RepositoryCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["repository"]>
 
 export type RepositorySelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -631,6 +754,8 @@ export type RepositorySelectScalar = {
 export type RepositoryOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "repoId" | "name" | "fullName" | "private" | "installationId" | "createdAt" | "updatedAt", ExtArgs["result"]["repository"]>
 export type RepositoryInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   installation?: boolean | Prisma.GithubInstallationDefaultArgs<ExtArgs>
+  reviews?: boolean | Prisma.Repository$reviewsArgs<ExtArgs>
+  _count?: boolean | Prisma.RepositoryCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type RepositoryIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   installation?: boolean | Prisma.GithubInstallationDefaultArgs<ExtArgs>
@@ -643,6 +768,7 @@ export type $RepositoryPayload<ExtArgs extends runtime.Types.Extensions.Internal
   name: "Repository"
   objects: {
     installation: Prisma.$GithubInstallationPayload<ExtArgs>
+    reviews: Prisma.$ReviewPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1048,6 +1174,7 @@ readonly fields: RepositoryFieldRefs;
 export interface Prisma__RepositoryClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   installation<T extends Prisma.GithubInstallationDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.GithubInstallationDefaultArgs<ExtArgs>>): Prisma.Prisma__GithubInstallationClient<runtime.Types.Result.GetResult<Prisma.$GithubInstallationPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+  reviews<T extends Prisma.Repository$reviewsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Repository$reviewsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ReviewPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1478,6 +1605,30 @@ export type RepositoryDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.In
    * Limit how many Repositories to delete.
    */
   limit?: number
+}
+
+/**
+ * Repository.reviews
+ */
+export type Repository$reviewsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the Review
+   */
+  select?: Prisma.ReviewSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the Review
+   */
+  omit?: Prisma.ReviewOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.ReviewInclude<ExtArgs> | null
+  where?: Prisma.ReviewWhereInput
+  orderBy?: Prisma.ReviewOrderByWithRelationInput | Prisma.ReviewOrderByWithRelationInput[]
+  cursor?: Prisma.ReviewWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.ReviewScalarFieldEnum | Prisma.ReviewScalarFieldEnum[]
 }
 
 /**

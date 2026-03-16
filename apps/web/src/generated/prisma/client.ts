@@ -56,3 +56,8 @@ export type GithubInstallation = Prisma.GithubInstallationModel
  * 
  */
 export type Repository = Prisma.RepositoryModel
+/**
+ * Model Review
+ * 
+ */
+export type Review = Prisma.ReviewModel

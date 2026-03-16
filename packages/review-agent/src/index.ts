@@ -41,11 +41,32 @@ export {
   type ReviewResultSchema,
 } from "./schema/review-result.schema";
 
-export { getDiffHunks, type DiffHunk } from "./tools/get-diff-hunks";
-export { listChangedFiles } from "./tools/list-changed-files";
-export { readFileFromReviewInput } from "./tools/read-file";
 export {
-  searchCode,
-  type SearchCodeInput,
-  type SearchCodeMatch,
-} from "./tools/search-code";
+  listFiles,
+  readFile,
+  searchRepository,
+  RepoToolError,
+  type ListFilesFailure,
+  type ListFilesOptions,
+  type ListFilesResult,
+  type ListFilesSuccess,
+  type ReadFileFailure,
+  type ReadFileOptions,
+  type ReadFileResult,
+  type ReadFileSuccess,
+  type RepoToolErrorCode,
+  type RepoToolErrorData,
+  type SearchRepositoryFailure,
+  type SearchRepositoryMatch,
+  type SearchRepositoryOptions,
+  type SearchRepositoryResult,
+  type SearchRepositorySuccess,
+} from "./lib/repo-tools";
+
+export {
+  createPrReviewAgent,
+  runPrReviewWithRepositoryTools,
+  DEFAULT_REPOSITORY_EXPLORATION_SYSTEM_PROMPT,
+  type CreatePrReviewAgentOptions,
+  type PrReviewAgent,
+} from "./lib/agent/pr-review-agent";

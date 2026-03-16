@@ -11,4 +11,5 @@
 export type * from './models/User'
 export type * from './models/GithubInstallation'
 export type * from './models/Repository'
+export type * from './models/Review'
 export type * from './commonInputTypes'
