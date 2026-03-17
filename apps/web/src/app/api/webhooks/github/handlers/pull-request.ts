@@ -19,6 +19,57 @@ type HandlePullRequestEventArgs = {
   eventName: string;
 };
 
+function getErrorString(
+  error: unknown,
+  key: "name" | "message" | "code",
+): string {
+  if (!error || typeof error !== "object") {
+    return "";
+  }
+
+  const value = Reflect.get(error, key);
+
+  return typeof value === "string" ? value : "";
+}
+
+function hasCauseNamed(error: unknown, expectedName: string): boolean {
+  let current: unknown = error;
+
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (!current || typeof current !== "object") {
+      return false;
+    }
+
+    const currentName = getErrorString(current, "name");
+    if (currentName === expectedName) {
+      return true;
+    }
+
+    current = Reflect.get(current, "cause");
+  }
+
+  return false;
+}
+
+function isReviewOutputValidationFailure(error: unknown): boolean {
+  const name = getErrorString(error, "name");
+  const code = getErrorString(error, "code");
+  const message = getErrorString(error, "message").toLowerCase();
+
+  return (
+    name === "AI_NoObjectGeneratedError" ||
+    name === "AI_TypeValidationError" ||
+    code === "AI_NO_OBJECT_GENERATED" ||
+    code === "AI_TYPE_VALIDATION_ERROR" ||
+    hasCauseNamed(error, "AI_NoObjectGeneratedError") ||
+    hasCauseNamed(error, "AI_TypeValidationError") ||
+    hasCauseNamed(error, "ZodError") ||
+    message.includes("no object generated") ||
+    message.includes("response did not match schema") ||
+    message.includes("type validation failed")
+  );
+}
+
 export const handlePullRequestEvent = async ({
   payload,
   deliveryId,
@@ -102,36 +153,64 @@ export const handlePullRequestEvent = async ({
     return null;
   }
 
-  const review = await runReview(
-    {
-      repository: {
-        owner: ownerRepo.owner,
-        name: ownerRepo.repo,
-        defaultBranch: body.repository?.default_branch,
-      },
-      pullRequest: {
-        number: pullRequest.number,
-        title: pullRequest.title,
-        body: body.pull_request?.body,
-        baseSha: body.pull_request?.base?.sha ?? "unknown-base-sha",
-        headSha: body.pull_request?.head?.sha ?? "unknown-head-sha",
-        baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
-        headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
-      },
-      files: filesForReview,
-      metadata: {
+  const reviewInput = {
+    repository: {
+      owner: ownerRepo.owner,
+      name: ownerRepo.repo,
+      defaultBranch: body.repository?.default_branch,
+    },
+    pullRequest: {
+      number: pullRequest.number,
+      title: pullRequest.title,
+      body: body.pull_request?.body,
+      baseSha: body.pull_request?.base?.sha ?? "unknown-base-sha",
+      headSha: body.pull_request?.head?.sha ?? "unknown-head-sha",
+      baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
+      headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
+    },
+    files: filesForReview,
+    metadata: {
+      deliveryId,
+      eventName,
+      action: body.action,
+      sender: body.sender?.login,
+      pullRequestUrl: body.pull_request?.html_url,
+    },
+  };
+
+  const model = createGitHubReviewModel();
+
+  let review;
+
+  try {
+    review = await runReview(reviewInput, {
+      model,
+      useRepositoryTools: true,
+    });
+  } catch (error) {
+    if (!isReviewOutputValidationFailure(error)) {
+      throw error;
+    }
+
+    console.warn(
+      "[github-webhook] pull_request tool review failed schema validation; retrying without tools",
+      {
         deliveryId,
-        eventName,
-        action: body.action,
-        sender: body.sender?.login,
-        pullRequestUrl: body.pull_request?.html_url,
+        installationId,
+        owner: ownerRepo.owner,
+        repo: ownerRepo.repo,
+        pullRequestNumber,
+        errorName: getErrorString(error, "name") || "UnknownError",
+        errorCode: getErrorString(error, "code") || undefined,
+        errorMessage: getErrorString(error, "message") || "Unknown error",
       },
-    },
-    {
-      model: createGitHubReviewModel(),
+    );
+
+    review = await runReview(reviewInput, {
+      model,
       useRepositoryTools: false,
-    },
-  );
+    });
+  }
 
   const reviewText = toMarkdownReview(review);
   const pullRequestUrl = body.pull_request?.html_url ?? pullRequest.htmlUrl;

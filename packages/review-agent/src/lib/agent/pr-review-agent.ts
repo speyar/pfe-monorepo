@@ -36,6 +36,9 @@ export const DEFAULT_REPOSITORY_EXPLORATION_SYSTEM_PROMPT = [
   "3) Search for references and usage patterns with searchRepository.",
   "4) Open impacted files with readFile and inspect relevant directories with listFiles.",
   "5) Report only high-confidence findings backed by inspected code.",
+  "Return valid JSON only using this exact schema: { summary: { verdict: 'approve' | 'comment' | 'request_changes', score: 0-100, overview: string, risk: string }, findings: [{ severity: 'critical' | 'high' | 'medium' | 'low' | 'info', file: string, line?: number, endLine?: number, title: string, message: string, suggestion?: string, category?: string, confidence?: 0-1 }], notes?: string[] }.",
+  "Do not use unsupported fields such as summary or description inside findings; use title and message.",
+  "If there are no meaningful issues, still include summary and return findings as an empty array.",
   "Return output that matches the schema exactly.",
   "Do not include markdown and do not include text outside the structured result.",
 ].join(" ");
@@ -56,6 +59,37 @@ export interface CreatePrReviewAgentOptions {
 
 export interface PrReviewAgent {
   reviewPullRequest(input: ReviewRequest): Promise<ReviewResult>;
+}
+
+type ToolUsageEntry = {
+  stepNumber: number;
+  toolName: string;
+  toolCallId: string;
+  dynamic: boolean;
+  invalid: boolean;
+};
+
+function summarizeToolUsage(entries: ToolUsageEntry[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  for (const entry of entries) {
+    counts[entry.toolName] = (counts[entry.toolName] ?? 0) + 1;
+  }
+
+  return counts;
+}
+
+function getErrorString(
+  error: unknown,
+  key: "name" | "message" | "code",
+): string {
+  if (!error || typeof error !== "object") {
+    return "";
+  }
+
+  const value = Reflect.get(error, key);
+
+  return typeof value === "string" ? value : "";
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -282,23 +316,73 @@ export async function runPrReviewWithRepositoryTools(
 ): Promise<ReviewResult> {
   const normalizedRequest = normalizeReviewRequest(input);
   const startedAt = Date.now();
+  const toolUsageEntries: ToolUsageEntry[] = [];
+  const toolUsageContext = {
+    repository: `${normalizedRequest.repository.owner}/${normalizedRequest.repository.name}`,
+    pullRequestNumber: normalizedRequest.pullRequest.number,
+  };
 
-  const { output } = await generateText({
-    model: options.model,
-    system:
-      options.systemPrompt ?? DEFAULT_REPOSITORY_EXPLORATION_SYSTEM_PROMPT,
-    prompt: buildRepositoryExplorationPrompt(normalizedRequest),
-    tools: buildRepositoryTools(options),
-    stopWhen: stepCountIs(normalizeToolStepLimit(options.maxToolSteps)),
-    output: Output.object({
-      schema: reviewResultSchema,
-      name: "review_result",
-      description: "Structured pull request review findings.",
-    }),
-    temperature: options.temperature ?? 0.1,
-    maxOutputTokens: options.maxOutputTokens,
-    abortSignal: options.signal,
-  });
+  let output: ReviewResult;
+  let totalSteps = 0;
+
+  try {
+    const generation = await generateText({
+      model: options.model,
+      system:
+        options.systemPrompt ?? DEFAULT_REPOSITORY_EXPLORATION_SYSTEM_PROMPT,
+      prompt: buildRepositoryExplorationPrompt(normalizedRequest),
+      tools: buildRepositoryTools(options),
+      toolChoice: "required",
+      stopWhen: stepCountIs(normalizeToolStepLimit(options.maxToolSteps)),
+      output: Output.object({
+        schema: reviewResultSchema,
+        name: "review_result",
+        description: "Structured pull request review findings.",
+      }),
+      temperature: options.temperature ?? 0.1,
+      maxOutputTokens: options.maxOutputTokens,
+      abortSignal: options.signal,
+      onStepFinish: (step) => {
+        totalSteps = Math.max(totalSteps, step.stepNumber + 1);
+
+        for (const toolCall of step.toolCalls) {
+          const usageEntry: ToolUsageEntry = {
+            stepNumber: step.stepNumber,
+            toolName: toolCall.toolName,
+            toolCallId: toolCall.toolCallId,
+            dynamic: toolCall.dynamic === true,
+            invalid: toolCall.invalid === true,
+          };
+
+          toolUsageEntries.push(usageEntry);
+        }
+      },
+    });
+
+    output = generation.output;
+    totalSteps = generation.steps.length;
+
+    console.info("[review-agent] repository-tools usage", {
+      ...toolUsageContext,
+      steps: totalSteps,
+      totalToolCalls: toolUsageEntries.length,
+      tools: summarizeToolUsage(toolUsageEntries),
+      calls: toolUsageEntries,
+    });
+  } catch (error) {
+    console.warn("[review-agent] repository-tools usage failed", {
+      ...toolUsageContext,
+      stepsObserved: totalSteps,
+      totalToolCallsObserved: toolUsageEntries.length,
+      toolsObserved: summarizeToolUsage(toolUsageEntries),
+      callsObserved: toolUsageEntries,
+      errorName: getErrorString(error, "name") || "UnknownError",
+      errorCode: getErrorString(error, "code") || undefined,
+      errorMessage: getErrorString(error, "message") || "Unknown error",
+    });
+
+    throw error;
+  }
 
   const result = validateReviewResult(output, normalizedRequest);
 
