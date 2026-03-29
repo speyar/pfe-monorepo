@@ -1,9 +1,15 @@
 import {
+  createPullRequestReviewComment,
   getPullRequest,
   listPullRequestFiles,
   upsertPullRequestComment,
 } from "@pfe-monorepo/github-api";
-import { createGitHubReviewModel, runReview } from "@pfe-monorepo/review-agent";
+import {
+  createGitHubReviewModel,
+  type ReviewFinding,
+  type ReviewResult,
+  runReview,
+} from "@pfe-monorepo/review-agent";
 import { getGithubInstallationReviewer, savePullRequestReview } from "../db";
 import {
   getInstallationId,
@@ -18,6 +24,193 @@ type HandlePullRequestEventArgs = {
   deliveryId: string;
   eventName: string;
 };
+
+type DiffSide = "LEFT" | "RIGHT";
+
+type DiffLineMaps = {
+  right: Map<number, string>;
+  left: Map<number, string>;
+};
+
+type InlineTarget = {
+  path: string;
+  line: number;
+  side: DiffSide;
+  snippet: string[];
+};
+
+type InlineTargetResolution =
+  | { ok: true; target: InlineTarget }
+  | { ok: false; reason: string };
+
+const MAX_INLINE_SNIPPET_LINES = 3;
+
+function normalizePath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\.\//, "");
+}
+
+function parsePatchLineMaps(patch: string): DiffLineMaps {
+  const right = new Map<number, string>();
+  const left = new Map<number, string>();
+
+  const lines = patch.split(/\r?\n/);
+  let oldLine = 0;
+  let newLine = 0;
+  let inHunk = false;
+
+  for (const rawLine of lines) {
+    const hunkHeader = /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/.exec(
+      rawLine,
+    );
+
+    if (hunkHeader) {
+      oldLine = Number.parseInt(hunkHeader[1], 10);
+      newLine = Number.parseInt(hunkHeader[2], 10);
+      inHunk = true;
+      continue;
+    }
+
+    if (!inHunk) {
+      continue;
+    }
+
+    if (!rawLine) {
+      continue;
+    }
+
+    const marker = rawLine[0];
+
+    if (marker === "+") {
+      right.set(newLine, rawLine);
+      newLine += 1;
+      continue;
+    }
+
+    if (marker === "-") {
+      left.set(oldLine, rawLine);
+      oldLine += 1;
+      continue;
+    }
+
+    if (marker === " ") {
+      right.set(newLine, rawLine);
+      left.set(oldLine, rawLine);
+      oldLine += 1;
+      newLine += 1;
+    }
+  }
+
+  return { right, left };
+}
+
+function buildSnippet(
+  sideMap: Map<number, string>,
+  targetLine: number,
+): string[] {
+  const snippet: string[] = [];
+
+  for (let offset = -1; offset <= 1; offset += 1) {
+    const lineNumber = targetLine + offset;
+    const line = sideMap.get(lineNumber);
+
+    if (!line) {
+      continue;
+    }
+
+    snippet.push(`${lineNumber}: ${line}`);
+    if (snippet.length >= MAX_INLINE_SNIPPET_LINES) {
+      break;
+    }
+  }
+
+  return snippet;
+}
+
+function buildInlineCommentBody(
+  finding: ReviewFinding,
+  target: InlineTarget,
+): string {
+  const snippetSection =
+    target.snippet.length > 0
+      ? `${target.snippet.map((line) => `> ${line}`).join("\n")}\n\n`
+      : "";
+  const suggestionSection = finding.suggestion
+    ? `\n\nSuggestion: ${finding.suggestion}`
+    : "";
+
+  return `[${finding.severity.toUpperCase()}] ${finding.title}\n\n${snippetSection}${finding.message}${suggestionSection}`;
+}
+
+function resolveInlineTarget(
+  finding: ReviewFinding,
+  patchByPath: Map<string, string>,
+  lineMapsByPath: Map<string, DiffLineMaps>,
+): InlineTargetResolution {
+  if (typeof finding.line !== "number") {
+    return { ok: false, reason: "missing_line" };
+  }
+
+  const normalizedPath = normalizePath(finding.file);
+  const patch = patchByPath.get(normalizedPath);
+  if (!patch) {
+    return { ok: false, reason: "file_not_in_changed_diff" };
+  }
+
+  let maps = lineMapsByPath.get(normalizedPath);
+  if (!maps) {
+    maps = parsePatchLineMaps(patch);
+    lineMapsByPath.set(normalizedPath, maps);
+  }
+
+  const rightLine = maps.right.get(finding.line);
+  if (rightLine) {
+    return {
+      ok: true,
+      target: {
+        path: normalizedPath,
+        line: finding.line,
+        side: "RIGHT",
+        snippet: buildSnippet(maps.right, finding.line),
+      },
+    };
+  }
+
+  const leftLine = maps.left.get(finding.line);
+  if (leftLine) {
+    return {
+      ok: true,
+      target: {
+        path: normalizedPath,
+        line: finding.line,
+        side: "LEFT",
+        snippet: buildSnippet(maps.left, finding.line),
+      },
+    };
+  }
+
+  return { ok: false, reason: "line_not_in_changed_hunks" };
+}
+
+function buildFallbackSummaryComment(input: {
+  totalFindings: number;
+  postedInline: number;
+  skippedByReason: Record<string, number>;
+}): string {
+  const skipped = input.totalFindings - input.postedInline;
+  const reasonLines = Object.entries(input.skippedByReason)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([reason, count]) => `- ${reason}: ${count}`);
+
+  return [
+    REVIEW_COMMENT_MARKER,
+    "## Automated PR Review",
+    `Inline comments posted: ${input.postedInline}/${input.totalFindings}`,
+    skipped > 0 ? "Skipped findings:" : "",
+    skipped > 0 ? reasonLines.join("\n") : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 function getErrorString(
   error: unknown,
@@ -180,7 +373,7 @@ export const handlePullRequestEvent = async ({
 
   const model = createGitHubReviewModel();
 
-  let review;
+  let review: ReviewResult;
 
   try {
     review = await runReview(reviewInput, {
@@ -214,6 +407,73 @@ export const handlePullRequestEvent = async ({
 
   const reviewText = toMarkdownReview(review);
   const pullRequestUrl = body.pull_request?.html_url ?? pullRequest.htmlUrl;
+
+  const patchByPath = new Map<string, string>();
+  for (const file of files) {
+    if (!file.patch) {
+      continue;
+    }
+
+    patchByPath.set(normalizePath(file.filename), file.patch);
+  }
+
+  const lineMapsByPath = new Map<string, DiffLineMaps>();
+  const skippedByReason: Record<string, number> = {};
+  let postedInline = 0;
+
+  const commitSha = body.pull_request?.head?.sha;
+  if (commitSha) {
+    for (const finding of review.findings) {
+      const targetResolution = resolveInlineTarget(
+        finding,
+        patchByPath,
+        lineMapsByPath,
+      );
+
+      if (!targetResolution.ok) {
+        skippedByReason[targetResolution.reason] =
+          (skippedByReason[targetResolution.reason] ?? 0) + 1;
+        continue;
+      }
+
+      const commentBody = buildInlineCommentBody(
+        finding,
+        targetResolution.target,
+      );
+
+      await createPullRequestReviewComment(installationId, {
+        owner: ownerRepo.owner,
+        repo: ownerRepo.repo,
+        pullRequestNumber,
+        commitSha,
+        path: targetResolution.target.path,
+        line: targetResolution.target.line,
+        side: targetResolution.target.side,
+        body: commentBody,
+      });
+
+      postedInline += 1;
+    }
+  } else {
+    skippedByReason.missing_commit_sha = review.findings.length;
+  }
+
+  if (postedInline < review.findings.length) {
+    const fallbackComment = buildFallbackSummaryComment({
+      totalFindings: review.findings.length,
+      postedInline,
+      skippedByReason,
+    });
+
+    await upsertPullRequestComment(installationId, {
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      pullRequestNumber,
+      marker: REVIEW_COMMENT_MARKER,
+      body: fallbackComment,
+    });
+  }
+
   const reviewDbStatus = await savePullRequestReview({
     installationId,
     repository: body.repository,
@@ -225,14 +485,6 @@ export const handlePullRequestEvent = async ({
     reviewerClerkUserId: githubInstallation.user.clerkUserId,
   });
 
-  await upsertPullRequestComment(installationId, {
-    owner: ownerRepo.owner,
-    repo: ownerRepo.repo,
-    pullRequestNumber,
-    marker: REVIEW_COMMENT_MARKER,
-    body: reviewText,
-  });
-
   console.info("[github-webhook] pull_request review completed", {
     deliveryId,
     action: body.action,
@@ -241,6 +493,9 @@ export const handlePullRequestEvent = async ({
     repo: ownerRepo.repo,
     pullRequestNumber,
     findingsCount: review.findings.length,
+    inlineCommentsPosted: postedInline,
+    inlineCommentsSkipped: review.findings.length - postedInline,
+    skippedByReason,
     verdict: review.summary.verdict,
     db: reviewDbStatus,
   });
