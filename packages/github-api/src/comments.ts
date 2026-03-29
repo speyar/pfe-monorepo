@@ -77,6 +77,10 @@ export const createPullRequestReviewComment = async (
       side: input.side,
     });
 
+    console.log("createPullRequestReviewComment response", {
+      data: response.data,
+    });
+
     return {
       commentId: response.data.id,
       body: response.data.body ?? "",
@@ -84,6 +88,9 @@ export const createPullRequestReviewComment = async (
       updatedAt: response.data.updated_at,
     };
   } catch (error) {
+    console.error("createPullRequestReviewComment error", {
+      error,
+    });
     throw normalizeGitHubError(
       error,
       "Failed to create pull request review comment",

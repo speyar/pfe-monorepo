@@ -43,10 +43,178 @@ type InlineTargetResolution =
   | { ok: true; target: InlineTarget }
   | { ok: false; reason: string };
 
-const MAX_INLINE_SNIPPET_LINES = 3;
+const MAX_INLINE_SNIPPET_LINES = 5;
+
+function looksLikeCode(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const wordCount = trimmed.split(/\s+/).length;
+  const startsLikeSentence = /^[A-Z][a-z]+(\s|$)/.test(trimmed);
+  const hasInlineCodeTicks = trimmed.includes("`");
+  const startsLikeCode =
+    /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class)\b/.test(
+      trimmed,
+    ) || /^[A-Za-z_$][\w$.\]]*\s*(=|\+=|-=|\*=|\/=|\(|\[)/.test(trimmed);
+  const endsLikeCode = /[;{}]$/.test(trimmed);
+
+  if (startsLikeSentence && wordCount >= 5 && !endsLikeCode) {
+    return false;
+  }
+
+  if (hasInlineCodeTicks && startsLikeSentence) {
+    return false;
+  }
+
+  return startsLikeCode || endsLikeCode;
+}
+
+function extractCodeFromSuggestion(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const hrefMatch = /^change\s+href\s+to\s+["']([^"']+)["']/i.exec(trimmed);
+  if (hrefMatch) {
+    return `href="${hrefMatch[1]}"`;
+  }
+
+  const srcMatch = /^update\s+src\s+to\s+["']([^"']+)["']/i.exec(trimmed);
+  if (srcMatch) {
+    return `src="${srcMatch[1]}"`;
+  }
+
+  const callMatch = /^call\s+([A-Za-z_$][\w$]*\([^)]*\))/i.exec(trimmed);
+  if (callMatch) {
+    return callMatch[1];
+  }
+
+  const passMatch =
+    /^pass\s+([A-Za-z_$][\w$]*)\s+to\s+([A-Za-z_$][\w$]*)/i.exec(trimmed);
+  if (passMatch) {
+    return `${passMatch[2]}(${passMatch[1]})`;
+  }
+
+  const backtickMatches = [...trimmed.matchAll(/`([^`]+)`/g)]
+    .map((match) => match[1].trim())
+    .filter(Boolean);
+
+  const backtickCode = backtickMatches.find((candidate) => {
+    if (!/[A-Za-z_$]/.test(candidate)) {
+      return false;
+    }
+
+    return /[().=!+\-/*\[\]{}'"<>]|\./.test(candidate);
+  });
+
+  if (backtickCode) {
+    return backtickCode;
+  }
+
+  if (looksLikeCode(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
+}
+
+function formatSuggestionSection(suggestion: string): string {
+  const normalized = suggestion.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const lineCount = normalized.split(/\r?\n/).length;
+
+  if (lineCount === 1) {
+    const codeCandidate = extractCodeFromSuggestion(normalized);
+    if (codeCandidate) {
+      return ["```suggestion", codeCandidate, "```"].join("\n");
+    }
+  }
+
+  return normalized;
+}
 
 function normalizePath(path: string): string {
   return path.replaceAll("\\", "/").replace(/^\.\//, "");
+}
+
+function normalizeCodeForComparison(value: string): string {
+  return value.trim().replace(/\s+/g, " ");
+}
+
+function chooseClosestLine(
+  lines: number[],
+  preferredLine?: number,
+): number | undefined {
+  if (lines.length === 0) {
+    return undefined;
+  }
+
+  if (typeof preferredLine !== "number") {
+    return lines[0];
+  }
+
+  return lines.reduce((closest, current) => {
+    const currentDistance = Math.abs(current - preferredLine);
+    const closestDistance = Math.abs(closest - preferredLine);
+
+    return currentDistance < closestDistance ? current : closest;
+  }, lines[0]);
+}
+
+function findLineByQuote(
+  sideMap: Map<number, string>,
+  quote: string,
+  preferredLine?: number,
+): number | undefined {
+  const quoteTrimmed = quote.trim();
+  if (!quoteTrimmed) {
+    return undefined;
+  }
+
+  const exactMatches: number[] = [];
+  const normalizedMatches: number[] = [];
+  const includeMatches: number[] = [];
+  const normalizedQuote = normalizeCodeForComparison(quoteTrimmed);
+  const normalizedQuoteLower = normalizedQuote.toLowerCase();
+
+  for (const [lineNumber, rawLine] of sideMap.entries()) {
+    const content = rawLine.slice(1);
+    const contentTrimmed = content.trim();
+    if (!contentTrimmed) {
+      continue;
+    }
+
+    if (contentTrimmed === quoteTrimmed) {
+      exactMatches.push(lineNumber);
+      continue;
+    }
+
+    const normalizedContent = normalizeCodeForComparison(contentTrimmed);
+    if (normalizedContent === normalizedQuote) {
+      normalizedMatches.push(lineNumber);
+      continue;
+    }
+
+    const normalizedContentLower = normalizedContent.toLowerCase();
+    if (
+      normalizedContentLower.includes(normalizedQuoteLower) ||
+      normalizedQuoteLower.includes(normalizedContentLower)
+    ) {
+      includeMatches.push(lineNumber);
+    }
+  }
+
+  return (
+    chooseClosestLine(exactMatches, preferredLine) ??
+    chooseClosestLine(normalizedMatches, preferredLine) ??
+    chooseClosestLine(includeMatches, preferredLine)
+  );
 }
 
 function parsePatchLineMaps(patch: string): DiffLineMaps {
@@ -117,7 +285,13 @@ function buildSnippet(
       continue;
     }
 
-    snippet.push(`${lineNumber}: ${line}`);
+    const marker =
+      line[0] === "+" || line[0] === "-" || line[0] === " " ? line[0] : " ";
+    const content = line.slice(1);
+
+    snippet.push(
+      `${lineNumber.toString().padStart(4, " ")} ${marker} ${content}`,
+    );
     if (snippet.length >= MAX_INLINE_SNIPPET_LINES) {
       break;
     }
@@ -130,15 +304,11 @@ function buildInlineCommentBody(
   finding: ReviewFinding,
   target: InlineTarget,
 ): string {
-  const snippetSection =
-    target.snippet.length > 0
-      ? `${target.snippet.map((line) => `> ${line}`).join("\n")}\n\n`
-      : "";
   const suggestionSection = finding.suggestion
-    ? `\n\nSuggestion: ${finding.suggestion}`
+    ? formatSuggestionSection(finding.suggestion)
     : "";
 
-  return `[${finding.severity.toUpperCase()}] ${finding.title}\n\n${snippetSection}${finding.message}${suggestionSection}`;
+  return [finding.message, suggestionSection].filter(Boolean).join("\n\n");
 }
 
 function resolveInlineTarget(
@@ -146,10 +316,6 @@ function resolveInlineTarget(
   patchByPath: Map<string, string>,
   lineMapsByPath: Map<string, DiffLineMaps>,
 ): InlineTargetResolution {
-  if (typeof finding.line !== "number") {
-    return { ok: false, reason: "missing_line" };
-  }
-
   const normalizedPath = normalizePath(finding.file);
   const patch = patchByPath.get(normalizedPath);
   if (!patch) {
@@ -160,6 +326,43 @@ function resolveInlineTarget(
   if (!maps) {
     maps = parsePatchLineMaps(patch);
     lineMapsByPath.set(normalizedPath, maps);
+  }
+
+  const quotedCode = finding.quote?.trim();
+  if (quotedCode) {
+    const rightQuotedLine = findLineByQuote(
+      maps.right,
+      quotedCode,
+      finding.line,
+    );
+    if (typeof rightQuotedLine === "number") {
+      return {
+        ok: true,
+        target: {
+          path: normalizedPath,
+          line: rightQuotedLine,
+          side: "RIGHT",
+          snippet: buildSnippet(maps.right, rightQuotedLine),
+        },
+      };
+    }
+
+    const leftQuotedLine = findLineByQuote(maps.left, quotedCode, finding.line);
+    if (typeof leftQuotedLine === "number") {
+      return {
+        ok: true,
+        target: {
+          path: normalizedPath,
+          line: leftQuotedLine,
+          side: "LEFT",
+          snippet: buildSnippet(maps.left, leftQuotedLine),
+        },
+      };
+    }
+  }
+
+  if (typeof finding.line !== "number") {
+    return { ok: false, reason: "missing_line" };
   }
 
   const rightLine = maps.right.get(finding.line);
