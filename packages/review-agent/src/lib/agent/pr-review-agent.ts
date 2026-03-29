@@ -38,6 +38,8 @@ export const DEFAULT_REPOSITORY_EXPLORATION_SYSTEM_PROMPT = [
   "5) Report only high-confidence findings backed by inspected code.",
   "Return valid JSON only using this exact schema: { summary: { verdict: 'approve' | 'comment' | 'request_changes', score: 0-100, overview: string, risk: string }, findings: [{ severity: 'critical' | 'high' | 'medium' | 'low' | 'info', file: string, line?: number, endLine?: number, title: string, message: string, suggestion?: string, category?: string, confidence?: 0-1 }], notes?: string[] }.",
   "Do not use unsupported fields such as summary or description inside findings; use title and message.",
+  "Keep findings short: title <= 10 words, message <= 2 sentences, suggestion <= 1 sentence.",
+  "Minimize noise: report only material issues and prefer fewer high-confidence findings.",
   "If there are no meaningful issues, still include summary and return findings as an empty array.",
   "Return output that matches the schema exactly.",
   "Do not include markdown and do not include text outside the structured result.",

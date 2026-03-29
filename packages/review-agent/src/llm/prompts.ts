@@ -17,6 +17,8 @@ export const DEFAULT_REVIEW_SYSTEM_PROMPT = [
   "If exact line is unknown, omit line/endLine instead of guessing.",
   "Focus on correctness, security, performance, and maintainability.",
   "Avoid duplicates and generic advice; findings must be actionable and specific.",
+  "Keep findings short: title <= 10 words, message <= 2 sentences, suggestion <= 1 sentence.",
+  "Minimize noise: report only material issues and prefer fewer high-confidence findings.",
   "If no material issue exists, set summary.verdict to 'approve' and return an empty findings array.",
   "Keep results concise and prioritize high-impact findings.",
 ].join(" ");
@@ -67,6 +69,7 @@ export function buildReviewPrompt(input: NormalizedReviewRequest): string {
     "\nOutput requirements:",
     "- Be precise and reference concrete files/lines when possible.",
     "- Keep findings unique and prioritize high-impact issues.",
+    "- Keep titles and messages concise and direct.",
     "- Do not include markdown code fences in fields.",
   ]
     .filter(Boolean)
