@@ -6,6 +6,7 @@ export const reviewFindingSchema = z.object({
   file: z.string().min(1),
   line: z.number().int().positive().optional(),
   endLine: z.number().int().positive().optional(),
+  quote: z.string().min(1).optional(),
   title: z.string().min(1),
   message: z.string().min(1),
   suggestion: z.string().min(1).optional(),

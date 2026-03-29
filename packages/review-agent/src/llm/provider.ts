@@ -27,5 +27,5 @@ export function createGitHubReviewModel(
     cliPath: input.cliPath,
   });
 
-  return provider(input.model ?? "gpt-4.1");
+  return provider(input.model ?? "gpt-5.3-codex");
 }

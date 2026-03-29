@@ -21,6 +21,7 @@ export interface ReviewFinding {
   file: string;
   line?: number;
   endLine?: number;
+  quote?: string;
   title: string;
   message: string;
   suggestion?: string;

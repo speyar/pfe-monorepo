@@ -4,6 +4,100 @@ import type { GitHubInstallation, PullRequestPayload } from "./types";
 
 export const REVIEW_COMMENT_MARKER = "<!-- pfe-review-agent -->";
 
+function looksLikeCode(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const wordCount = trimmed.split(/\s+/).length;
+  const startsLikeSentence = /^[A-Z][a-z]+(\s|$)/.test(trimmed);
+  const hasInlineCodeTicks = trimmed.includes("`");
+  const startsLikeCode =
+    /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class)\b/.test(
+      trimmed,
+    ) || /^[A-Za-z_$][\w$.\]]*\s*(=|\+=|-=|\*=|\/=|\(|\[)/.test(trimmed);
+  const endsLikeCode = /[;{}]$/.test(trimmed);
+
+  if (startsLikeSentence && wordCount >= 5 && !endsLikeCode) {
+    return false;
+  }
+
+  if (hasInlineCodeTicks && startsLikeSentence) {
+    return false;
+  }
+
+  return startsLikeCode || endsLikeCode;
+}
+
+function extractCodeFromSuggestion(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const hrefMatch = /^change\s+href\s+to\s+["']([^"']+)["']/i.exec(trimmed);
+  if (hrefMatch) {
+    return `href="${hrefMatch[1]}"`;
+  }
+
+  const srcMatch = /^update\s+src\s+to\s+["']([^"']+)["']/i.exec(trimmed);
+  if (srcMatch) {
+    return `src="${srcMatch[1]}"`;
+  }
+
+  const callMatch = /^call\s+([A-Za-z_$][\w$]*\([^)]*\))/i.exec(trimmed);
+  if (callMatch) {
+    return callMatch[1];
+  }
+
+  const passMatch =
+    /^pass\s+([A-Za-z_$][\w$]*)\s+to\s+([A-Za-z_$][\w$]*)/i.exec(trimmed);
+  if (passMatch) {
+    return `${passMatch[2]}(${passMatch[1]})`;
+  }
+
+  const backtickMatches = [...trimmed.matchAll(/`([^`]+)`/g)]
+    .map((match) => match[1].trim())
+    .filter(Boolean);
+
+  const backtickCode = backtickMatches.find((candidate) => {
+    if (!/[A-Za-z_$]/.test(candidate)) {
+      return false;
+    }
+
+    return /[().=!+\-/*\[\]{}'"<>]|\./.test(candidate);
+  });
+
+  if (backtickCode) {
+    return backtickCode;
+  }
+
+  if (looksLikeCode(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
+}
+
+function formatSuggestionSection(suggestion: string): string {
+  const normalized = suggestion.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const lineCount = normalized.split(/\r?\n/).length;
+
+  if (lineCount === 1) {
+    const codeCandidate = extractCodeFromSuggestion(normalized);
+    if (codeCandidate) {
+      return ["```suggestion", codeCandidate, "```"].join("\n");
+    }
+  }
+
+  return normalized;
+}
+
 export const getInstallationId = (
   installation?: GitHubInstallation,
 ): number | null => {
@@ -42,23 +136,20 @@ export const getOwnerRepo = (
 };
 
 export const toMarkdownReview = (review: ReviewResult): string => {
-  const findingLines = review.findings.map((finding, index) => {
-    const location = finding.line
-      ? ` (${finding.file}:${finding.line})`
-      : ` (${finding.file})`;
-    const suggestion = finding.suggestion
-      ? `\nSuggestion: ${finding.suggestion}`
+  const findingLines = review.findings.map((finding) => {
+    const suggestionLine = finding.suggestion
+      ? formatSuggestionSection(finding.suggestion)
       : "";
 
-    return `${index + 1}. [${finding.severity.toUpperCase()}] ${finding.title}${location}\n${finding.message}${suggestion}`;
+    return [finding.message, suggestionLine].filter(Boolean).join("\n\n");
   });
 
   return [
     REVIEW_COMMENT_MARKER,
     "## Automated PR Review",
-    `Verdict: **${review.summary.verdict}**`,
-    `Score: **${review.summary.score}/100**`,
-    `Risk: ${review.summary.risk}`,
+    `- Verdict: **${review.summary.verdict.toUpperCase()}**`,
+    `- Score: **${review.summary.score}/100**`,
+    `- Risk: ${review.summary.risk}`,
     "",
     review.summary.overview,
     "",
