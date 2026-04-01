@@ -45,6 +45,25 @@ type InlineTargetResolution =
 
 const MAX_INLINE_SNIPPET_LINES = 5;
 
+function parseBooleanEnv(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
+function parseIntegerEnv(name: string): number | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 function looksLikeCode(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -571,6 +590,7 @@ export const handlePullRequestEvent = async ({
       action: body.action,
       sender: body.sender?.login,
       pullRequestUrl: body.pull_request?.html_url,
+      installationId,
     },
   };
 
@@ -582,6 +602,16 @@ export const handlePullRequestEvent = async ({
     review = await runReview(reviewInput, {
       model,
       useRepositoryTools: true,
+      executionMode: parseBooleanEnv("REVIEW_AGENT_USE_SANDBOX")
+        ? "sandbox"
+        : "local",
+      reviewTimeoutMs: parseIntegerEnv(
+        "REVIEW_AGENT_SANDBOX_REVIEW_TIMEOUT_MS",
+      ),
+      sandboxTimeoutSeconds: parseIntegerEnv(
+        "REVIEW_AGENT_SANDBOX_TIMEOUT_SECONDS",
+      ),
+      sandboxRuntime: process.env.REVIEW_AGENT_SANDBOX_RUNTIME,
     });
   } catch (error) {
     if (!isReviewOutputValidationFailure(error)) {
@@ -605,6 +635,16 @@ export const handlePullRequestEvent = async ({
     review = await runReview(reviewInput, {
       model,
       useRepositoryTools: false,
+      executionMode: parseBooleanEnv("REVIEW_AGENT_USE_SANDBOX")
+        ? "sandbox"
+        : "local",
+      reviewTimeoutMs: parseIntegerEnv(
+        "REVIEW_AGENT_SANDBOX_REVIEW_TIMEOUT_MS",
+      ),
+      sandboxTimeoutSeconds: parseIntegerEnv(
+        "REVIEW_AGENT_SANDBOX_TIMEOUT_SECONDS",
+      ),
+      sandboxRuntime: process.env.REVIEW_AGENT_SANDBOX_RUNTIME,
     });
   }
 

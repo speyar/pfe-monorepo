@@ -19,6 +19,7 @@ import { listFiles } from "../repo-tools/list-files";
 import { readFile } from "../repo-tools/read-file";
 import { searchRepository } from "../repo-tools/search-repo";
 import { RepoToolError } from "../repo-tools/shared";
+import type { RepositoryToolsRunner } from "../../sandbox/types";
 
 const DEFAULT_MAX_TOOL_STEPS = 12;
 const DEFAULT_READ_FILE_MAX_BYTES = 64_000;
@@ -28,13 +29,14 @@ const DEFAULT_LIST_MAX_ENTRIES = 400;
 
 export const DEFAULT_REPOSITORY_EXPLORATION_SYSTEM_PROMPT = [
   "You are an expert PR review agent.",
-  "You can inspect the repository using tools: readFile, searchRepository, listFiles.",
+  "You can inspect the repository using tools: readFile, searchRepository, listFiles, runCommand.",
   "Use the tools to analyze how changed files impact other files before producing findings.",
   "Reasoning workflow:",
   "1) Inspect changed files and patch hunks from the prompt.",
   "2) Identify important symbols and behavioral changes.",
   "3) Search for references and usage patterns with searchRepository.",
   "4) Open impacted files with readFile and inspect relevant directories with listFiles.",
+  "4.5) Use runCommand for targeted verification (for example rg, tests, or symbol tracing) when file tools are insufficient.",
   "5) Report only high-confidence findings backed by inspected code.",
   "Return valid JSON only using this exact schema: { summary: { verdict: 'approve' | 'comment' | 'request_changes', score: 0-100, overview: string, risk: string }, findings: [{ severity: 'critical' | 'high' | 'medium' | 'low' | 'info', file: string, line?: number, endLine?: number, quote?: string, title: string, message: string, suggestion?: string, category?: string, confidence?: 0-1 }], notes?: string[] }.",
   "Do not use unsupported fields such as summary or description inside findings; use title and message.",
@@ -61,6 +63,7 @@ export interface CreatePrReviewAgentOptions {
   listMaxDepth?: number;
   listMaxEntries?: number;
   signal?: AbortSignal;
+  repositoryToolsRunner?: RepositoryToolsRunner;
 }
 
 export interface PrReviewAgent {
@@ -73,6 +76,13 @@ type ToolUsageEntry = {
   toolCallId: string;
   dynamic: boolean;
   invalid: boolean;
+};
+
+type ToolLogInput = {
+  tool: string;
+  input: Record<string, unknown>;
+  startedAt: number;
+  result: unknown;
 };
 
 function summarizeToolUsage(entries: ToolUsageEntry[]): Record<string, number> {
@@ -104,6 +114,90 @@ function truncate(value: string, maxLength: number): string {
   }
 
   return `${value.slice(0, maxLength)}\n...<truncated>`;
+}
+
+function summarizeToolResult(result: unknown): Record<string, unknown> {
+  if (!result || typeof result !== "object") {
+    return { ok: false, type: typeof result };
+  }
+
+  const candidate = result as {
+    ok?: boolean;
+    error?: { code?: string; message?: string };
+    matches?: unknown[];
+    entries?: unknown[];
+    bytesRead?: number;
+    truncated?: boolean;
+    exitCode?: number;
+    stdout?: string;
+    stderr?: string;
+  };
+
+  const stdoutLength =
+    typeof candidate.stdout === "string" ? candidate.stdout.length : undefined;
+  const stderrLength =
+    typeof candidate.stderr === "string" ? candidate.stderr.length : undefined;
+
+  return {
+    ok: candidate.ok ?? true,
+    errorCode: candidate.error?.code,
+    errorMessage: candidate.error?.message,
+    matchCount: Array.isArray(candidate.matches)
+      ? candidate.matches.length
+      : undefined,
+    entryCount: Array.isArray(candidate.entries)
+      ? candidate.entries.length
+      : undefined,
+    bytesRead:
+      typeof candidate.bytesRead === "number" ? candidate.bytesRead : undefined,
+    truncated:
+      typeof candidate.truncated === "boolean"
+        ? candidate.truncated
+        : undefined,
+    exitCode:
+      typeof candidate.exitCode === "number" ? candidate.exitCode : undefined,
+    stdoutLength,
+    stderrLength,
+  };
+}
+
+function sanitizeToolInput(
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(input)) {
+    if (
+      key.toLowerCase().includes("token") ||
+      key.toLowerCase().includes("password")
+    ) {
+      sanitized[key] = "[redacted]";
+      continue;
+    }
+
+    if (typeof value === "string") {
+      sanitized[key] = value.length > 300 ? `${value.slice(0, 300)}...` : value;
+      continue;
+    }
+
+    sanitized[key] = value;
+  }
+
+  return sanitized;
+}
+
+function logToolExecution({
+  tool,
+  input,
+  startedAt,
+  result,
+}: ToolLogInput): void {
+  console.info("[review-agent] tool execution", {
+    tool,
+    elapsedMs: Date.now() - startedAt,
+    input: sanitizeToolInput(input),
+    result: summarizeToolResult(result),
+  });
 }
 
 function formatChangedFiles(input: NormalizedReviewRequest): string {
@@ -202,6 +296,7 @@ function buildToolErrorResult(error: unknown): {
 
 function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
   const repositoryRoot = options.repositoryRoot;
+  const runner = options.repositoryToolsRunner;
 
   return {
     readFile: tool({
@@ -221,16 +316,52 @@ function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
           .describe("Optional max number of bytes to read from the file."),
       }),
       execute: async ({ path, maxBytes }) => {
+        const startedAt = Date.now();
+        const toolInput = { path, maxBytes, repositoryRoot };
+
         try {
-          return await readFile(path, {
+          if (runner) {
+            const result = await runner.readFile(path, {
+              repositoryRoot,
+              maxBytes:
+                maxBytes ??
+                options.readFileMaxBytes ??
+                DEFAULT_READ_FILE_MAX_BYTES,
+            });
+
+            logToolExecution({
+              tool: "readFile",
+              input: toolInput,
+              startedAt,
+              result,
+            });
+            return result;
+          }
+
+          const result = await readFile(path, {
             repositoryRoot,
             maxBytes:
               maxBytes ??
               options.readFileMaxBytes ??
               DEFAULT_READ_FILE_MAX_BYTES,
           });
+
+          logToolExecution({
+            tool: "readFile",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         } catch (error) {
-          return buildToolErrorResult(error);
+          const result = buildToolErrorResult(error);
+          logToolExecution({
+            tool: "readFile",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         }
       },
     }),
@@ -260,8 +391,37 @@ function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
           .describe("Maximum number of matches to return."),
       }),
       execute: async ({ query, isRegexp, caseSensitive, maxResults }) => {
+        const startedAt = Date.now();
+        const toolInput = {
+          query,
+          isRegexp,
+          caseSensitive,
+          maxResults,
+          repositoryRoot,
+        };
+
         try {
-          return await searchRepository(query, {
+          if (runner) {
+            const result = await runner.searchRepository(query, {
+              repositoryRoot,
+              isRegexp,
+              caseSensitive,
+              maxResults:
+                maxResults ??
+                options.searchMaxResults ??
+                DEFAULT_SEARCH_MAX_RESULTS,
+            });
+
+            logToolExecution({
+              tool: "searchRepository",
+              input: toolInput,
+              startedAt,
+              result,
+            });
+            return result;
+          }
+
+          const result = await searchRepository(query, {
             repositoryRoot,
             isRegexp,
             caseSensitive,
@@ -270,8 +430,23 @@ function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
               options.searchMaxResults ??
               DEFAULT_SEARCH_MAX_RESULTS,
           });
+
+          logToolExecution({
+            tool: "searchRepository",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         } catch (error) {
-          return buildToolErrorResult(error);
+          const result = buildToolErrorResult(error);
+          logToolExecution({
+            tool: "searchRepository",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         }
       },
     }),
@@ -300,16 +475,115 @@ function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
           .describe("Maximum number of directory entries to return."),
       }),
       execute: async ({ path, maxDepth, maxEntries }) => {
+        const startedAt = Date.now();
+        const toolInput = { path, maxDepth, maxEntries, repositoryRoot };
+
         try {
-          return await listFiles(path, {
+          if (runner) {
+            const result = await runner.listFiles(path, {
+              repositoryRoot,
+              maxDepth:
+                maxDepth ?? options.listMaxDepth ?? DEFAULT_LIST_MAX_DEPTH,
+              maxEntries:
+                maxEntries ??
+                options.listMaxEntries ??
+                DEFAULT_LIST_MAX_ENTRIES,
+            });
+
+            logToolExecution({
+              tool: "listFiles",
+              input: toolInput,
+              startedAt,
+              result,
+            });
+            return result;
+          }
+
+          const result = await listFiles(path, {
             repositoryRoot,
             maxDepth:
               maxDepth ?? options.listMaxDepth ?? DEFAULT_LIST_MAX_DEPTH,
             maxEntries:
               maxEntries ?? options.listMaxEntries ?? DEFAULT_LIST_MAX_ENTRIES,
           });
+
+          logToolExecution({
+            tool: "listFiles",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         } catch (error) {
-          return buildToolErrorResult(error);
+          const result = buildToolErrorResult(error);
+          logToolExecution({
+            tool: "listFiles",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
+        }
+      },
+    }),
+
+    runCommand: tool({
+      description:
+        "Run a shell command in the repository for deeper verification.",
+      inputSchema: z.object({
+        command: z.string().min(1).describe("Shell command to run."),
+        cwd: z
+          .string()
+          .optional()
+          .describe("Optional working directory relative to repository root."),
+        timeoutMs: z
+          .number()
+          .int()
+          .min(100)
+          .max(120_000)
+          .optional()
+          .describe("Optional timeout in milliseconds."),
+      }),
+      execute: async ({ command, cwd, timeoutMs }) => {
+        const startedAt = Date.now();
+        const toolInput = { command, cwd, timeoutMs, repositoryRoot };
+
+        try {
+          if (!runner?.runCommand) {
+            const result = {
+              ok: false,
+              error: {
+                code: "TOOL_EXECUTION_ERROR",
+                message: "runCommand is unavailable in this execution context.",
+              },
+            };
+
+            logToolExecution({
+              tool: "runCommand",
+              input: toolInput,
+              startedAt,
+              result,
+            });
+            return result;
+          }
+
+          const result = await runner.runCommand({ command, cwd, timeoutMs });
+          logToolExecution({
+            tool: "runCommand",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
+        } catch (error) {
+          const result = buildToolErrorResult(error);
+          logToolExecution({
+            tool: "runCommand",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         }
       },
     }),

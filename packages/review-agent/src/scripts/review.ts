@@ -16,6 +16,25 @@ interface CliArgs {
   help?: boolean;
 }
 
+function parseBooleanEnv(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
+function parseIntegerEnv(name: string): number | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`Invalid integer value for ${name}: ${value}`);
+  }
+
+  return parsed;
+}
+
 const DEFAULT_INPUT_PATH = "examples/review-input.json";
 
 function printUsage(): void {
@@ -196,6 +215,14 @@ async function main(): Promise<void> {
     model: createGitHubReviewModel({ model: args.model }),
     temperature: args.temperature,
     maxOutputTokens: args.maxOutputTokens,
+    executionMode: parseBooleanEnv("REVIEW_AGENT_USE_SANDBOX")
+      ? "sandbox"
+      : "local",
+    reviewTimeoutMs: parseIntegerEnv("REVIEW_AGENT_SANDBOX_REVIEW_TIMEOUT_MS"),
+    sandboxTimeoutSeconds: parseIntegerEnv(
+      "REVIEW_AGENT_SANDBOX_TIMEOUT_SECONDS",
+    ),
+    sandboxRuntime: process.env.REVIEW_AGENT_SANDBOX_RUNTIME,
   });
 
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

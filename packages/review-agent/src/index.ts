@@ -70,3 +70,10 @@ export {
   type CreatePrReviewAgentOptions,
   type PrReviewAgent,
 } from "./lib/agent/pr-review-agent";
+
+export {
+  runReviewInSandbox,
+  SandboxReviewExecutionError,
+} from "./sandbox/executor";
+
+export { SandboxAuthError } from "./sandbox/github-auth";

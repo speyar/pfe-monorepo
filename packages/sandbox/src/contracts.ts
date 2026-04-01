@@ -32,6 +32,19 @@ export interface CreateSandboxInput {
   metadata?: SandboxMetadata;
   runtime?: string;
   timeoutSeconds?: number;
+  source?:
+    | {
+        type: "git";
+        url: string;
+        revision?: string;
+        username?: string;
+        password?: string;
+        depth?: number;
+      }
+    | {
+        type: "tarball";
+        url: string;
+      };
   resourceProfile?: {
     vcpus?: number;
     memoryMb?: number;

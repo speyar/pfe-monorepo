@@ -15,6 +15,17 @@ export type GitHubAppAuthInput = {
 
 export type CreateGitHubAppClientInput = GitHubAppAuthInput;
 
+export type CreateInstallationAccessTokenInput = {
+  appId: number;
+  privateKey: string;
+  installationId: number;
+};
+
+export type InstallationAccessToken = {
+  token: string;
+  expiresAt?: string;
+};
+
 export type Repository = {
   id: number;
   owner: { login: string };
