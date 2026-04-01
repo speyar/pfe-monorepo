@@ -56,6 +56,7 @@ export class VercelSandboxProvider implements SandboxProvider {
       const sandbox = await Sandbox.create({
         ...this.credentials,
         runtime: input.runtime ?? this.defaultRuntime,
+        source: mapSandboxSource(input.source),
         timeout:
           typeof input.timeoutSeconds === "number"
             ? input.timeoutSeconds * 1000
@@ -185,6 +186,38 @@ export class VercelSandboxProvider implements SandboxProvider {
       throw mapVercelError(error, "run sandbox command");
     }
   }
+}
+
+function mapSandboxSource(source: CreateSandboxInput["source"]):
+  | {
+      type: "git";
+      url: string;
+      revision?: string;
+      username?: string;
+      password?: string;
+      depth?: number;
+    }
+  | {
+      type: "tarball";
+      url: string;
+    }
+  | undefined {
+  if (!source) {
+    return undefined;
+  }
+
+  if (source.type === "git") {
+    return {
+      type: "git",
+      url: source.url,
+      revision: source.revision,
+      username: source.username,
+      password: source.password,
+      depth: source.depth,
+    };
+  }
+
+  return source;
 }
 
 function resolveCredentials(

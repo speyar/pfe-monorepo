@@ -45,6 +45,25 @@ type InlineTargetResolution =
 
 const MAX_INLINE_SNIPPET_LINES = 5;
 
+function parseBooleanEnv(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
+function parseIntegerEnv(name: string): number | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 function looksLikeCode(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -311,6 +330,18 @@ function buildInlineCommentBody(
   return [finding.message, suggestionSection].filter(Boolean).join("\n\n");
 }
 
+function getFirstMappedLine(map: Map<number, string>): number | null {
+  let first: number | null = null;
+
+  for (const line of map.keys()) {
+    if (first === null || line < first) {
+      first = line;
+    }
+  }
+
+  return first;
+}
+
 function resolveInlineTarget(
   finding: ReviewFinding,
   patchByPath: Map<string, string>,
@@ -362,6 +393,32 @@ function resolveInlineTarget(
   }
 
   if (typeof finding.line !== "number") {
+    const fallbackRightLine = getFirstMappedLine(maps.right);
+    if (fallbackRightLine !== null) {
+      return {
+        ok: true,
+        target: {
+          path: normalizedPath,
+          line: fallbackRightLine,
+          side: "RIGHT",
+          snippet: buildSnippet(maps.right, fallbackRightLine),
+        },
+      };
+    }
+
+    const fallbackLeftLine = getFirstMappedLine(maps.left);
+    if (fallbackLeftLine !== null) {
+      return {
+        ok: true,
+        target: {
+          path: normalizedPath,
+          line: fallbackLeftLine,
+          side: "LEFT",
+          snippet: buildSnippet(maps.left, fallbackLeftLine),
+        },
+      };
+    }
+
     return { ok: false, reason: "missing_line" };
   }
 
@@ -571,6 +628,8 @@ export const handlePullRequestEvent = async ({
       action: body.action,
       sender: body.sender?.login,
       pullRequestUrl: body.pull_request?.html_url,
+      installationId,
+      repositoryPrivate: body.repository?.private,
     },
   };
 
@@ -582,6 +641,16 @@ export const handlePullRequestEvent = async ({
     review = await runReview(reviewInput, {
       model,
       useRepositoryTools: true,
+      executionMode: parseBooleanEnv("REVIEW_AGENT_USE_SANDBOX")
+        ? "sandbox"
+        : "local",
+      reviewTimeoutMs: parseIntegerEnv(
+        "REVIEW_AGENT_SANDBOX_REVIEW_TIMEOUT_MS",
+      ),
+      sandboxTimeoutSeconds: parseIntegerEnv(
+        "REVIEW_AGENT_SANDBOX_TIMEOUT_SECONDS",
+      ),
+      sandboxRuntime: process.env.REVIEW_AGENT_SANDBOX_RUNTIME,
     });
   } catch (error) {
     if (!isReviewOutputValidationFailure(error)) {
@@ -605,6 +674,16 @@ export const handlePullRequestEvent = async ({
     review = await runReview(reviewInput, {
       model,
       useRepositoryTools: false,
+      executionMode: parseBooleanEnv("REVIEW_AGENT_USE_SANDBOX")
+        ? "sandbox"
+        : "local",
+      reviewTimeoutMs: parseIntegerEnv(
+        "REVIEW_AGENT_SANDBOX_REVIEW_TIMEOUT_MS",
+      ),
+      sandboxTimeoutSeconds: parseIntegerEnv(
+        "REVIEW_AGENT_SANDBOX_TIMEOUT_SECONDS",
+      ),
+      sandboxRuntime: process.env.REVIEW_AGENT_SANDBOX_RUNTIME,
     });
   }
 

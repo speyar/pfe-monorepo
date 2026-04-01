@@ -8,6 +8,9 @@ import {
 import { reviewResultSchema } from "../schema/review-result.schema";
 import { runPrReviewWithRepositoryTools } from "../lib/agent/pr-review-agent";
 import { OutputValidationError } from "../errors/review-errors";
+import { runReviewInSandbox } from "../sandbox/executor";
+import { createLocalRepositoryToolsRunner } from "../sandbox/local-runner";
+import type { RepositoryToolsRunner } from "../sandbox/types";
 
 import { normalizeReviewRequest } from "./normalize-input";
 import { validateReviewResult } from "./validate-output";
@@ -26,6 +29,11 @@ export interface RunReviewOptions {
   searchMaxResults?: number;
   listMaxDepth?: number;
   listMaxEntries?: number;
+  repositoryToolsRunner?: RepositoryToolsRunner;
+  executionMode?: "local" | "sandbox";
+  reviewTimeoutMs?: number;
+  sandboxTimeoutSeconds?: number;
+  sandboxRuntime?: string;
 }
 
 export interface ReviewAgent {
@@ -118,10 +126,43 @@ export async function runReview(
   input: ReviewRequest,
   options: RunReviewOptions,
 ): Promise<ReviewResult> {
+  console.info("[review-agent] review start", {
+    repository: `${input.repository.owner}/${input.repository.name}`,
+    pullRequestNumber: input.pullRequest.number,
+    executionMode: options.executionMode ?? "local",
+    useRepositoryTools: options.useRepositoryTools ?? true,
+  });
+
   const useRepositoryTools = options.useRepositoryTools ?? true;
+
+  if (options.executionMode === "sandbox" && useRepositoryTools) {
+    return runReviewInSandbox(input, {
+      model: options.model,
+      systemPrompt: options.systemPrompt,
+      temperature: options.temperature,
+      maxOutputTokens: options.maxOutputTokens,
+      signal: options.signal,
+      maxToolSteps: options.maxToolSteps,
+      readFileMaxBytes: options.readFileMaxBytes,
+      searchMaxResults: options.searchMaxResults,
+      listMaxDepth: options.listMaxDepth,
+      listMaxEntries: options.listMaxEntries,
+      reviewTimeoutMs: options.reviewTimeoutMs,
+      sandboxTimeoutSeconds: options.sandboxTimeoutSeconds,
+      sandboxRuntime: options.sandboxRuntime,
+    });
+  }
+
   if (useRepositoryTools) {
     try {
-      return runPrReviewWithRepositoryTools(input, options);
+      return runPrReviewWithRepositoryTools(input, {
+        ...options,
+        repositoryToolsRunner:
+          options.repositoryToolsRunner ??
+          createLocalRepositoryToolsRunner({
+            repositoryRoot: options.repositoryRoot,
+          }),
+      });
     } catch (error) {
       if (!isToolOutputValidationFailure(error)) {
         throw error;

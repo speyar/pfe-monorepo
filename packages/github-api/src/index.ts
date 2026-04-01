@@ -1,4 +1,4 @@
-export { createGitHubAppClient } from "./client";
+export { createGitHubAppClient, createInstallationAccessToken } from "./client";
 export { cloneRepository } from "./clone";
 export {
   createPullRequestComment,
@@ -29,9 +29,11 @@ export type {
 
 export type {
   CreateGitHubAppClientInput,
+  CreateInstallationAccessTokenInput,
   GitHubAppAuthInput,
   GitHubClient,
   GitHubOwnerRepo,
+  InstallationAccessToken,
   PullRequestDiff,
   PullRequestFile,
   PullRequestSummary,

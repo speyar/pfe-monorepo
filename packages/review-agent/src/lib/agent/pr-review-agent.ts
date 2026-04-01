@@ -19,22 +19,31 @@ import { listFiles } from "../repo-tools/list-files";
 import { readFile } from "../repo-tools/read-file";
 import { searchRepository } from "../repo-tools/search-repo";
 import { RepoToolError } from "../repo-tools/shared";
+import type { RepositoryToolsRunner } from "../../sandbox/types";
 
 const DEFAULT_MAX_TOOL_STEPS = 12;
 const DEFAULT_READ_FILE_MAX_BYTES = 64_000;
 const DEFAULT_SEARCH_MAX_RESULTS = 120;
 const DEFAULT_LIST_MAX_DEPTH = 2;
 const DEFAULT_LIST_MAX_ENTRIES = 400;
+const PREEXPLORE_MAX_CHANGED_FILES = 8;
+const PREEXPLORE_MAX_TERMS = 8;
+const PREEXPLORE_MAX_SEARCHES = 8;
+const PREEXPLORE_SEARCH_MAX_RESULTS = 20;
+const PREEXPLORE_MAX_RELATED_FILES = 6;
+const PREEXPLORE_READ_MAX_BYTES = 32_000;
+const PREEXPLORE_MAX_CONTEXT_CHARS = 12_000;
 
 export const DEFAULT_REPOSITORY_EXPLORATION_SYSTEM_PROMPT = [
   "You are an expert PR review agent.",
-  "You can inspect the repository using tools: readFile, searchRepository, listFiles.",
+  "You can inspect the repository using tools: readFile, searchRepository, listFiles, runCommand.",
   "Use the tools to analyze how changed files impact other files before producing findings.",
   "Reasoning workflow:",
   "1) Inspect changed files and patch hunks from the prompt.",
   "2) Identify important symbols and behavioral changes.",
   "3) Search for references and usage patterns with searchRepository.",
   "4) Open impacted files with readFile and inspect relevant directories with listFiles.",
+  "4.5) Use runCommand for targeted verification (for example rg, tests, or symbol tracing) when file tools are insufficient.",
   "5) Report only high-confidence findings backed by inspected code.",
   "Return valid JSON only using this exact schema: { summary: { verdict: 'approve' | 'comment' | 'request_changes', score: 0-100, overview: string, risk: string }, findings: [{ severity: 'critical' | 'high' | 'medium' | 'low' | 'info', file: string, line?: number, endLine?: number, quote?: string, title: string, message: string, suggestion?: string, category?: string, confidence?: 0-1 }], notes?: string[] }.",
   "Do not use unsupported fields such as summary or description inside findings; use title and message.",
@@ -61,6 +70,7 @@ export interface CreatePrReviewAgentOptions {
   listMaxDepth?: number;
   listMaxEntries?: number;
   signal?: AbortSignal;
+  repositoryToolsRunner?: RepositoryToolsRunner;
 }
 
 export interface PrReviewAgent {
@@ -74,6 +84,20 @@ type ToolUsageEntry = {
   dynamic: boolean;
   invalid: boolean;
 };
+
+type ToolLogInput = {
+  tool: string;
+  input: Record<string, unknown>;
+  startedAt: number;
+  result: unknown;
+};
+
+interface PreExploreOptions {
+  request: NormalizedReviewRequest;
+  repositoryRoot?: string;
+  runner?: RepositoryToolsRunner;
+  readFileMaxBytes?: number;
+}
 
 function summarizeToolUsage(entries: ToolUsageEntry[]): Record<string, number> {
   const counts: Record<string, number> = {};
@@ -106,6 +130,310 @@ function truncate(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength)}\n...<truncated>`;
 }
 
+function summarizeToolResult(result: unknown): Record<string, unknown> {
+  if (!result || typeof result !== "object") {
+    return { ok: false, type: typeof result };
+  }
+
+  const candidate = result as {
+    ok?: boolean;
+    error?: { code?: string; message?: string };
+    matches?: unknown[];
+    entries?: unknown[];
+    bytesRead?: number;
+    truncated?: boolean;
+    exitCode?: number;
+    stdout?: string;
+    stderr?: string;
+  };
+
+  const stdoutLength =
+    typeof candidate.stdout === "string" ? candidate.stdout.length : undefined;
+  const stderrLength =
+    typeof candidate.stderr === "string" ? candidate.stderr.length : undefined;
+
+  return {
+    ok: candidate.ok ?? true,
+    errorCode: candidate.error?.code,
+    errorMessage: candidate.error?.message,
+    matchCount: Array.isArray(candidate.matches)
+      ? candidate.matches.length
+      : undefined,
+    entryCount: Array.isArray(candidate.entries)
+      ? candidate.entries.length
+      : undefined,
+    bytesRead:
+      typeof candidate.bytesRead === "number" ? candidate.bytesRead : undefined,
+    truncated:
+      typeof candidate.truncated === "boolean"
+        ? candidate.truncated
+        : undefined,
+    exitCode:
+      typeof candidate.exitCode === "number" ? candidate.exitCode : undefined,
+    stdoutLength,
+    stderrLength,
+  };
+}
+
+function sanitizeToolInput(
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const sanitized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(input)) {
+    if (
+      key.toLowerCase().includes("token") ||
+      key.toLowerCase().includes("password")
+    ) {
+      sanitized[key] = "[redacted]";
+      continue;
+    }
+
+    if (typeof value === "string") {
+      sanitized[key] = value.length > 300 ? `${value.slice(0, 300)}...` : value;
+      continue;
+    }
+
+    sanitized[key] = value;
+  }
+
+  return sanitized;
+}
+
+function logToolExecution({
+  tool,
+  input,
+  startedAt,
+  result,
+}: ToolLogInput): void {
+  console.info("[review-agent] tool execution", {
+    tool,
+    elapsedMs: Date.now() - startedAt,
+    input: sanitizeToolInput(input),
+    result: summarizeToolResult(result),
+  });
+}
+
+function getChangedPaths(input: NormalizedReviewRequest): string[] {
+  return input.files
+    .map((file) => file.path)
+    .filter((path) => path.trim().length > 0);
+}
+
+function isLikelyCodeFile(path: string): boolean {
+  const normalized = path.toLowerCase();
+
+  return [
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".py",
+    ".go",
+    ".rs",
+    ".java",
+    ".kt",
+    ".swift",
+    ".php",
+    ".rb",
+    ".cs",
+    ".cpp",
+    ".c",
+    ".h",
+    ".hpp",
+    ".json",
+    ".yml",
+    ".yaml",
+    ".prisma",
+  ].some((ext) => normalized.endsWith(ext));
+}
+
+function collectSearchTerms(input: NormalizedReviewRequest): string[] {
+  const terms = new Set<string>();
+
+  const addTerm = (value: string): void => {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > 64) {
+      return;
+    }
+
+    if (/^[0-9]+$/.test(trimmed)) {
+      return;
+    }
+
+    terms.add(trimmed);
+  };
+
+  for (const file of input.files.slice(0, PREEXPLORE_MAX_CHANGED_FILES)) {
+    const path = file.path;
+    const filename = path.split("/").pop() ?? path;
+    const basename = filename.replace(/\.[^.]+$/, "");
+    addTerm(basename);
+
+    const candidateText = `${file.patch ?? ""}\n${file.content ?? ""}`;
+    const identifierMatches =
+      candidateText.match(/[A-Za-z_][A-Za-z0-9_]{2,}/g) ?? [];
+
+    for (const identifier of identifierMatches.slice(0, 30)) {
+      if (
+        [
+          "const",
+          "let",
+          "var",
+          "return",
+          "function",
+          "class",
+          "if",
+          "else",
+          "for",
+          "while",
+          "await",
+          "import",
+          "export",
+          "from",
+          "true",
+          "false",
+          "null",
+          "undefined",
+        ].includes(identifier)
+      ) {
+        continue;
+      }
+
+      addTerm(identifier);
+
+      if (terms.size >= PREEXPLORE_MAX_TERMS) {
+        return [...terms].slice(0, PREEXPLORE_MAX_TERMS);
+      }
+    }
+  }
+
+  return [...terms].slice(0, PREEXPLORE_MAX_TERMS);
+}
+
+async function preExploreRepository(
+  options: PreExploreOptions,
+): Promise<string> {
+  const startedAt = Date.now();
+  const repositoryRoot = options.repositoryRoot;
+  const changedPaths = getChangedPaths(options.request);
+  const tools = options.runner
+    ? {
+        readFile: options.runner.readFile,
+        searchRepository: options.runner.searchRepository,
+      }
+    : {
+        readFile: (path: string, readFileOptions: { maxBytes?: number }) =>
+          readFile(path, {
+            repositoryRoot,
+            maxBytes: readFileOptions.maxBytes,
+          }),
+        searchRepository: (
+          query: string,
+          searchOptions: {
+            maxResults?: number;
+            includeGlobs?: string[];
+            caseSensitive?: boolean;
+          },
+        ) =>
+          searchRepository(query, {
+            repositoryRoot,
+            maxResults: searchOptions.maxResults,
+            includeGlobs: searchOptions.includeGlobs,
+            caseSensitive: searchOptions.caseSensitive,
+            isRegexp: false,
+          }),
+      };
+
+  const terms = collectSearchTerms(options.request);
+  const relatedFiles = new Set<string>();
+  const termSummaries: Array<{ term: string; matchCount: number }> = [];
+
+  for (const term of terms.slice(0, PREEXPLORE_MAX_SEARCHES)) {
+    const result = await tools.searchRepository(term, {
+      maxResults: PREEXPLORE_SEARCH_MAX_RESULTS,
+      caseSensitive: false,
+    });
+
+    if (!result.ok) {
+      termSummaries.push({ term, matchCount: 0 });
+      continue;
+    }
+
+    const uniqueFiles = new Set(result.matches.map((match) => match.file));
+    termSummaries.push({ term, matchCount: result.matches.length });
+
+    for (const file of uniqueFiles) {
+      if (changedPaths.includes(file) || !isLikelyCodeFile(file)) {
+        continue;
+      }
+
+      relatedFiles.add(file);
+
+      if (relatedFiles.size >= PREEXPLORE_MAX_RELATED_FILES) {
+        break;
+      }
+    }
+
+    if (relatedFiles.size >= PREEXPLORE_MAX_RELATED_FILES) {
+      break;
+    }
+  }
+
+  const snippets: string[] = [];
+  let contextChars = 0;
+
+  for (const file of [...relatedFiles]) {
+    const readResult = await tools.readFile(file, {
+      maxBytes:
+        Math.min(
+          options.readFileMaxBytes ?? PREEXPLORE_READ_MAX_BYTES,
+          PREEXPLORE_READ_MAX_BYTES,
+        ) || PREEXPLORE_READ_MAX_BYTES,
+    });
+
+    if (!readResult.ok) {
+      continue;
+    }
+
+    const content = readResult.content.split(/\r?\n/).slice(0, 40).join("\n");
+    if (!content.trim()) {
+      continue;
+    }
+
+    const snippet = `### ${file}\n${content}`;
+    if (contextChars + snippet.length > PREEXPLORE_MAX_CONTEXT_CHARS) {
+      break;
+    }
+
+    snippets.push(snippet);
+    contextChars += snippet.length;
+
+    if (snippets.length >= PREEXPLORE_MAX_RELATED_FILES) {
+      break;
+    }
+  }
+
+  console.info("[review-agent] pre-explore summary", {
+    termsTried: terms.length,
+    relatedFiles: relatedFiles.size,
+    snippets: snippets.length,
+    elapsedMs: Date.now() - startedAt,
+    termSummaries,
+  });
+
+  return [
+    "Repository pre-exploration context (generated before model reasoning):",
+    `Changed files: ${changedPaths.join(", ") || "none"}`,
+    `Search terms: ${terms.join(", ") || "none"}`,
+    snippets.length
+      ? `Related files context:\n\n${snippets.join("\n\n")}`
+      : "Related files context: none",
+  ].join("\n\n");
+}
+
 function formatChangedFiles(input: NormalizedReviewRequest): string {
   return input.files
     .map((file) => {
@@ -126,6 +454,7 @@ function formatChangedFiles(input: NormalizedReviewRequest): string {
 
 function buildRepositoryExplorationPrompt(
   input: NormalizedReviewRequest,
+  preExploreContext?: string,
 ): string {
   const changedFilePaths = input.files.map((file) => file.path).join(", ");
 
@@ -142,6 +471,7 @@ function buildRepositoryExplorationPrompt(
     formatChangedFiles(input),
     "",
     "Use repository tools to inspect impact outside changed files when needed.",
+    preExploreContext ?? "",
     "Review for correctness, security, performance, and maintainability.",
   ]
     .filter(Boolean)
@@ -202,6 +532,7 @@ function buildToolErrorResult(error: unknown): {
 
 function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
   const repositoryRoot = options.repositoryRoot;
+  const runner = options.repositoryToolsRunner;
 
   return {
     readFile: tool({
@@ -221,16 +552,52 @@ function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
           .describe("Optional max number of bytes to read from the file."),
       }),
       execute: async ({ path, maxBytes }) => {
+        const startedAt = Date.now();
+        const toolInput = { path, maxBytes, repositoryRoot };
+
         try {
-          return await readFile(path, {
+          if (runner) {
+            const result = await runner.readFile(path, {
+              repositoryRoot,
+              maxBytes:
+                maxBytes ??
+                options.readFileMaxBytes ??
+                DEFAULT_READ_FILE_MAX_BYTES,
+            });
+
+            logToolExecution({
+              tool: "readFile",
+              input: toolInput,
+              startedAt,
+              result,
+            });
+            return result;
+          }
+
+          const result = await readFile(path, {
             repositoryRoot,
             maxBytes:
               maxBytes ??
               options.readFileMaxBytes ??
               DEFAULT_READ_FILE_MAX_BYTES,
           });
+
+          logToolExecution({
+            tool: "readFile",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         } catch (error) {
-          return buildToolErrorResult(error);
+          const result = buildToolErrorResult(error);
+          logToolExecution({
+            tool: "readFile",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         }
       },
     }),
@@ -260,8 +627,37 @@ function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
           .describe("Maximum number of matches to return."),
       }),
       execute: async ({ query, isRegexp, caseSensitive, maxResults }) => {
+        const startedAt = Date.now();
+        const toolInput = {
+          query,
+          isRegexp,
+          caseSensitive,
+          maxResults,
+          repositoryRoot,
+        };
+
         try {
-          return await searchRepository(query, {
+          if (runner) {
+            const result = await runner.searchRepository(query, {
+              repositoryRoot,
+              isRegexp,
+              caseSensitive,
+              maxResults:
+                maxResults ??
+                options.searchMaxResults ??
+                DEFAULT_SEARCH_MAX_RESULTS,
+            });
+
+            logToolExecution({
+              tool: "searchRepository",
+              input: toolInput,
+              startedAt,
+              result,
+            });
+            return result;
+          }
+
+          const result = await searchRepository(query, {
             repositoryRoot,
             isRegexp,
             caseSensitive,
@@ -270,8 +666,23 @@ function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
               options.searchMaxResults ??
               DEFAULT_SEARCH_MAX_RESULTS,
           });
+
+          logToolExecution({
+            tool: "searchRepository",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         } catch (error) {
-          return buildToolErrorResult(error);
+          const result = buildToolErrorResult(error);
+          logToolExecution({
+            tool: "searchRepository",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         }
       },
     }),
@@ -300,16 +711,115 @@ function buildRepositoryTools(options: CreatePrReviewAgentOptions) {
           .describe("Maximum number of directory entries to return."),
       }),
       execute: async ({ path, maxDepth, maxEntries }) => {
+        const startedAt = Date.now();
+        const toolInput = { path, maxDepth, maxEntries, repositoryRoot };
+
         try {
-          return await listFiles(path, {
+          if (runner) {
+            const result = await runner.listFiles(path, {
+              repositoryRoot,
+              maxDepth:
+                maxDepth ?? options.listMaxDepth ?? DEFAULT_LIST_MAX_DEPTH,
+              maxEntries:
+                maxEntries ??
+                options.listMaxEntries ??
+                DEFAULT_LIST_MAX_ENTRIES,
+            });
+
+            logToolExecution({
+              tool: "listFiles",
+              input: toolInput,
+              startedAt,
+              result,
+            });
+            return result;
+          }
+
+          const result = await listFiles(path, {
             repositoryRoot,
             maxDepth:
               maxDepth ?? options.listMaxDepth ?? DEFAULT_LIST_MAX_DEPTH,
             maxEntries:
               maxEntries ?? options.listMaxEntries ?? DEFAULT_LIST_MAX_ENTRIES,
           });
+
+          logToolExecution({
+            tool: "listFiles",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         } catch (error) {
-          return buildToolErrorResult(error);
+          const result = buildToolErrorResult(error);
+          logToolExecution({
+            tool: "listFiles",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
+        }
+      },
+    }),
+
+    runCommand: tool({
+      description:
+        "Run a shell command in the repository for deeper verification.",
+      inputSchema: z.object({
+        command: z.string().min(1).describe("Shell command to run."),
+        cwd: z
+          .string()
+          .optional()
+          .describe("Optional working directory relative to repository root."),
+        timeoutMs: z
+          .number()
+          .int()
+          .min(100)
+          .max(120_000)
+          .optional()
+          .describe("Optional timeout in milliseconds."),
+      }),
+      execute: async ({ command, cwd, timeoutMs }) => {
+        const startedAt = Date.now();
+        const toolInput = { command, cwd, timeoutMs, repositoryRoot };
+
+        try {
+          if (!runner?.runCommand) {
+            const result = {
+              ok: false,
+              error: {
+                code: "TOOL_EXECUTION_ERROR",
+                message: "runCommand is unavailable in this execution context.",
+              },
+            };
+
+            logToolExecution({
+              tool: "runCommand",
+              input: toolInput,
+              startedAt,
+              result,
+            });
+            return result;
+          }
+
+          const result = await runner.runCommand({ command, cwd, timeoutMs });
+          logToolExecution({
+            tool: "runCommand",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
+        } catch (error) {
+          const result = buildToolErrorResult(error);
+          logToolExecution({
+            tool: "runCommand",
+            input: toolInput,
+            startedAt,
+            result,
+          });
+          return result;
         }
       },
     }),
@@ -330,40 +840,124 @@ export async function runPrReviewWithRepositoryTools(
 
   let output: ReviewResult;
   let totalSteps = 0;
+  let preExploreContext = "";
 
   try {
-    const generation = await generateText({
-      model: options.model,
-      system:
-        options.systemPrompt ?? DEFAULT_REPOSITORY_EXPLORATION_SYSTEM_PROMPT,
-      prompt: buildRepositoryExplorationPrompt(normalizedRequest),
-      tools: buildRepositoryTools(options),
-      toolChoice: "required",
-      stopWhen: stepCountIs(normalizeToolStepLimit(options.maxToolSteps)),
-      output: Output.object({
-        schema: reviewResultSchema,
-        name: "review_result",
-        description: "Structured pull request review findings.",
-      }),
-      temperature: options.temperature ?? 0.1,
-      maxOutputTokens: options.maxOutputTokens,
-      abortSignal: options.signal,
-      onStepFinish: (step) => {
-        totalSteps = Math.max(totalSteps, step.stepNumber + 1);
+    try {
+      preExploreContext = await preExploreRepository({
+        request: normalizedRequest,
+        repositoryRoot: options.repositoryRoot,
+        runner: options.repositoryToolsRunner,
+        readFileMaxBytes: options.readFileMaxBytes,
+      });
+    } catch (preExploreError) {
+      console.warn("[review-agent] pre-explore failed", {
+        ...toolUsageContext,
+        errorName: getErrorString(preExploreError, "name") || "UnknownError",
+        errorCode: getErrorString(preExploreError, "code") || undefined,
+        errorMessage:
+          getErrorString(preExploreError, "message") || "Unknown error",
+      });
+      preExploreContext = "";
+    }
 
-        for (const toolCall of step.toolCalls) {
-          const usageEntry: ToolUsageEntry = {
-            stepNumber: step.stepNumber,
-            toolName: toolCall.toolName,
-            toolCallId: toolCall.toolCallId,
-            dynamic: toolCall.dynamic === true,
-            invalid: toolCall.invalid === true,
-          };
+    const runGeneration = async (
+      attempt: number,
+      extraSystemInstruction?: string,
+    ) => {
+      toolUsageEntries.length = 0;
+      totalSteps = 0;
 
-          toolUsageEntries.push(usageEntry);
-        }
-      },
-    });
+      console.info("[review-agent] repository-tools generation start", {
+        ...toolUsageContext,
+        attempt,
+        hasExtraInstruction: Boolean(extraSystemInstruction),
+      });
+
+      const generation = await generateText({
+        model: options.model,
+        system: [
+          options.systemPrompt ?? DEFAULT_REPOSITORY_EXPLORATION_SYSTEM_PROMPT,
+          extraSystemInstruction ?? "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        prompt: buildRepositoryExplorationPrompt(
+          normalizedRequest,
+          preExploreContext,
+        ),
+        tools: buildRepositoryTools(options),
+        toolChoice: "required",
+        stopWhen: stepCountIs(normalizeToolStepLimit(options.maxToolSteps)),
+        output: Output.object({
+          schema: reviewResultSchema,
+          name: "review_result",
+          description: "Structured pull request review findings.",
+        }),
+        temperature: options.temperature ?? 0.1,
+        maxOutputTokens: options.maxOutputTokens,
+        abortSignal: options.signal,
+        onStepFinish: (step) => {
+          totalSteps = Math.max(totalSteps, step.stepNumber + 1);
+
+          for (const toolCall of step.toolCalls) {
+            const usageEntry: ToolUsageEntry = {
+              stepNumber: step.stepNumber,
+              toolName: toolCall.toolName,
+              toolCallId: toolCall.toolCallId,
+              dynamic: toolCall.dynamic === true,
+              invalid: toolCall.invalid === true,
+            };
+
+            toolUsageEntries.push(usageEntry);
+          }
+        },
+      });
+
+      return generation;
+    };
+
+    let generation = await runGeneration(1);
+
+    if (toolUsageEntries.length === 0) {
+      console.warn("[review-agent] repository-tools no tool calls observed", {
+        ...toolUsageContext,
+        attempt: 1,
+        steps: totalSteps,
+      });
+
+      generation = await runGeneration(
+        2,
+        "Mandatory: call at least two repository tools before final output. Use readFile/searchRepository/listFiles/runCommand to validate findings with concrete evidence.",
+      );
+
+      if (toolUsageEntries.length === 0) {
+        console.warn(
+          "[review-agent] repository-tools still no tool calls, forcing runCommand preflight",
+          {
+            ...toolUsageContext,
+            attempt: 2,
+            steps: totalSteps,
+          },
+        );
+
+        generation = await runGeneration(
+          3,
+          "Before producing final output, first call runCommand with command 'pwd', then continue normal repository exploration with at least one more tool call.",
+        );
+      }
+
+      if (toolUsageEntries.length === 0) {
+        console.warn(
+          "[review-agent] repository-tools proceeding with pre-explored context after zero tool calls",
+          {
+            ...toolUsageContext,
+            attempt: 3,
+            steps: totalSteps,
+          },
+        );
+      }
+    }
 
     output = generation.output;
     totalSteps = generation.steps.length;
