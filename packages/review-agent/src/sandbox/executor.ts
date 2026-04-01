@@ -45,6 +45,17 @@ export class SandboxReviewExecutionError extends Error {
   }
 }
 
+function isRepositoryPrivate(input: NormalizedReviewRequest): boolean | null {
+  const metadata = input.metadata as Record<string, unknown> | undefined;
+  const value = metadata?.repositoryPrivate;
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return null;
+}
+
 function getRepoUrl(input: NormalizedReviewRequest): string {
   return `https://github.com/${input.repository.owner}/${input.repository.name}.git`;
 }
@@ -78,6 +89,16 @@ export async function runReviewInSandbox(
   options: SandboxReviewExecutorOptions,
 ): Promise<ReviewResult> {
   const normalized = normalizeReviewRequest(input);
+  console.info("[review-agent] sandbox init", {
+    repository: `${normalized.repository.owner}/${normalized.repository.name}`,
+    pullRequestNumber: normalized.pullRequest.number,
+    headSha: normalized.pullRequest.headSha,
+    runtime: options.sandboxRuntime ?? DEFAULT_SANDBOX_RUNTIME,
+    sandboxTimeoutSeconds:
+      options.sandboxTimeoutSeconds ?? DEFAULT_SANDBOX_TIMEOUT_SECONDS,
+    reviewTimeoutMs: options.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
+  });
+
   const provider = new VercelSandboxProvider();
   const manager = SandboxManager.getInstance({
     provider,
@@ -86,7 +107,18 @@ export async function runReviewInSandbox(
 
   await manager.init();
 
-  const cloneAuth = await createRepositoryCloneAuth(normalized);
+  const repositoryPrivate = isRepositoryPrivate(normalized);
+  const shouldUseCloneAuth = repositoryPrivate !== false;
+
+  const cloneAuth = shouldUseCloneAuth
+    ? await createRepositoryCloneAuth(normalized)
+    : null;
+
+  console.info("[review-agent] sandbox auth strategy", {
+    repositoryPrivate,
+    usingInstallationAuth: shouldUseCloneAuth,
+    installationIdPresent: shouldUseCloneAuth,
+  });
 
   const sandbox = await manager.createSandbox({
     ownerId: `${normalized.repository.owner}/${normalized.repository.name}`,
@@ -97,8 +129,8 @@ export async function runReviewInSandbox(
       type: "git",
       url: getRepoUrl(normalized),
       revision: getRevision(normalized),
-      username: cloneAuth.username,
-      password: cloneAuth.password,
+      username: cloneAuth?.username,
+      password: cloneAuth?.password,
       depth: 20,
     },
     metadata: {
@@ -110,6 +142,12 @@ export async function runReviewInSandbox(
   });
 
   try {
+    console.info("[review-agent] sandbox created", {
+      sandboxId: sandbox.id,
+      provider: sandbox.provider,
+      state: sandbox.state,
+    });
+
     const cwdProbe = await manager.runCommand({
       sandboxId: sandbox.id,
       command: "pwd",
@@ -119,6 +157,14 @@ export async function runReviewInSandbox(
       cwdProbe.exitCode === 0 && cwdProbe.stdout.trim().length > 0
         ? (cwdProbe.stdout.trim().split(/\r?\n/)[0] ?? "/workspace")
         : "/workspace";
+
+    console.info("[review-agent] sandbox repository root", {
+      sandboxId: sandbox.id,
+      repositoryRoot: sandboxRepositoryRoot,
+      probeExitCode: cwdProbe.exitCode,
+      probeStdout: cwdProbe.stdout.trim().slice(0, 200),
+      probeStderr: cwdProbe.stderr.trim().slice(0, 200),
+    });
 
     const toolsRunner = createSandboxRepositoryToolsRunner({
       sandboxManager: manager,
@@ -132,18 +178,36 @@ export async function runReviewInSandbox(
       repositoryToolsRunner: toolsRunner,
     });
 
-    return await timeoutPromise(
+    const result = await timeoutPromise(
       reviewPromise,
       options.reviewTimeoutMs ?? DEFAULT_REVIEW_TIMEOUT_MS,
       "Sandbox review timed out before completion.",
     );
+
+    console.info("[review-agent] sandbox review complete", {
+      sandboxId: sandbox.id,
+      verdict: result.summary.verdict,
+      findingsCount: result.findings.length,
+      elapsedMs: result.summary.elapsedMs,
+    });
+
+    return result;
   } catch (error) {
+    console.error("[review-agent] sandbox review failed", {
+      sandboxId: sandbox.id,
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+
     throw new SandboxReviewExecutionError("Sandbox review execution failed.", {
       cause: error,
     });
   } finally {
     try {
       await manager.stopSandbox(sandbox.id);
+      console.info("[review-agent] sandbox stopped", {
+        sandboxId: sandbox.id,
+      });
     } catch (stopError) {
       console.warn("[review-agent] failed to stop sandbox", {
         sandboxId: sandbox.id,

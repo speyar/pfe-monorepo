@@ -19,6 +19,13 @@ const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;
 const DEFAULT_LIST_MAX_DEPTH = 2;
 const DEFAULT_LIST_MAX_ENTRIES = 400;
 
+function logSandboxTool(tool: string, payload: Record<string, unknown>): void {
+  console.info("[review-agent] sandbox tool", {
+    tool,
+    ...payload,
+  });
+}
+
 function quotePosix(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
@@ -81,6 +88,11 @@ export function createSandboxRepositoryToolsRunner(
       try {
         relativePath = toRelativePath(path);
         const maxBytes = readOptions.maxBytes ?? DEFAULT_READ_FILE_MAX_BYTES;
+        logSandboxTool("readFile:start", {
+          sandboxId: options.sandboxId,
+          path: relativePath,
+          maxBytes,
+        });
         const command = `node - <<'NODE'\nconst fs = require('node:fs');\nconst path = require('node:path');\nconst root = path.resolve(${quotePosix(options.repositoryRoot)});\nconst rel = ${quotePosix(relativePath)};\nconst maxBytes = ${maxBytes};\nconst target = path.resolve(root, rel);\nif (!target.startsWith(root)) {\n  console.log(JSON.stringify({ ok: false, error: { code: 'PATH_OUTSIDE_REPOSITORY', message: 'Path must be inside repository root.' }, path: rel }));\n  process.exit(0);\n}\nif (!fs.existsSync(target)) {\n  console.log(JSON.stringify({ ok: false, error: { code: 'FILE_NOT_FOUND', message: 'File not found: ' + rel }, path: rel }));\n  process.exit(0);\n}\nconst stat = fs.statSync(target);\nif (!stat.isFile()) {\n  console.log(JSON.stringify({ ok: false, error: { code: 'NOT_A_FILE', message: 'The provided path is not a file.' }, path: rel }));\n  process.exit(0);\n}\nconst handle = fs.openSync(target, 'r');\nconst toRead = Math.min(stat.size, maxBytes);\nconst buffer = Buffer.alloc(toRead);\nconst bytesRead = fs.readSync(handle, buffer, 0, toRead, 0);\nfs.closeSync(handle);\nconsole.log(JSON.stringify({ ok: true, path: rel, content: buffer.subarray(0, bytesRead).toString('utf8'), totalBytes: stat.size, bytesRead, maxBytes, truncated: stat.size > maxBytes }));\nNODE`;
 
         const result = await runCommand(command, 20_000);
@@ -113,6 +125,11 @@ export function createSandboxRepositoryToolsRunner(
             };
 
         if (!parsed.ok) {
+          logSandboxTool("readFile:error", {
+            sandboxId: options.sandboxId,
+            path: parsed.path,
+            code: parsed.error.code,
+          });
           return {
             ok: false,
             path: parsed.path,
@@ -120,6 +137,13 @@ export function createSandboxRepositoryToolsRunner(
             error: parsed.error,
           };
         }
+
+        logSandboxTool("readFile:done", {
+          sandboxId: options.sandboxId,
+          path: parsed.path,
+          bytesRead: parsed.bytesRead,
+          truncated: parsed.truncated,
+        });
 
         return {
           ok: true,
@@ -154,6 +178,12 @@ export function createSandboxRepositoryToolsRunner(
         relativePath = toRelativePath(path || ".");
         const maxDepth = listOptions.maxDepth ?? DEFAULT_LIST_MAX_DEPTH;
         const maxEntries = listOptions.maxEntries ?? DEFAULT_LIST_MAX_ENTRIES;
+        logSandboxTool("listFiles:start", {
+          sandboxId: options.sandboxId,
+          path: relativePath,
+          maxDepth,
+          maxEntries,
+        });
 
         const command = `node - <<'NODE'\nconst fs = require('node:fs');\nconst path = require('node:path');\nconst root = path.resolve(${quotePosix(options.repositoryRoot)});\nconst rel = ${quotePosix(relativePath)};\nconst maxDepth = ${maxDepth};\nconst maxEntries = ${maxEntries};\nconst start = path.resolve(root, rel);\nif (!start.startsWith(root)) {\n  console.log(JSON.stringify({ ok: false, error: { code: 'PATH_OUTSIDE_REPOSITORY', message: 'Path must be inside repository root.' }, path: rel }));\n  process.exit(0);\n}\nif (!fs.existsSync(start)) {\n  console.log(JSON.stringify({ ok: false, error: { code: 'DIRECTORY_NOT_FOUND', message: 'Directory not found: ' + rel }, path: rel }));\n  process.exit(0);\n}\nif (!fs.statSync(start).isDirectory()) {\n  console.log(JSON.stringify({ ok: false, error: { code: 'NOT_A_DIRECTORY', message: 'The provided path is not a directory.' }, path: rel }));\n  process.exit(0);\n}\nconst entries = [];\nlet truncated = false;\nfunction visit(current, depth) {\n  if (truncated || depth > maxDepth) return;\n  const children = fs.readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));\n  for (const child of children) {\n    if (entries.length >= maxEntries) { truncated = true; return; }\n    const absolute = path.join(current, child.name);\n    const relative = path.relative(root, absolute).replaceAll('\\\\', '/');\n    if (child.isDirectory()) {\n      entries.push(relative + '/');\n      if (depth < maxDepth) visit(absolute, depth + 1);\n    } else {\n      entries.push(relative);\n    }\n  }\n}\nvisit(start, 0);\nconsole.log(JSON.stringify({ ok: true, path: rel, maxDepth, maxEntries, truncated, entries }));\nNODE`;
 
@@ -186,6 +216,11 @@ export function createSandboxRepositoryToolsRunner(
             };
 
         if (!parsed.ok) {
+          logSandboxTool("listFiles:error", {
+            sandboxId: options.sandboxId,
+            path: parsed.path,
+            code: parsed.error.code,
+          });
           return {
             ok: false,
             path: parsed.path,
@@ -193,6 +228,13 @@ export function createSandboxRepositoryToolsRunner(
             error: parsed.error,
           };
         }
+
+        logSandboxTool("listFiles:done", {
+          sandboxId: options.sandboxId,
+          path: parsed.path,
+          entries: parsed.entries.length,
+          truncated: parsed.truncated,
+        });
 
         return {
           ok: true,
@@ -237,6 +279,12 @@ export function createSandboxRepositoryToolsRunner(
         const maxResults =
           searchOptions.maxResults ?? DEFAULT_SEARCH_MAX_RESULTS;
         const timeoutMs = searchOptions.timeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS;
+        logSandboxTool("searchRepository:start", {
+          sandboxId: options.sandboxId,
+          query: trimmedQuery.slice(0, 200),
+          maxResults,
+          timeoutMs,
+        });
         const flags = [
           "--json",
           "--line-number",
@@ -337,6 +385,13 @@ export function createSandboxRepositoryToolsRunner(
           }
         }
 
+        logSandboxTool("searchRepository:done", {
+          sandboxId: options.sandboxId,
+          query: trimmedQuery.slice(0, 200),
+          matches: matches.length,
+          truncated: matches.length >= maxResults,
+        });
+
         return {
           ok: true,
           query: trimmedQuery,
@@ -364,6 +419,14 @@ export function createSandboxRepositoryToolsRunner(
         command,
         cwd: cwd ?? options.repositoryRoot,
         timeoutMs,
+      });
+
+      logSandboxTool("runCommand", {
+        sandboxId: options.sandboxId,
+        cwd: cwd ?? options.repositoryRoot,
+        timeoutMs,
+        exitCode: result.exitCode,
+        command: command.slice(0, 200),
       });
 
       return {

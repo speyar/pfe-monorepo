@@ -330,6 +330,18 @@ function buildInlineCommentBody(
   return [finding.message, suggestionSection].filter(Boolean).join("\n\n");
 }
 
+function getFirstMappedLine(map: Map<number, string>): number | null {
+  let first: number | null = null;
+
+  for (const line of map.keys()) {
+    if (first === null || line < first) {
+      first = line;
+    }
+  }
+
+  return first;
+}
+
 function resolveInlineTarget(
   finding: ReviewFinding,
   patchByPath: Map<string, string>,
@@ -381,6 +393,32 @@ function resolveInlineTarget(
   }
 
   if (typeof finding.line !== "number") {
+    const fallbackRightLine = getFirstMappedLine(maps.right);
+    if (fallbackRightLine !== null) {
+      return {
+        ok: true,
+        target: {
+          path: normalizedPath,
+          line: fallbackRightLine,
+          side: "RIGHT",
+          snippet: buildSnippet(maps.right, fallbackRightLine),
+        },
+      };
+    }
+
+    const fallbackLeftLine = getFirstMappedLine(maps.left);
+    if (fallbackLeftLine !== null) {
+      return {
+        ok: true,
+        target: {
+          path: normalizedPath,
+          line: fallbackLeftLine,
+          side: "LEFT",
+          snippet: buildSnippet(maps.left, fallbackLeftLine),
+        },
+      };
+    }
+
     return { ok: false, reason: "missing_line" };
   }
 
@@ -591,6 +629,7 @@ export const handlePullRequestEvent = async ({
       sender: body.sender?.login,
       pullRequestUrl: body.pull_request?.html_url,
       installationId,
+      repositoryPrivate: body.repository?.private,
     },
   };
 

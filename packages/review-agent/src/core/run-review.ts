@@ -126,7 +126,16 @@ export async function runReview(
   input: ReviewRequest,
   options: RunReviewOptions,
 ): Promise<ReviewResult> {
-  if (options.executionMode === "sandbox") {
+  console.info("[review-agent] review start", {
+    repository: `${input.repository.owner}/${input.repository.name}`,
+    pullRequestNumber: input.pullRequest.number,
+    executionMode: options.executionMode ?? "local",
+    useRepositoryTools: options.useRepositoryTools ?? true,
+  });
+
+  const useRepositoryTools = options.useRepositoryTools ?? true;
+
+  if (options.executionMode === "sandbox" && useRepositoryTools) {
     return runReviewInSandbox(input, {
       model: options.model,
       systemPrompt: options.systemPrompt,
@@ -144,7 +153,6 @@ export async function runReview(
     });
   }
 
-  const useRepositoryTools = options.useRepositoryTools ?? true;
   if (useRepositoryTools) {
     try {
       return runPrReviewWithRepositoryTools(input, {
