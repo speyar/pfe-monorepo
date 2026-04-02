@@ -1,0 +1,31 @@
+{
+  "name": "@pfe-monorepo/new-review-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Simple test agent using AI SDK with GitHub provider",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "@ceira/github-sdk-provider": "workspace:*",
+    "@github/copilot": "^0.0.417",
+    "ai": "^6.0.116"
+  },
+  "devDependencies": {
+    "@pfe-monorepo/typescript-config": "workspace:*",
+    "bun-types": "^1.0.0"
+  }
+}

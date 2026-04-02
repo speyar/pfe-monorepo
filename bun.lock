@@ -78,6 +78,19 @@
         "@github/copilot": "^0.0.417",
       },
     },
+    "packages/new-review-agent": {
+      "name": "@pfe-monorepo/new-review-agent",
+      "version": "0.1.0",
+      "dependencies": {
+        "@ceira/github-sdk-provider": "workspace:*",
+        "@github/copilot": "^0.0.417",
+        "ai": "^6.0.116",
+      },
+      "devDependencies": {
+        "@pfe-monorepo/typescript-config": "workspace:*",
+        "bun-types": "^1.0.0",
+      },
+    },
     "packages/review-agent": {
       "name": "@pfe-monorepo/review-agent",
       "version": "0.0.0",
@@ -483,6 +496,8 @@
     "@packages/sandbox": ["@packages/sandbox@workspace:packages/sandbox"],
 
     "@pfe-monorepo/github-api": ["@pfe-monorepo/github-api@workspace:packages/github-api"],
+
+    "@pfe-monorepo/new-review-agent": ["@pfe-monorepo/new-review-agent@workspace:packages/new-review-agent"],
 
     "@pfe-monorepo/review-agent": ["@pfe-monorepo/review-agent@workspace:packages/review-agent"],
 
