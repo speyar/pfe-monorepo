@@ -1,3 +1,4 @@
+import { CommandFinished } from "@vercel/sandbox";
 import type {
   CreateSandboxInput,
   ExtendTimeoutInput,
