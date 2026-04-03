@@ -39,7 +39,7 @@ async function main() {
       model: provider("gpt-4.1"),
       sandboxManager: manager,
       sandboxId: sandbox.id,
-      maxToolSteps: 15,
+      maxToolSteps: 100,
     });
 
     console.log("Review Result:", JSON.stringify(result, null, 2));
