@@ -2,12 +2,12 @@ import { z } from "zod";
 
 export const reviewFindingSchema = z.object({
   severity: z.enum(["critical", "high", "medium", "low", "info"]),
-  file: z.string().min(1),
+  file: z.string().optional(),
   line: z.number().int().positive().optional(),
-  quote: z.string().min(1).optional(),
+  quote: z.string().optional(),
   title: z.string().min(1).max(100),
   message: z.string().min(1).max(500),
-  suggestion: z.string().min(1).max(200).optional(),
+  suggestion: z.string().optional(),
 });
 
 export const reviewResultSchema = z.object({

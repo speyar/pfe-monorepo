@@ -35,7 +35,7 @@ async function main() {
   });
 
   try {
-    const result = await runReviewAgent("feature-branch", {
+    const result = await runReviewAgent("new-review-agent", {
       model: provider("gpt-4.1"),
       sandboxManager: manager,
       sandboxId: sandbox.id,

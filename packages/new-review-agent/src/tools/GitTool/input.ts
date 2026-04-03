@@ -2,13 +2,13 @@ import { z } from "zod";
 
 export const GitInputSchema = z.object({
   operation: z
-    .enum(["status", "switch", "blame"])
-    .describe("Git operation to perform: status, switch, or blame."),
+    .enum(["status", "switch", "blame", "branch", "fetch"])
+    .describe("Git operation: status, switch, blame, branch (list), or fetch."),
   args: z
     .string()
     .optional()
     .describe(
-      "Arguments for the git operation. For 'switch': branch name. For 'blame': file path. For 'status': no args needed.",
+      "Arguments: For 'switch': branch name. For 'blame': file path. For 'branch': none. For 'fetch': none.",
     ),
 });
 

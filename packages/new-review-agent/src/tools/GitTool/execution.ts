@@ -58,8 +58,36 @@ export function createGitExecutor(manager: SandboxManager, sandboxId: string) {
         return result.stdout || "No blame information available";
       }
 
+      case "branch": {
+        const result = await manager.runCommand({
+          sandboxId,
+          command: "git",
+          args: ["branch", "-a"],
+        });
+
+        if (result.stderr) {
+          return `Error: ${result.stderr}`;
+        }
+
+        return result.stdout || "No branches found";
+      }
+
+      case "fetch": {
+        const result = await manager.runCommand({
+          sandboxId,
+          command: "git",
+          args: ["fetch", "--all"],
+        });
+
+        if (result.stderr) {
+          return `Error: ${result.stderr}`;
+        }
+
+        return result.stdout || "Fetch completed";
+      }
+
       default:
-        return `Error: Unknown operation '${operation}'. Use 'status', 'switch', or 'blame'.`;
+        return `Error: Unknown operation '${operation}'. Use 'status', 'switch', 'blame', 'branch', or 'fetch'.`;
     }
   };
 }
