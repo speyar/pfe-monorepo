@@ -72,21 +72,17 @@ async function setupBranch(
       ? "master"
       : "main";
 
-  const targetBranch = branches.includes(`origin/${branchName}`)
-    ? `origin/${branchName}`
-    : branches.includes(branchName)
-      ? branchName
-      : branchName;
-
-  const switchResult = await sandboxManager.runCommand({
+  await sandboxManager.runCommand({
     sandboxId,
     command: "git",
-    args: ["switch", targetBranch],
+    args: ["switch", defaultBranch],
   });
 
-  if (switchResult.stderr && !switchResult.stderr.includes("Switched")) {
-    return defaultBranch;
-  }
+  await sandboxManager.runCommand({
+    sandboxId,
+    command: "git",
+    args: ["switch", "-c", branchName, `origin/${branchName}`],
+  });
 
   return defaultBranch;
 }
@@ -123,7 +119,12 @@ Current working directory: ${workingDir}
 Default branch (base for comparison): ${defaultBranch}
 Target branch (to review): ${branchName}
 
-IMPORTANT: Before reviewing, run 'git diff ${defaultBranch}..HEAD' to see what changed in this branch compared to the default branch.`;
+IMMEDIATE ACTION REQUIRED:
+1. Run 'git diff ${defaultBranch}..HEAD' to see what changed
+2. Use the changed files to find inconsistencies in the code
+3. Output findings as JSON
+
+Do NOT run git status, git fetch, or git branch - the branch is already set up. Start with the diff.`;
 
   const generation = await generateText({
     model: options.model,

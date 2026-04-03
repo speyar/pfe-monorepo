@@ -6,42 +6,24 @@ export function createGitExecutor(manager: SandboxManager, sandboxId: string) {
     const { operation, args } = input;
 
     switch (operation) {
-      case "status": {
+      case "diff": {
+        const diffArgs = args ? args.split(" ") : ["HEAD~1", "HEAD"];
         const result = await manager.runCommand({
           sandboxId,
           command: "git",
-          args: ["status"],
+          args: ["diff", ...diffArgs],
         });
 
         if (result.stderr && !result.stderr.includes("warning")) {
           return `Error: ${result.stderr}`;
         }
 
-        return result.stdout || "No output";
-      }
-
-      case "switch": {
-        if (!args) {
-          return "Error: Branch name required for git switch. Provide args with branch name.";
-        }
-
-        const branchName = args.trim();
-        const result = await manager.runCommand({
-          sandboxId,
-          command: "git",
-          args: ["switch", branchName],
-        });
-
-        if (result.stderr) {
-          return `Error: ${result.stderr}`;
-        }
-
-        return result.stdout || `Switched to branch '${branchName}'`;
+        return result.stdout || "No changes";
       }
 
       case "blame": {
         if (!args) {
-          return "Error: File path required for git blame. Provide args with file path.";
+          return "Error: File path required for git blame.";
         }
 
         const filePath = args.trim();
@@ -55,39 +37,11 @@ export function createGitExecutor(manager: SandboxManager, sandboxId: string) {
           return `Error: ${result.stderr}`;
         }
 
-        return result.stdout || "No blame information available";
-      }
-
-      case "branch": {
-        const result = await manager.runCommand({
-          sandboxId,
-          command: "git",
-          args: ["branch", "-a"],
-        });
-
-        if (result.stderr) {
-          return `Error: ${result.stderr}`;
-        }
-
-        return result.stdout || "No branches found";
-      }
-
-      case "fetch": {
-        const result = await manager.runCommand({
-          sandboxId,
-          command: "git",
-          args: ["fetch", "--all"],
-        });
-
-        if (result.stderr) {
-          return `Error: ${result.stderr}`;
-        }
-
-        return result.stdout || "Fetch completed";
+        return result.stdout || "No blame information";
       }
 
       default:
-        return `Error: Unknown operation '${operation}'. Use 'status', 'switch', 'blame', 'branch', or 'fetch'.`;
+        return "Error: Use 'diff' or 'blame' only. Branch is already set up.";
     }
   };
 }

@@ -6,7 +6,7 @@ export function buildReviewPrompt(
     `Branch: ${branchName}`,
     `Working directory: ${workingDir}`,
     "",
-    "Explore this branch and find any code inconsistencies. Use available tools.",
-    "Start by listing the root directory to understand the project structure.",
+    "Run 'git diff main..HEAD' or 'git diff master..HEAD' to see what changed in this branch.",
+    "Then explore the changed files and find inconsistencies.",
   ].join("\n\n");
 }
