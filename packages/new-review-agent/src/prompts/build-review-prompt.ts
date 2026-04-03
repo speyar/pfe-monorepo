@@ -1,18 +1,55 @@
-export function buildReviewPrompt(
-  branchName: string,
-  workingDir: string,
-): string {
+export interface BuildReviewPromptInput {
+  branchName: string;
+  workingDir: string;
+  defaultBranch: string;
+  activeBranch: string;
+  changedFiles: string[];
+  initialDiff?: string;
+  evidence?: string;
+  useTools: boolean;
+  maxModelRequests: number;
+  minExplorationSteps?: number;
+}
+
+export function buildReviewPrompt(input: BuildReviewPromptInput): string {
+  const evidenceSection = (input.evidence ?? "").trim();
+  const diffSection = (input.initialDiff ?? "").trim();
+  const minExplorationSteps = input.minExplorationSteps ?? 4;
+
   return [
-    `Branch: ${branchName}`,
-    `Working directory: ${workingDir}`,
+    `Branch: ${input.branchName}`,
+    `Working directory: ${input.workingDir}`,
+    `Default branch: ${input.defaultBranch}`,
+    `Active branch: ${input.activeBranch}`,
     "",
-    "MANDATORY WORKFLOW:",
-    "1. Run 'git diff main..HEAD' or 'git diff master..HEAD' to get list of changed files",
-    "2. For each changed file, use readFile to read the actual code",
-    "3. Use grep to find usages of new/changed functions/constants",
-    "4. Verify changes don't break existing code",
-    "5. Output findings as JSON as you discover them",
+    `Changed files (${input.changedFiles.length}):`,
+    input.changedFiles.join("\n") || "(none)",
     "",
-    "Start with the git diff command now.",
+    ...(diffSection
+      ? ["Precomputed diff (already provided by runtime):", diffSection, ""]
+      : []),
+    ...(evidenceSection
+      ? [
+          "Precomputed repository evidence (already provided by runtime):",
+          evidenceSection,
+          "",
+        ]
+      : []),
+    "TASK:",
+    "- Find real semantic issues and inconsistencies using diff context and focused tool usage.",
+    `- Perform active exploration: use tools over at least ${minExplorationSteps} tool-using steps before finalizing.`,
+    "- Start by calling git diff for the full range between default branch and HEAD, then inspect impacted symbols with grep/glob, then read relevant files.",
+    "- Prioritize high-impact regressions over style nits.",
+    "- Avoid speculative findings when evidence is weak.",
+    input.useTools
+      ? `- Tools are available but expensive. Use minimal calls and finish within ${input.maxModelRequests} model requests.`
+      : "- Do not call tools; use provided evidence only.",
+    "",
+    "OUTPUT:",
+    "- Return ONLY valid JSON object: { findings: [...] }",
+    "- Each finding MUST include: severity, title, message; file/line/quote when available.",
+    "- Severity must be one of: critical | high | medium | low | info.",
+    "- If no issues found, return: { findings: [] }",
+    "- No markdown fences.",
   ].join("\n\n");
 }

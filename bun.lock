@@ -46,6 +46,20 @@
         "typescript": "^5",
       },
     },
+    "packages/better-copilot-provider": {
+      "name": "@ceira/better-copilot-provider",
+      "version": "0.1.0",
+      "dependencies": {
+        "@ai-sdk/provider": "^3.0.8",
+        "@ai-sdk/provider-utils": "^4.0.19",
+        "zod": "^4.1.8",
+      },
+      "devDependencies": {
+        "@pfe-monorepo/typescript-config": "workspace:*",
+        "tsup": "^8.5.1",
+        "typescript": "^5.9.2",
+      },
+    },
     "packages/github-api": {
       "name": "@pfe-monorepo/github-api",
       "version": "0.0.0",
@@ -82,9 +96,11 @@
       "name": "@pfe-monorepo/new-review-agent",
       "version": "0.1.0",
       "dependencies": {
-        "@ceira/github-sdk-provider": "workspace:*",
-        "@github/copilot": "^0.0.417",
+        "@ceira/better-copilot-provider": "workspace:*",
+        "@packages/sandbox": "workspace:*",
+        "@pfe-monorepo/github-api": "workspace:*",
         "ai": "^6.0.116",
+        "zod": "^4.1.8",
       },
       "devDependencies": {
         "@pfe-monorepo/typescript-config": "workspace:*",
@@ -95,8 +111,7 @@
       "name": "@pfe-monorepo/review-agent",
       "version": "0.0.0",
       "dependencies": {
-        "@ceira/github-sdk-provider": "workspace:*",
-        "@github/copilot": "^0.0.417",
+        "@ceira/better-copilot-provider": "workspace:*",
         "ai": "^6.0.116",
         "zod": "^4.1.8",
       },
@@ -127,6 +142,7 @@
   ],
   "catalog": {
     "vitest": "^3.0.0",
+    "zod": "^4.1.8",
   },
   "packages": {
     "@ai-sdk/gateway": ["@ai-sdk/gateway@3.0.66", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.19", "@vercel/oidc": "3.1.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-SIQ0YY0iMuv+07HLsZ+bB990zUJ6S4ujORAh+Jv1V2KGNn73qQKnGO0JBk+w+Res8YqOFSycwDoWcFlQrVxS4A=="],
@@ -218,6 +234,8 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.2.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-n9a1/f2CwIDmNMNkFs+JI0ZjFnMO0jdOyGNtihgUNFnlmd84yIYY2KMTBmMV58ZlVHjgmY5Y6E1hVTnSRieggA=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.2.0", "", { "os": "win32", "cpu": "x64" }, "sha512-Nawu5nHjP/zPKTIryh2AavzTc/KEg4um/MxWdXW0A6P/RZOyIpa7+QSjeXwAwX/utJGaCoXRPWtF3m5U/bB3Ww=="],
+
+    "@ceira/better-copilot-provider": ["@ceira/better-copilot-provider@workspace:packages/better-copilot-provider"],
 
     "@ceira/github-sdk-provider": ["@ceira/github-sdk-provider@workspace:packages/github-sdk-provider"],
 

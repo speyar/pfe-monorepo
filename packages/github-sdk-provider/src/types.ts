@@ -73,4 +73,19 @@ export interface GitHubCopilotModelSettings {
    * Uses the same values as `GitHubCopilotProviderOptions.builtInTools`.
    */
   builtInTools?: "none" | "all" | string[];
+
+  /**
+   * Conversation/session identifier used to reuse a Copilot session
+   * across multiple AI SDK model calls (e.g., tool loops).
+   *
+   * Provide this through AI SDK providerOptions:
+   * providerOptions: { "github-copilot": { conversationId: "..." } }
+   */
+  conversationId?: string;
+
+  /**
+   * Whether to reuse the Copilot session for the same conversationId.
+   * @default true
+   */
+  reuseSession?: boolean;
 }

@@ -20,12 +20,11 @@
     "start": "bun src/index.ts"
   },
   "dependencies": {
-    "@ceira/github-sdk-provider": "workspace:*",
-    "@github/copilot": "^0.0.417",
+    "@ceira/better-copilot-provider": "workspace:*",
     "@packages/sandbox": "workspace:*",
     "@pfe-monorepo/github-api": "workspace:*",
     "ai": "^6.0.116",
-    "zod": "workspace:*"
+    "zod": "^4.1.8"
   },
   "devDependencies": {
     "@pfe-monorepo/typescript-config": "workspace:*",

@@ -17,6 +17,7 @@ import type {
   SharedV3Warning,
 } from "@ai-sdk/provider";
 import type { CopilotClientManager } from "./client-manager";
+import type { CopilotSession } from "./copilot-session";
 import { mapCopilotError } from "./error";
 import { mapMessages } from "./message-mapper";
 import {
@@ -31,6 +32,33 @@ import type {
 
 const DEFAULT_TIMEOUT = 120_000; // 2 minutes
 
+interface CopilotCallProviderOptions {
+  conversationId?: string;
+  reuseSession?: boolean;
+}
+
+interface ConversationSessionState {
+  session: CopilotSession;
+  lastPrompt: string;
+  systemMessage?: string;
+  toolNames: string[];
+  availableTools?: string[];
+}
+
+function areEqualStringSets(
+  left: string[] = [],
+  right: string[] = [],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const leftSorted = [...left].sort();
+  const rightSorted = [...right].sort();
+
+  return leftSorted.every((value, index) => value === rightSorted[index]);
+}
+
 export class GitHubCopilotLanguageModel implements LanguageModelV3 {
   readonly specificationVersion = "v3" as const;
   readonly provider = "github-copilot";
@@ -43,6 +71,10 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
   private readonly clientManager: CopilotClientManager;
   private readonly providerOptions: GitHubCopilotProviderOptions;
   private readonly modelSettings: GitHubCopilotModelSettings;
+  private readonly conversationSessions = new Map<
+    string,
+    ConversationSessionState
+  >();
 
   constructor(options: {
     modelId: string;
@@ -102,6 +134,143 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
     );
   }
 
+  private getCopilotCallOptions(options: LanguageModelV3CallOptions): {
+    conversationId?: string;
+    reuseSession: boolean;
+  } {
+    const providerOptions = options.providerOptions as
+      | Record<string, unknown>
+      | undefined;
+    const providerEntry = providerOptions?.[this.provider] as
+      | CopilotCallProviderOptions
+      | undefined;
+
+    const conversationId =
+      providerEntry && typeof providerEntry.conversationId === "string"
+        ? providerEntry.conversationId
+        : undefined;
+
+    const reuseSession = providerEntry?.reuseSession !== false;
+
+    return {
+      conversationId,
+      reuseSession,
+    };
+  }
+
+  private getToolNames(tools: LanguageModelV3FunctionTool[]): string[] {
+    return tools.map((tool) => tool.name);
+  }
+
+  private async destroyConversationSession(
+    conversationId: string,
+  ): Promise<void> {
+    const existing = this.conversationSessions.get(conversationId);
+    if (!existing) {
+      return;
+    }
+
+    this.conversationSessions.delete(conversationId);
+    await existing.session.destroy().catch(() => {});
+  }
+
+  private async resolveSession(input: {
+    options: LanguageModelV3CallOptions;
+    systemMessage?: string;
+    copilotTools?: ReturnType<typeof mapToolsToCopilotFormat>;
+    builtInToolFilter: { availableTools?: string[]; excludedTools?: string[] };
+    toolNames: string[];
+    effectivePrompt: string;
+    streaming: boolean;
+  }): Promise<{
+    session: CopilotSession;
+    shouldDestroyAfterCall: boolean;
+    promptToSend: string;
+  }> {
+    const {
+      options,
+      systemMessage,
+      copilotTools,
+      builtInToolFilter,
+      toolNames,
+      effectivePrompt,
+      streaming,
+    } = input;
+
+    const { conversationId, reuseSession } =
+      this.getCopilotCallOptions(options);
+    const client = await this.clientManager.getClient();
+
+    if (!conversationId || !reuseSession) {
+      const session = await client.createSession({
+        model: this.modelId,
+        streaming,
+        systemMessage: systemMessage
+          ? { mode: "append", content: systemMessage }
+          : undefined,
+        tools: copilotTools,
+        ...builtInToolFilter,
+      });
+
+      return {
+        session,
+        shouldDestroyAfterCall: true,
+        promptToSend: effectivePrompt,
+      };
+    }
+
+    const availableTools = builtInToolFilter.availableTools ?? [];
+    const existing = this.conversationSessions.get(conversationId);
+
+    const shouldRecreate =
+      !existing ||
+      existing.systemMessage !== systemMessage ||
+      !areEqualStringSets(existing.toolNames, toolNames) ||
+      !areEqualStringSets(existing.availableTools ?? [], availableTools);
+
+    if (shouldRecreate) {
+      if (existing) {
+        await this.destroyConversationSession(conversationId);
+      }
+
+      const session = await client.createSession({
+        model: this.modelId,
+        streaming,
+        systemMessage: systemMessage
+          ? { mode: "append", content: systemMessage }
+          : undefined,
+        tools: copilotTools,
+        ...builtInToolFilter,
+      });
+
+      this.conversationSessions.set(conversationId, {
+        session,
+        lastPrompt: effectivePrompt,
+        systemMessage,
+        toolNames,
+        availableTools,
+      });
+
+      return {
+        session,
+        shouldDestroyAfterCall: false,
+        promptToSend: effectivePrompt,
+      };
+    }
+
+    const promptToSend = effectivePrompt.startsWith(existing.lastPrompt)
+      ? effectivePrompt.slice(existing.lastPrompt.length).trimStart()
+      : effectivePrompt;
+
+    existing.lastPrompt = effectivePrompt;
+
+    return {
+      session: existing.session,
+      shouldDestroyAfterCall: false,
+      promptToSend: promptToSend || effectivePrompt,
+    };
+  }
+
   /**
    * Non-streaming text generation.
    *
@@ -122,7 +291,7 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
     const functionTools = this.getFunctionTools(options);
     const toolChoiceInstruction = buildToolChoicePromptInstruction({
       toolChoice: getRequestedToolChoice(options),
-      toolNames: functionTools.map((tool) => tool.name),
+      toolNames: this.getToolNames(functionTools),
     });
     const effectivePrompt = toolChoiceInstruction
       ? [toolChoiceInstruction, prompt].filter(Boolean).join("\n\n")
@@ -143,17 +312,18 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
         ? mapToolsToCopilotFormat(functionTools)
         : undefined;
     const builtInToolFilter = this.getBuiltInToolFilter();
+    const toolNames = this.getToolNames(functionTools);
 
-    const client = await this.clientManager.getClient();
-    const session = await client.createSession({
-      model: this.modelId,
-      streaming: false,
-      systemMessage: systemMessage
-        ? { mode: "append", content: systemMessage }
-        : undefined,
-      tools: copilotTools,
-      ...builtInToolFilter,
-    });
+    const { session, shouldDestroyAfterCall, promptToSend } =
+      await this.resolveSession({
+        options,
+        systemMessage,
+        copilotTools,
+        builtInToolFilter,
+        toolNames,
+        effectivePrompt,
+        streaming: false,
+      });
 
     try {
       // Check abort before sending
@@ -162,7 +332,7 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
       }
 
       const response = await session.sendAndWait(
-        { prompt: effectivePrompt },
+        { prompt: promptToSend },
         this.timeout,
       );
 
@@ -219,6 +389,7 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
             streaming: false,
             tools: copilotTools?.map((t) => t.name),
             availableTools: builtInToolFilter.availableTools,
+            providerOptions: options.providerOptions,
           },
         },
         rawResponse: { body: response },
@@ -233,7 +404,9 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
       if (isAbortError(error)) throw error;
       throw mapCopilotError(error);
     } finally {
-      await session.destroy().catch(() => {});
+      if (shouldDestroyAfterCall) {
+        await session.destroy().catch(() => {});
+      }
     }
   }
 
@@ -254,7 +427,7 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
     const functionTools = this.getFunctionTools(options);
     const toolChoiceInstruction = buildToolChoicePromptInstruction({
       toolChoice: getRequestedToolChoice(options),
-      toolNames: functionTools.map((tool) => tool.name),
+      toolNames: this.getToolNames(functionTools),
     });
     const effectivePrompt = toolChoiceInstruction
       ? [toolChoiceInstruction, prompt].filter(Boolean).join("\n\n")
@@ -275,17 +448,18 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
         ? mapToolsToCopilotFormat(functionTools)
         : undefined;
     const builtInToolFilter = this.getBuiltInToolFilter();
+    const toolNames = this.getToolNames(functionTools);
 
-    const client = await this.clientManager.getClient();
-    const session = await client.createSession({
-      model: this.modelId,
-      streaming: true,
-      systemMessage: systemMessage
-        ? { mode: "append", content: systemMessage }
-        : undefined,
-      tools: copilotTools,
-      ...builtInToolFilter,
-    });
+    const { session, shouldDestroyAfterCall, promptToSend } =
+      await this.resolveSession({
+        options,
+        systemMessage,
+        copilotTools,
+        builtInToolFilter,
+        toolNames,
+        effectivePrompt,
+        streaming: true,
+      });
 
     // Check abort before starting stream
     if (options.abortSignal?.aborted) {
@@ -309,7 +483,9 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
         const cleanup = () => {
           if (!finished) {
             finished = true;
-            session.destroy().catch(() => {});
+            if (shouldDestroyAfterCall) {
+              session.destroy().catch(() => {});
+            }
           }
         };
 
@@ -449,7 +625,7 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
 
         // Send the prompt to kick off the conversation
         try {
-          await session.send({ prompt: effectivePrompt });
+          await session.send({ prompt: promptToSend });
         } catch (error) {
           cleanup();
           if (options.abortSignal) {
@@ -460,7 +636,9 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
         }
       },
       cancel() {
-        session.destroy().catch(() => {});
+        if (shouldDestroyAfterCall) {
+          session.destroy().catch(() => {});
+        }
       },
     });
 

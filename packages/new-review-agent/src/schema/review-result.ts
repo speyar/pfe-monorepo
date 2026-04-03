@@ -6,7 +6,7 @@ export const reviewFindingSchema = z.object({
   line: z.number().int().positive().optional(),
   quote: z.string().optional(),
   title: z.string().min(1).max(100),
-  message: z.string().min(1).max(500),
+  message: z.string().min(1).max(4000),
   suggestion: z.string().optional(),
 });
 

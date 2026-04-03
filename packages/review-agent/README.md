@@ -1,6 +1,6 @@
 # @pfe-monorepo/review-agent
 
-Code-review-only agent package powered by Vercel AI SDK (GitHub Copilot provider).
+Code-review-only agent package powered by Vercel AI SDK (OpenAI-compatible provider).
 
 ## Scope
 
@@ -21,6 +21,7 @@ import {
 
 const model = createGitHubReviewModel({
   githubToken: process.env.COPILOT_GITHUB_TOKEN,
+  baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
 });
 
 const agent = createReviewAgent({ model });
@@ -51,6 +52,7 @@ Run with JSON input:
 ```powershell
 Set-Location packages/review-agent
 $env:COPILOT_GITHUB_TOKEN="your_github_token"
+$env:COPILOT_BASE_URL="https://api.githubcopilot.com"
 bun run review --input ./examples/review-input.json
 ```
 
@@ -59,5 +61,6 @@ Run ad-hoc review from a file:
 ```powershell
 Set-Location packages/review-agent
 $env:COPILOT_GITHUB_TOKEN="your_github_token"
+$env:COPILOT_BASE_URL="https://api.githubcopilot.com"
 bun run review --file ./src/core/run-review.ts
 ```

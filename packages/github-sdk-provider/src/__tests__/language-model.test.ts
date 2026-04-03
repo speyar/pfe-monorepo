@@ -503,6 +503,117 @@ describe("GitHubCopilotLanguageModel", () => {
         }),
       );
     });
+
+    it("should reuse session when conversationId is provided", async () => {
+      mockSession.sendAndWait.mockResolvedValue({
+        data: { content: "Response", messageId: "msg-1", toolRequests: [] },
+      });
+
+      await model.doGenerate({
+        prompt: defaultPrompt,
+        providerOptions: {
+          "github-copilot": {
+            conversationId: "conv-1",
+          },
+        },
+      });
+
+      await model.doGenerate({
+        prompt: defaultPrompt,
+        providerOptions: {
+          "github-copilot": {
+            conversationId: "conv-1",
+          },
+        },
+      });
+
+      expect(mockClient.createSession).toHaveBeenCalledTimes(1);
+      expect(mockSession.destroy).not.toHaveBeenCalled();
+      expect(mockSession.sendAndWait).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ prompt: "Test prompt" }),
+        expect.any(Number),
+      );
+      expect(mockSession.sendAndWait).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ prompt: "Test prompt" }),
+        expect.any(Number),
+      );
+    });
+
+    it("should send only incremental prompt content on reused session", async () => {
+      vi.mocked(mapMessages)
+        .mockReturnValueOnce({
+          systemMessage: undefined,
+          prompt: "Line A\nLine B",
+        })
+        .mockReturnValueOnce({
+          systemMessage: undefined,
+          prompt: "Line A\nLine B\nLine C",
+        });
+
+      mockSession.sendAndWait.mockResolvedValue({
+        data: { content: "Response", messageId: "msg-1", toolRequests: [] },
+      });
+
+      await model.doGenerate({
+        prompt: defaultPrompt,
+        providerOptions: {
+          "github-copilot": {
+            conversationId: "conv-inc",
+          },
+        },
+      });
+
+      await model.doGenerate({
+        prompt: defaultPrompt,
+        providerOptions: {
+          "github-copilot": {
+            conversationId: "conv-inc",
+          },
+        },
+      });
+
+      expect(mockSession.sendAndWait).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ prompt: "Line A\nLine B" }),
+        expect.any(Number),
+      );
+      expect(mockSession.sendAndWait).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ prompt: "Line C" }),
+        expect.any(Number),
+      );
+    });
+
+    it("should not reuse session when reuseSession is false", async () => {
+      mockSession.sendAndWait.mockResolvedValue({
+        data: { content: "Response", messageId: "msg-1", toolRequests: [] },
+      });
+
+      await model.doGenerate({
+        prompt: defaultPrompt,
+        providerOptions: {
+          "github-copilot": {
+            conversationId: "conv-2",
+            reuseSession: false,
+          },
+        },
+      });
+
+      await model.doGenerate({
+        prompt: defaultPrompt,
+        providerOptions: {
+          "github-copilot": {
+            conversationId: "conv-2",
+            reuseSession: false,
+          },
+        },
+      });
+
+      expect(mockClient.createSession).toHaveBeenCalledTimes(2);
+      expect(mockSession.destroy).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe("doStream", () => {
