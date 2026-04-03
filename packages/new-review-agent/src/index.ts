@@ -2,11 +2,13 @@ import { generateText, stepCountIs } from "ai";
 import { createGitHubCopilotProvider } from "@ceira/github-sdk-provider";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
+import { createLsTool } from "./tools/LsTool";
 
 const provider = createGitHubCopilotProvider({
 	clientOptions: {
 		logLevel: "debug",
 	},
+	builtInTools: "all",
 });
 
 const client = await getGitHubClient(120638931);
@@ -32,23 +34,47 @@ const sandbox = await manager.createSandbox({
 	},
 });
 
-const response = await manager.runCommand({
-	sandboxId: sandbox.id,
-	command: "ls",
-});
+const lsTool = createLsTool(manager, sandbox.id);
 
-console.log(response.stdout);
-if (response.stderr) {
-	console.error(response.stderr);
+try {
+	const result = await generateText({
+		model: provider("gpt-4.1"),
+		system:
+			"You are exploring a repository. Use only the ls tool for exploration.",
+		prompt:
+			"Explore this repository structure in depth. Start with ls on root, then inspect key directories such as src, packages, and apps when present. and then tell me your thoughts about the structure is it organized is it scabale and basically give me alot of insights about the structure of the repository",
+		tools: {
+			ls: lsTool,
+		},
+		toolChoice: "required",
+		stopWhen: stepCountIs(20),
+		experimental_onToolCallFinish: (toolCall) => {
+			console.log(
+				`[tool call ${toolCall.stepNumber}] ${toolCall.toolCall.toolName}(${JSON.stringify(
+					toolCall.toolCall.input,
+				)})`,
+			);
+		},
+		onStepFinish: (step) => {
+			console.log(
+				`[step ${step.stepNumber}] finish=${JSON.stringify(step.finishReason)} toolCalls=${step.toolCalls.length}`,
+			);
+		},
+	});
+
+	const totalLsCalls = result.steps.reduce((count, step) => {
+		const lsCalls = step.toolCalls.filter(
+			(toolCall) => toolCall.toolName === "ls",
+		).length;
+
+		return count + lsCalls;
+	}, 0);
+
+	console.log("Result:", result.text);
+	console.log("Exploration stats:", {
+		totalSteps: result.steps.length,
+		totalLsCalls,
+	});
+} finally {
+	await manager.stopSandbox(sandbox.id);
 }
-/*const { text } = await generateText({
-	model: provider("gpt-4.1"),
-	system:
-		"answer whatever the user asks, no tool is passed passed to you for now, all the tools you may have are result of an error, and are wrong and you should ignore them. there for you have 0 tools in your possession",
-	stopWhen: stepCountIs(5),
-	prompt:
-		"hi, what are the tools available to you, tell me exact names only no noise",
-});*/
-
-// close sandbox
-await manager.stopSandbox(sandbox.id);

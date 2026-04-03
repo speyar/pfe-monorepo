@@ -119,6 +119,14 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
   }> {
     const warnings: SharedV3Warning[] = [];
     const { systemMessage, prompt } = mapMessages(options.prompt);
+    const functionTools = this.getFunctionTools(options);
+    const toolChoiceInstruction = buildToolChoicePromptInstruction({
+      toolChoice: getRequestedToolChoice(options),
+      toolNames: functionTools.map((tool) => tool.name),
+    });
+    const effectivePrompt = toolChoiceInstruction
+      ? [toolChoiceInstruction, prompt].filter(Boolean).join("\n\n")
+      : prompt;
 
     if (options.responseFormat?.type === "json") {
       warnings.push({
@@ -130,7 +138,6 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
     }
 
     // Map AI SDK tools to Copilot SDK format
-    const functionTools = this.getFunctionTools(options);
     const copilotTools =
       functionTools.length > 0
         ? mapToolsToCopilotFormat(functionTools)
@@ -154,7 +161,10 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
         throw createAbortError();
       }
 
-      const response = await session.sendAndWait({ prompt }, this.timeout);
+      const response = await session.sendAndWait(
+        { prompt: effectivePrompt },
+        this.timeout,
+      );
 
       // Check abort after receiving
       if (options.abortSignal?.aborted) {
@@ -203,7 +213,7 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
         finishReason,
         usage,
         rawCall: {
-          rawPrompt: { systemMessage, prompt },
+          rawPrompt: { systemMessage, prompt: effectivePrompt },
           rawSettings: {
             model: this.modelId,
             streaming: false,
@@ -241,6 +251,14 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
   }> {
     const warnings: SharedV3Warning[] = [];
     const { systemMessage, prompt } = mapMessages(options.prompt);
+    const functionTools = this.getFunctionTools(options);
+    const toolChoiceInstruction = buildToolChoicePromptInstruction({
+      toolChoice: getRequestedToolChoice(options),
+      toolNames: functionTools.map((tool) => tool.name),
+    });
+    const effectivePrompt = toolChoiceInstruction
+      ? [toolChoiceInstruction, prompt].filter(Boolean).join("\n\n")
+      : prompt;
 
     if (options.responseFormat?.type === "json") {
       warnings.push({
@@ -252,7 +270,6 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
     }
 
     // Map AI SDK tools to Copilot SDK format
-    const functionTools = this.getFunctionTools(options);
     const copilotTools =
       functionTools.length > 0
         ? mapToolsToCopilotFormat(functionTools)
@@ -432,7 +449,7 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
 
         // Send the prompt to kick off the conversation
         try {
-          await session.send({ prompt });
+          await session.send({ prompt: effectivePrompt });
         } catch (error) {
           cleanup();
           if (options.abortSignal) {
@@ -450,7 +467,7 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
     return {
       stream,
       rawCall: {
-        rawPrompt: { systemMessage, prompt },
+        rawPrompt: { systemMessage, prompt: effectivePrompt },
         rawSettings: {
           model: this.modelId,
           streaming: true,
@@ -460,6 +477,54 @@ export class GitHubCopilotLanguageModel implements LanguageModelV3 {
       },
     };
   }
+}
+
+function getRequestedToolChoice(options: LanguageModelV3CallOptions): unknown {
+  return (options as LanguageModelV3CallOptions & { toolChoice?: unknown })
+    .toolChoice;
+}
+
+function buildToolChoicePromptInstruction(input: {
+  toolChoice: unknown;
+  toolNames: string[];
+}): string | undefined {
+  const { toolChoice, toolNames } = input;
+
+  if (toolChoice === "none") {
+    return "Tool usage is disabled for this step. Do not call any tools in this response.";
+  }
+
+  if (toolChoice === "required") {
+    if (toolNames.length === 0) {
+      return undefined;
+    }
+
+    return [
+      "Tool usage is required for this step.",
+      `You must call at least one tool before producing a final text answer. Available tools: ${toolNames.join(", ")}.`,
+      "Do not reply with plain text only.",
+    ].join(" ");
+  }
+
+  if (
+    typeof toolChoice === "object" &&
+    toolChoice !== null &&
+    (toolChoice as { type?: unknown }).type === "tool"
+  ) {
+    const toolName = (toolChoice as { toolName?: unknown }).toolName;
+
+    if (typeof toolName !== "string" || toolName.length === 0) {
+      return undefined;
+    }
+
+    return [
+      "Tool usage is required for this step.",
+      `You must call the tool \"${toolName}\" before producing any final text answer.`,
+      "Do not reply with plain text only.",
+    ].join(" ");
+  }
+
+  return undefined;
 }
 
 function createAbortError(): Error {

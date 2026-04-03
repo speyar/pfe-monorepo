@@ -22,7 +22,10 @@
   "dependencies": {
     "@ceira/github-sdk-provider": "workspace:*",
     "@github/copilot": "^0.0.417",
-    "ai": "^6.0.116"
+    "@packages/sandbox": "workspace:*",
+    "@pfe-monorepo/github-api": "workspace:*",
+    "ai": "^6.0.116",
+    "zod": "workspace:*"
   },
   "devDependencies": {
     "@pfe-monorepo/typescript-config": "workspace:*",
