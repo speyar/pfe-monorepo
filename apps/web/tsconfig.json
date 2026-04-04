@@ -21,6 +21,9 @@
     "paths": {
       "@/*": ["./src/*"],
       "@pfe-monorepo/github-api": ["../../packages/github-api/src/index.ts"],
+      "@pfe-monorepo/new-review-agent": [
+        "../../packages/new-review-agent/src/index.ts"
+      ],
       "@pfe-monorepo/review-agent": ["../../packages/review-agent/src/index.ts"]
     }
   },

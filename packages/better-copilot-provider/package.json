@@ -1,0 +1,28 @@
+{
+  "name": "@ceira/better-copilot-provider",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenCode-style GitHub Copilot provider for Vercel AI SDK",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "^3.0.8",
+    "@ai-sdk/provider-utils": "^4.0.19",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@pfe-monorepo/typescript-config": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

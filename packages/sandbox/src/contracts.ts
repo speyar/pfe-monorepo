@@ -31,6 +31,14 @@ export interface CreateSandboxInput {
   ownerId?: string;
   metadata?: SandboxMetadata;
   runtime?: string;
+  source: {
+    type: "git",
+    url: string;
+    username?: string;
+    password?: string;
+    depth?: number;
+    revision?: string;
+  }
   timeoutSeconds?: number;
   resourceProfile?: {
     vcpus?: number;
@@ -52,6 +60,7 @@ export interface RunSandboxCommandInput {
   sandboxId: string;
   command: string;
   cwd?: string;
+  args?: string[];
   detached?: boolean;
   timeoutMs?: number;
 }
