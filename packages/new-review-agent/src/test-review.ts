@@ -1,54 +1,9 @@
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
-import { existsSync, readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { runReviewAgent } from "./index";
 
-function loadEnvFile(filePath: string): void {
-  if (!existsSync(filePath)) {
-    return;
-  }
-
-  const content = readFileSync(filePath, "utf8");
-  for (const rawLine of content.split("\n")) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-
-    const eqIndex = line.indexOf("=");
-    if (eqIndex <= 0) {
-      continue;
-    }
-
-    const key = line.slice(0, eqIndex).trim();
-    if (!key || process.env[key] !== undefined) {
-      continue;
-    }
-
-    let value = line.slice(eqIndex + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-
-    process.env[key] = value;
-  }
-}
-
-function bootstrapEnv(): void {
-  loadEnvFile(
-    fileURLToPath(new URL("../../../apps/web/.env", import.meta.url)),
-  );
-  loadEnvFile(fileURLToPath(new URL("../.env", import.meta.url)));
-}
-
 async function main() {
-  bootstrapEnv();
-
   const copilotToken =
     process.env.COPILOT_GITHUB_TOKEN ??
     process.env.GH_TOKEN ??
@@ -67,11 +22,12 @@ async function main() {
     name: "copilot",
   });
 
-  const client = await getGitHubClient(120638931);
+  // const client = await getGitHubClient(120638931);
+  const client = await getGitHubClient(115597577);
   const {
     data: { token },
   } = await client.rest.apps.createInstallationAccessToken({
-    installation_id: 120638931,
+    installation_id: 115597577,
   });
 
   const vercelProvider = new VercelSandboxProvider();
@@ -84,20 +40,21 @@ async function main() {
     ownerId: "test-owner",
     source: {
       type: "git",
-      url: "https://github.com/speyar/pfe-monorepo.git",
+      // url: "https://github.com/speyar/pfe-monorepo.git",
+      url: "https://github.com/BenyounesMehdi/CodeAlchemy.git",
       username: "x-access-token",
       password: token,
     },
   });
 
   try {
-    const result = await runReviewAgent("new-review-agent", {
-      model: provider(process.env.REVIEW_MODEL ?? "gpt-5.3-codex"),
+    const result = await runReviewAgent("react", {
+      model: provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini"),
       sandboxManager: manager,
       sandboxId: sandbox.id,
-      defaultBranch: "master",
+      defaultBranch: "main",
       maxFindings: 20,
-      maxToolSteps: 16,
+      maxToolSteps: 24,
       minToolSteps: 5,
     });
 

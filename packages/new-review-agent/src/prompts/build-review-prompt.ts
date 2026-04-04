@@ -39,6 +39,8 @@ export function buildReviewPrompt(input: BuildReviewPromptInput): string {
     "- Find real semantic issues and inconsistencies using diff context and focused tool usage.",
     `- Perform active exploration: use tools over at least ${minExplorationSteps} tool-using steps before finalizing.`,
     "- Start by calling git diff for the full range between default branch and HEAD, then inspect impacted symbols with grep/glob, then read relevant files.",
+    "- For code discovery and caller tracing, prefer grep first; use readFile only after grep points you to exact files/lines.",
+    "- Do not read whole files unless absolutely required; pass lineStart/lineEnd or maxLines to keep reads focused.",
     "- Prioritize high-impact regressions over style nits.",
     "- Avoid speculative findings when evidence is weak.",
     input.useTools

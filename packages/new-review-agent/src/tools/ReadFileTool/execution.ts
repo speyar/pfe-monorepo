@@ -47,6 +47,44 @@ export function createReadFileExecutor(
         input.maxLines !== undefined;
 
       if (!hasLineRange) {
+        const wcRawResult = await manager.runCommand({
+          sandboxId,
+          command: "wc",
+          args: ["-l", path],
+        });
+        const wcResult = normalizeCommandResult(wcRawResult);
+
+        if (wcResult.exitCode !== 0) {
+          const rangeRequiredMessage =
+            "Error: readFile requires lineStart/lineEnd or maxLines for this file. Use grep first, then read a focused range.";
+          logToolEvent({
+            tool: "readFile",
+            phase: "finish",
+            payload: {
+              exitCode: wcResult.exitCode,
+              error: previewText(rangeRequiredMessage),
+            },
+          });
+          return rangeRequiredMessage;
+        }
+
+        const lineCountMatch = wcResult.stdout.trim().match(/^(\d+)/);
+        const lineCount = lineCountMatch ? Number(lineCountMatch[1]) : NaN;
+
+        if (!Number.isFinite(lineCount) || lineCount > 120) {
+          const rangeRequiredMessage =
+            "Error: Full-file read blocked for files over 120 lines. Use grep first, then call readFile with lineStart/lineEnd or maxLines.";
+          logToolEvent({
+            tool: "readFile",
+            phase: "finish",
+            payload: {
+              lineCount: Number.isFinite(lineCount) ? lineCount : undefined,
+              error: previewText(rangeRequiredMessage),
+            },
+          });
+          return rangeRequiredMessage;
+        }
+
         const catRawResult = await manager.runCommand({
           sandboxId,
           command: "cat",

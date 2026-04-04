@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, type LanguageModel } from "ai";
+import { generateText, Output, stepCountIs, type LanguageModel } from "ai";
 
 import { reviewResultSchema } from "./schema/review-result";
 import { REVIEW_AGENT_SYSTEM_PROMPT } from "./prompts/review-agent";
@@ -178,7 +178,7 @@ async function setupBranchAndContext(
           ? "master"
           : "main";
 
-  await runCommand(sandboxManager, sandboxId, "git", ["switch", defaultBranch]);
+  await runCommand(sandboxManager, sandboxId, "git", ["switch", branchName]);
 
   const targetLocalExists =
     splitLines(
@@ -296,8 +296,9 @@ ${changedFiles.join("\n") || "(none)"}
 
 IMMEDIATE ACTION REQUIRED:
 1. First, call the git tool to fetch complete diff context for ${branchContext.defaultBranch}...HEAD.
-2. Use tools to inspect impacted callers/usages.
-3. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.`;
+2. Use grep first to discover impacted callers/usages and relevant symbols in changed files.
+3. Use readFile only for focused ranges (lineStart/lineEnd or maxLines) when validating evidence.
+4. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.`;
 
   const generation = await generateText({
     model: options.model,
@@ -316,7 +317,17 @@ IMMEDIATE ACTION REQUIRED:
     }),
     tools,
     stopWhen: stepCountIs(maxSteps),
+    output: Output.object({
+      schema: reviewResultSchema,
+      name: "review_result",
+      description: "Structured pull request review findings.",
+    }),
     abortSignal: options.signal,
+    experimental_onToolCallFinish: async ({ toolCall, output }) => {
+      console.log(
+        `[toolCall] ${toolCall.toolName}-${JSON.stringify(toolCall.input)}`,
+      );
+    },
     onStepFinish: (step) => {
       const toolResults =
         (step as { toolResults?: unknown[] }).toolResults ?? [];
@@ -361,6 +372,9 @@ IMMEDIATE ACTION REQUIRED:
     console.log("[llm] final text", preview(generation.text, 1000));
   }
 
-  const parsed = parseJsonResponse(generation.text);
+  const parsed = generation.output ??
+    parseJsonResponse(generation.text ?? "") ?? {
+      findings: [],
+    };
   return capFindings(parsed, options.maxFindings ?? 25);
 }
