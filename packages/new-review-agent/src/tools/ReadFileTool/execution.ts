@@ -6,7 +6,6 @@ import {
   previewText,
   splitOptions,
   toSandboxPath,
-  truncateByLines,
 } from "../shared";
 
 export function createReadFileExecutor(
@@ -47,44 +46,6 @@ export function createReadFileExecutor(
         input.maxLines !== undefined;
 
       if (!hasLineRange) {
-        const wcRawResult = await manager.runCommand({
-          sandboxId,
-          command: "wc",
-          args: ["-l", path],
-        });
-        const wcResult = normalizeCommandResult(wcRawResult);
-
-        if (wcResult.exitCode !== 0) {
-          const rangeRequiredMessage =
-            "Error: readFile requires lineStart/lineEnd or maxLines for this file. Use grep first, then read a focused range.";
-          logToolEvent({
-            tool: "readFile",
-            phase: "finish",
-            payload: {
-              exitCode: wcResult.exitCode,
-              error: previewText(rangeRequiredMessage),
-            },
-          });
-          return rangeRequiredMessage;
-        }
-
-        const lineCountMatch = wcResult.stdout.trim().match(/^(\d+)/);
-        const lineCount = lineCountMatch ? Number(lineCountMatch[1]) : NaN;
-
-        if (!Number.isFinite(lineCount) || lineCount > 120) {
-          const rangeRequiredMessage =
-            "Error: Full-file read blocked for files over 120 lines. Use grep first, then call readFile with lineStart/lineEnd or maxLines.";
-          logToolEvent({
-            tool: "readFile",
-            phase: "finish",
-            payload: {
-              lineCount: Number.isFinite(lineCount) ? lineCount : undefined,
-              error: previewText(rangeRequiredMessage),
-            },
-          });
-          return rangeRequiredMessage;
-        }
-
         const catRawResult = await manager.runCommand({
           sandboxId,
           command: "cat",
@@ -105,7 +66,8 @@ export function createReadFileExecutor(
           return errorMessage;
         }
 
-        if (catResult.stdout.length === 0) {
+        const output = catResult.stdout;
+        if (!output || output.trim() === "") {
           const emptyMessage = `File is empty: ${path}`;
           logToolEvent({
             tool: "readFile",
@@ -115,7 +77,6 @@ export function createReadFileExecutor(
           return emptyMessage;
         }
 
-        const output = truncateByLines(catResult.stdout, 250);
         logToolEvent({
           tool: "readFile",
           phase: "finish",
@@ -169,16 +130,15 @@ export function createReadFileExecutor(
         return emptyRangeMessage;
       }
 
-      const truncatedOutput = truncateByLines(output, 250);
       logToolEvent({
         tool: "readFile",
         phase: "finish",
         payload: {
           exitCode: sedResult.exitCode,
-          output: previewText(truncatedOutput),
+          output: previewText(output),
         },
       });
-      return truncatedOutput;
+      return output;
     } catch (error) {
       const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
       logToolEvent({

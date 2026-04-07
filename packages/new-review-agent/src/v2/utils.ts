@@ -1,4 +1,5 @@
 import type { SandboxManager } from "@packages/sandbox";
+import { debug } from "./debug";
 
 export function normalizeBranchName(value: string): string {
   return value.replace(/^refs\/heads\//, "").replace(/^origin\//, "");
@@ -36,6 +37,10 @@ export function capList<T>(items: T[], max: number): T[] {
 }
 
 export function textPreview(value: string, maxChars = 500): string {
+  if (process.env.NEW_REVIEW_AGENT_LOG_FULL_OUTPUT === "1") {
+    return value;
+  }
+
   if (value.length <= maxChars) {
     return value;
   }
@@ -48,21 +53,51 @@ export async function runCommand(
   command: string,
   args: string[] = [],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  debug("sandbox-command-start", {
+    sandboxId,
+    command,
+    args,
+  });
+
   try {
     const result = await sandboxManager.runCommand({
       sandboxId,
       command,
       args,
     });
-    return {
+
+    const normalized = {
       stdout: result.stdout ?? "",
       stderr: result.stderr ?? "",
       exitCode: result.exitCode ?? 0,
     };
+
+    debug("sandbox-command-finish", {
+      sandboxId,
+      command,
+      args,
+      exitCode: normalized.exitCode,
+      stdout: textPreview(normalized.stdout, 280),
+      stderr: textPreview(normalized.stderr, 280),
+    });
+
+    return {
+      stdout: normalized.stdout,
+      stderr: normalized.stderr,
+      exitCode: normalized.exitCode,
+    };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    debug("sandbox-command-error", {
+      sandboxId,
+      command,
+      args,
+      error: message,
+    });
+
     return {
       stdout: "",
-      stderr: error instanceof Error ? error.message : String(error),
+      stderr: message,
       exitCode: 127,
     };
   }

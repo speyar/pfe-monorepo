@@ -203,13 +203,18 @@ function findLineByQuote(
     return undefined;
   }
 
-  const exactMatches: number[] = [];
-  const normalizedMatches: number[] = [];
-  const includeMatches: number[] = [];
+  const exactChanged: number[] = [];
+  const exactContext: number[] = [];
+  const normalizedChanged: number[] = [];
+  const normalizedContext: number[] = [];
+  const includeChanged: number[] = [];
+  const includeContext: number[] = [];
   const normalizedQuote = normalizeCodeForComparison(quoteTrimmed);
   const normalizedQuoteLower = normalizedQuote.toLowerCase();
 
   for (const [lineNumber, rawLine] of sideMap.entries()) {
+    const marker = rawLine[0];
+    const isChangedLine = marker === "+" || marker === "-";
     const content = rawLine.slice(1);
     const contentTrimmed = content.trim();
     if (!contentTrimmed) {
@@ -217,13 +222,13 @@ function findLineByQuote(
     }
 
     if (contentTrimmed === quoteTrimmed) {
-      exactMatches.push(lineNumber);
+      (isChangedLine ? exactChanged : exactContext).push(lineNumber);
       continue;
     }
 
     const normalizedContent = normalizeCodeForComparison(contentTrimmed);
     if (normalizedContent === normalizedQuote) {
-      normalizedMatches.push(lineNumber);
+      (isChangedLine ? normalizedChanged : normalizedContext).push(lineNumber);
       continue;
     }
 
@@ -232,14 +237,17 @@ function findLineByQuote(
       normalizedContentLower.includes(normalizedQuoteLower) ||
       normalizedQuoteLower.includes(normalizedContentLower)
     ) {
-      includeMatches.push(lineNumber);
+      (isChangedLine ? includeChanged : includeContext).push(lineNumber);
     }
   }
 
   return (
-    chooseClosestLine(exactMatches, preferredLine) ??
-    chooseClosestLine(normalizedMatches, preferredLine) ??
-    chooseClosestLine(includeMatches, preferredLine)
+    chooseClosestLine(exactChanged, preferredLine) ??
+    chooseClosestLine(normalizedChanged, preferredLine) ??
+    chooseClosestLine(includeChanged, preferredLine) ??
+    chooseClosestLine(exactContext, preferredLine) ??
+    chooseClosestLine(normalizedContext, preferredLine) ??
+    chooseClosestLine(includeContext, preferredLine)
   );
 }
 
@@ -328,13 +336,18 @@ function buildSnippet(
 
 function buildInlineCommentBody(
   finding: ReviewFinding,
-  target: InlineTarget,
+  _target: InlineTarget,
 ): string {
   const suggestionSection = finding.suggestion
     ? formatSuggestionSection(finding.suggestion)
     : "";
 
-  return [finding.message, suggestionSection].filter(Boolean).join("\n\n");
+  const bodyParts = [finding.message];
+  if (suggestionSection) {
+    bodyParts.push("", suggestionSection);
+  }
+
+  return bodyParts.join("\n");
 }
 
 function resolveInlineTarget(
@@ -393,6 +406,12 @@ function resolveInlineTarget(
 
   const rightLine = maps.right.get(finding.line);
   if (rightLine) {
+    const marker = rightLine[0];
+    const isChanged = marker === "+";
+    if (!quotedCode && !isChanged) {
+      return { ok: false, reason: "line_points_to_context_only" };
+    }
+
     return {
       ok: true,
       target: {
@@ -406,6 +425,12 @@ function resolveInlineTarget(
 
   const leftLine = maps.left.get(finding.line);
   if (leftLine) {
+    const marker = leftLine[0];
+    const isChanged = marker === "-";
+    if (!quotedCode && !isChanged) {
+      return { ok: false, reason: "line_points_to_context_only" };
+    }
+
     return {
       ok: true,
       target: {
@@ -550,13 +575,15 @@ export const handlePullRequestEvent = async ({
           "[==========] generating findings",
         ]),
       }).catch((error) => {
-        console.warn("[github-webhook] failed to create review check run", {
+        console.error("[github-webhook] failed to create review check run", {
           deliveryId,
           installationId,
           owner: ownerRepo.owner,
           repo: ownerRepo.repo,
           pullRequestNumber,
+          headSha: checkRunHeadSha,
           error: error instanceof Error ? error.message : String(error),
+          errorCause: error instanceof Error ? error.cause : undefined,
         });
         return null;
       })
@@ -570,6 +597,37 @@ export const handlePullRequestEvent = async ({
       headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
       baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
     });
+
+    console.info("[github-webhook] v2 review result", {
+      deliveryId,
+      installationId,
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      pullRequestNumber,
+      verdict: review.summary.verdict,
+      score: review.summary.score,
+      risk: review.summary.risk,
+      findingsCount: review.findings.length,
+      notes: review.notes,
+    });
+
+    if (review.findings.length === 0) {
+      const notesText = (review.notes ?? []).join("\n").toLowerCase();
+      const dueToError =
+        notesText.includes("encountered an error") ||
+        notesText.includes("error details:");
+
+      console.warn("[github-webhook] v2 review returned zero findings", {
+        deliveryId,
+        installationId,
+        owner: ownerRepo.owner,
+        repo: ownerRepo.repo,
+        pullRequestNumber,
+        verdict: review.summary.verdict,
+        reason: dueToError ? "error_fallback" : "clean_no_findings",
+        notes: review.notes,
+      });
+    }
 
     if (checkRun) {
       await updateCheckRun(installationId, {

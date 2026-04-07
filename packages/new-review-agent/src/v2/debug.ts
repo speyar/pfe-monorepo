@@ -4,7 +4,15 @@
  */
 
 function isEnabled(): boolean {
-  return process.env.NEW_REVIEW_AGENT_V2_DEBUG === "1";
+  const raw = String(process.env.NEW_REVIEW_AGENT_V2_DEBUG ?? "").toLowerCase();
+  if (["1", "true", "yes", "on"].includes(raw)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(raw)) {
+    return false;
+  }
+
+  return process.env.NODE_ENV !== "production";
 }
 
 export function debug(stage: string, payload: unknown): void {

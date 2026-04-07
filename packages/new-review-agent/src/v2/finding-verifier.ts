@@ -31,6 +31,7 @@ export function verifyAndDedupeFindings(input: {
   for (const finding of input.findings) {
     const title = finding.title.trim();
     const message = finding.message.trim();
+
     if (!title || !message) {
       continue;
     }

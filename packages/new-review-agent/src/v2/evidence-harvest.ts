@@ -5,10 +5,25 @@ import { createReadFileExecutor } from "../tools/ReadFileTool/execution";
 import { EvidenceStore } from "./evidence-store";
 import { runWithConcurrency } from "./parallel-scheduler";
 import { textPreview } from "./utils";
+import type { DiffCollectionFailure } from "./diff-context";
 import type { DependencyMap, RoutedSkill } from "./types";
 
 function makeId(source: string, key: string): string {
   return `${source}:${key}`;
+}
+
+function looksLikeErrorOutput(output: string): boolean {
+  const trimmed = output.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  const head = trimmed.slice(0, 300).toLowerCase();
+  return (
+    head.startsWith("error:") ||
+    head.includes("executable file not found") ||
+    head.includes("command not found")
+  );
 }
 
 export async function harvestEvidence(input: {
@@ -17,11 +32,35 @@ export async function harvestEvidence(input: {
   dependencyMap: DependencyMap;
   routedSkills: RoutedSkill[];
   changedFiles: string[];
+  patchesByFile: Map<string, string>;
+  diffFailures: DiffCollectionFailure[];
 }): Promise<EvidenceStore> {
   const store = new EvidenceStore();
   const grep = createGrepExecutor(input.sandboxManager, input.sandboxId);
   const glob = createGlobExecutor(input.sandboxManager, input.sandboxId);
   const read = createReadFileExecutor(input.sandboxManager, input.sandboxId);
+
+  for (const [filePath, patch] of input.patchesByFile.entries()) {
+    if (!patch.trim()) {
+      continue;
+    }
+
+    store.add({
+      id: makeId("diff-changed", filePath),
+      source: "diff-changed",
+      file: filePath,
+      text: textPreview(patch, 4_000),
+    });
+  }
+
+  for (const failure of input.diffFailures) {
+    store.add({
+      id: makeId("diff-failure", failure.path),
+      source: "diff-failure",
+      file: failure.path,
+      text: `Failed to collect patch for ${failure.path}: ${failure.error}`,
+    });
+  }
 
   const symbolQueries = input.dependencyMap.topSymbols.slice(0, 20);
   const symbolResults = await runWithConcurrency(
@@ -38,6 +77,10 @@ export async function harvestEvidence(input: {
   );
 
   for (const item of symbolResults) {
+    if (looksLikeErrorOutput(item.output)) {
+      continue;
+    }
+
     store.add({
       id: makeId("grep-symbol", item.symbol),
       source: "grep-symbol",
@@ -53,13 +96,17 @@ export async function harvestEvidence(input: {
       const output = await read({
         path: filePath,
         lineStart: 1,
-        maxLines: 120,
+        maxLines: 260,
       });
       return { filePath, output };
     },
   );
 
   for (const item of readResults) {
+    if (looksLikeErrorOutput(item.output)) {
+      continue;
+    }
+
     store.add({
       id: makeId("read-changed", item.filePath),
       source: "read-changed",
@@ -78,12 +125,16 @@ export async function harvestEvidence(input: {
       const output = await read({
         path: filePath,
         lineStart: 1,
-        maxLines: 90,
+        maxLines: 220,
       });
       return { routed, filePath, output };
     },
   );
   for (const item of skillFileResults) {
+    if (looksLikeErrorOutput(item.output)) {
+      continue;
+    }
+
     store.add({
       id: makeId(`read-skill-${item.routed.skill.name}`, item.filePath),
       source: "read-skill",
@@ -109,6 +160,10 @@ export async function harvestEvidence(input: {
     },
   );
   for (const item of skillSymbolResults) {
+    if (looksLikeErrorOutput(item.output)) {
+      continue;
+    }
+
     store.add({
       id: makeId(`grep-skill-${item.routed.skill.name}`, item.symbol),
       source: "grep-skill",

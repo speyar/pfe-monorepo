@@ -334,8 +334,17 @@ function mapVercelError(error: unknown, operation: string): Error {
       );
     }
 
+    const apiError = error as APIError<unknown>;
+    const bodyText =
+      typeof apiError.text === "string" ? apiError.text : undefined;
+    const bodyJson =
+      apiError.json && typeof apiError.json === "object"
+        ? JSON.stringify(apiError.json)
+        : undefined;
+    const bodyDetail = bodyJson ?? bodyText;
+
     return new SandboxError(
-      `Vercel API error while trying to ${operation}: ${error.message}`,
+      `Vercel API error while trying to ${operation}: ${error.message}${bodyDetail ? ` | body=${bodyDetail}` : ""}`,
       "VERCEL_API_ERROR",
       error,
     );

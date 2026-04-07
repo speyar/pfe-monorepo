@@ -19,6 +19,16 @@ export interface ReviewAgentV2Result {
     selectedSkills: string[];
     dependencyTags: string[];
     changedFiles: number;
+    skillsDir?: string;
+    routedSkillsCount?: number;
+    evidenceCount?: number;
+    workerFindingsCount?: number;
+    rejectedFindingsCount?: number;
+    diffFailureCount?: number;
+    impactedFilesCount?: number;
+    coreFindingsCount?: number;
+    skillFindingsCount?: number;
+    workerErrorsCount?: number;
   };
 }
 

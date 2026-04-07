@@ -6,6 +6,29 @@ function simpleGlobMatch(pattern: string, value: string): boolean {
   return new RegExp(regexText, "i").test(value);
 }
 
+function pathSignalScore(path: string): number {
+  const normalized = path.toLowerCase();
+  let score = 0;
+
+  if (normalized.includes("/api/") || normalized.includes("route")) {
+    score += 5;
+  }
+  if (normalized.includes("webhook")) {
+    score += 5;
+  }
+  if (normalized.includes("review-agent")) {
+    score += 8;
+  }
+  if (normalized.includes("sandbox")) {
+    score += 4;
+  }
+  if (normalized.includes("auth") || normalized.includes("security")) {
+    score += 4;
+  }
+
+  return score;
+}
+
 export function routeSkills(input: {
   dependencyMap: DependencyMap;
   skills: SkillDefinition[];
@@ -33,6 +56,14 @@ export function routeSkills(input: {
     if (fileHits.length > 0) {
       score += Math.min(12, fileHits.length * 2);
       reasons.push(`files=${fileHits.length}`);
+
+      const pathScore = fileHits
+        .slice(0, 40)
+        .reduce((sum, filePath) => sum + pathSignalScore(filePath), 0);
+      if (pathScore > 0) {
+        score += Math.min(20, pathScore);
+        reasons.push(`path-signals=${Math.min(20, pathScore)}`);
+      }
     }
 
     const symbolHits = input.dependencyMap.topSymbols.filter((symbol) =>
@@ -57,7 +88,7 @@ export function routeSkills(input: {
   const selected = scored
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(1, input.maxSkills));
+    .slice(0, Math.max(2, input.maxSkills));
 
   if (selected.length === 0 && input.skills.length > 0) {
     return [
