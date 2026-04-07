@@ -14,3 +14,18 @@ export {
   type PullRequestReviewSummary,
   type PullRequestReviewVerdict,
 } from "./pull-request-review";
+
+export {
+  runReviewAgentV2,
+  type ReviewAgentV2Options,
+  type ReviewAgentV2Result,
+} from "./review-agent-v2";
+
+export {
+  runPullRequestReviewV2,
+  type PullRequestReviewFindingV2,
+  type PullRequestReviewInputV2,
+  type PullRequestReviewOptionsV2,
+  type PullRequestReviewResultV2,
+  type PullRequestReviewSummaryV2,
+} from "./pull-request-review-v2";
