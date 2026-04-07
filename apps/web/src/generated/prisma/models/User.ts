@@ -207,6 +207,7 @@ export type UserWhereInput = {
   createdAt?: Prisma.DateTimeFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
   githubInstallations?: Prisma.GithubInstallationListRelationFilter
+  sentryConnection?: Prisma.XOR<Prisma.SentryConnectionNullableScalarRelationFilter, Prisma.SentryConnectionWhereInput> | null
 }
 
 export type UserOrderByWithRelationInput = {
@@ -219,6 +220,7 @@ export type UserOrderByWithRelationInput = {
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
   githubInstallations?: Prisma.GithubInstallationOrderByRelationAggregateInput
+  sentryConnection?: Prisma.SentryConnectionOrderByWithRelationInput
 }
 
 export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -234,6 +236,7 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   createdAt?: Prisma.DateTimeFilter<"User"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"User"> | Date | string
   githubInstallations?: Prisma.GithubInstallationListRelationFilter
+  sentryConnection?: Prisma.XOR<Prisma.SentryConnectionNullableScalarRelationFilter, Prisma.SentryConnectionWhereInput> | null
 }, "id" | "clerkUserId" | "email">
 
 export type UserOrderByWithAggregationInput = {
@@ -274,6 +277,7 @@ export type UserCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   githubInstallations?: Prisma.GithubInstallationCreateNestedManyWithoutUserInput
+  sentryConnection?: Prisma.SentryConnectionCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -286,6 +290,7 @@ export type UserUncheckedCreateInput = {
   createdAt?: Date | string
   updatedAt?: Date | string
   githubInstallations?: Prisma.GithubInstallationUncheckedCreateNestedManyWithoutUserInput
+  sentryConnection?: Prisma.SentryConnectionUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserUpdateInput = {
@@ -298,6 +303,7 @@ export type UserUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   githubInstallations?: Prisma.GithubInstallationUpdateManyWithoutUserNestedInput
+  sentryConnection?: Prisma.SentryConnectionUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -310,6 +316,7 @@ export type UserUncheckedUpdateInput = {
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   githubInstallations?: Prisma.GithubInstallationUncheckedUpdateManyWithoutUserNestedInput
+  sentryConnection?: Prisma.SentryConnectionUncheckedUpdateOneWithoutUserNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -409,6 +416,20 @@ export type UserUpdateOneRequiredWithoutGithubInstallationsNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutGithubInstallationsInput, Prisma.UserUpdateWithoutGithubInstallationsInput>, Prisma.UserUncheckedUpdateWithoutGithubInstallationsInput>
 }
 
+export type UserCreateNestedOneWithoutSentryConnectionInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutSentryConnectionInput, Prisma.UserUncheckedCreateWithoutSentryConnectionInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutSentryConnectionInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutSentryConnectionNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutSentryConnectionInput, Prisma.UserUncheckedCreateWithoutSentryConnectionInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutSentryConnectionInput
+  upsert?: Prisma.UserUpsertWithoutSentryConnectionInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutSentryConnectionInput, Prisma.UserUpdateWithoutSentryConnectionInput>, Prisma.UserUncheckedUpdateWithoutSentryConnectionInput>
+}
+
 export type UserCreateWithoutGithubInstallationsInput = {
   id?: string
   clerkUserId: string
@@ -418,6 +439,7 @@ export type UserCreateWithoutGithubInstallationsInput = {
   phoneNumber?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  sentryConnection?: Prisma.SentryConnectionCreateNestedOneWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutGithubInstallationsInput = {
@@ -429,6 +451,7 @@ export type UserUncheckedCreateWithoutGithubInstallationsInput = {
   phoneNumber?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
+  sentryConnection?: Prisma.SentryConnectionUncheckedCreateNestedOneWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutGithubInstallationsInput = {
@@ -456,6 +479,7 @@ export type UserUpdateWithoutGithubInstallationsInput = {
   phoneNumber?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sentryConnection?: Prisma.SentryConnectionUpdateOneWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutGithubInstallationsInput = {
@@ -467,6 +491,71 @@ export type UserUncheckedUpdateWithoutGithubInstallationsInput = {
   phoneNumber?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  sentryConnection?: Prisma.SentryConnectionUncheckedUpdateOneWithoutUserNestedInput
+}
+
+export type UserCreateWithoutSentryConnectionInput = {
+  id?: string
+  clerkUserId: string
+  firstName: string
+  lastName: string
+  email: string
+  phoneNumber?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  githubInstallations?: Prisma.GithubInstallationCreateNestedManyWithoutUserInput
+}
+
+export type UserUncheckedCreateWithoutSentryConnectionInput = {
+  id?: string
+  clerkUserId: string
+  firstName: string
+  lastName: string
+  email: string
+  phoneNumber?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  githubInstallations?: Prisma.GithubInstallationUncheckedCreateNestedManyWithoutUserInput
+}
+
+export type UserCreateOrConnectWithoutSentryConnectionInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutSentryConnectionInput, Prisma.UserUncheckedCreateWithoutSentryConnectionInput>
+}
+
+export type UserUpsertWithoutSentryConnectionInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutSentryConnectionInput, Prisma.UserUncheckedUpdateWithoutSentryConnectionInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutSentryConnectionInput, Prisma.UserUncheckedCreateWithoutSentryConnectionInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutSentryConnectionInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutSentryConnectionInput, Prisma.UserUncheckedUpdateWithoutSentryConnectionInput>
+}
+
+export type UserUpdateWithoutSentryConnectionInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  clerkUserId?: Prisma.StringFieldUpdateOperationsInput | string
+  firstName?: Prisma.StringFieldUpdateOperationsInput | string
+  lastName?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  phoneNumber?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  githubInstallations?: Prisma.GithubInstallationUpdateManyWithoutUserNestedInput
+}
+
+export type UserUncheckedUpdateWithoutSentryConnectionInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  clerkUserId?: Prisma.StringFieldUpdateOperationsInput | string
+  firstName?: Prisma.StringFieldUpdateOperationsInput | string
+  lastName?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  phoneNumber?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  githubInstallations?: Prisma.GithubInstallationUncheckedUpdateManyWithoutUserNestedInput
 }
 
 
@@ -510,6 +599,7 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   createdAt?: boolean
   updatedAt?: boolean
   githubInstallations?: boolean | Prisma.User$githubInstallationsArgs<ExtArgs>
+  sentryConnection?: boolean | Prisma.User$sentryConnectionArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -549,6 +639,7 @@ export type UserSelectScalar = {
 export type UserOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "clerkUserId" | "firstName" | "lastName" | "email" | "phoneNumber" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
 export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   githubInstallations?: boolean | Prisma.User$githubInstallationsArgs<ExtArgs>
+  sentryConnection?: boolean | Prisma.User$sentryConnectionArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 export type UserIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {}
@@ -558,6 +649,7 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   name: "User"
   objects: {
     githubInstallations: Prisma.$GithubInstallationPayload<ExtArgs>[]
+    sentryConnection: Prisma.$SentryConnectionPayload<ExtArgs> | null
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -963,6 +1055,7 @@ readonly fields: UserFieldRefs;
 export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
   readonly [Symbol.toStringTag]: "PrismaPromise"
   githubInstallations<T extends Prisma.User$githubInstallationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$githubInstallationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$GithubInstallationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  sentryConnection<T extends Prisma.User$sentryConnectionArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$sentryConnectionArgs<ExtArgs>>): Prisma.Prisma__SentryConnectionClient<runtime.Types.Result.GetResult<Prisma.$SentryConnectionPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1409,6 +1502,25 @@ export type User$githubInstallationsArgs<ExtArgs extends runtime.Types.Extension
   take?: number
   skip?: number
   distinct?: Prisma.GithubInstallationScalarFieldEnum | Prisma.GithubInstallationScalarFieldEnum[]
+}
+
+/**
+ * User.sentryConnection
+ */
+export type User$sentryConnectionArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the SentryConnection
+   */
+  select?: Prisma.SentryConnectionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the SentryConnection
+   */
+  omit?: Prisma.SentryConnectionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.SentryConnectionInclude<ExtArgs> | null
+  where?: Prisma.SentryConnectionWhereInput
 }
 
 /**

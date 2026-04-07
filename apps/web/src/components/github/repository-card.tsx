@@ -1,5 +1,5 @@
 import { Repository } from "@pfe-monorepo/github-api";
-import { SquareArrowOutUpRight, Globe, Lock } from "lucide-react";
+import { SquareArrowOutUpRight, Globe, Lock, Activity } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,14 @@ export default function RepositoryCard({ repository }: RepositoryCardProps) {
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end border-t border-border/60 pt-4">
+        <div className="mt-4 flex justify-between border-t border-border/60 pt-4">
+          <Link href={`/repos/${repo.id}/monitoring`}>
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+              Monitoring
+              <Activity className="size-3" />
+            </Button>
+          </Link>
+
           <a href={repo.html_url} target="_blank" rel="noopener noreferrer">
             <Button
               variant="ghost"

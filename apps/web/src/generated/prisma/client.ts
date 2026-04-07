@@ -61,3 +61,13 @@ export type Repository = Prisma.RepositoryModel
  * 
  */
 export type Review = Prisma.ReviewModel
+/**
+ * Model SentryConnection
+ * 
+ */
+export type SentryConnection = Prisma.SentryConnectionModel
+/**
+ * Model RepositorySentryProject
+ * 
+ */
+export type RepositorySentryProject = Prisma.RepositorySentryProjectModel
