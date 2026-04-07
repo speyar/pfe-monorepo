@@ -80,18 +80,21 @@ export async function exchangeCodeForToken(code: string): Promise<{
     });
   }
 
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    client_id: clientId,
+    client_secret: clientSecret,
+    code,
+    redirect_uri: redirectUri,
+  });
+
   const response = await fetch(`${SENTRY_BASE_URL}/oauth/token/`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
     },
-    body: JSON.stringify({
-      grant_type: "authorization_code",
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-      redirect_uri: redirectUri,
-    }),
+    body: body.toString(),
   });
 
   const payload = await response.json().catch(() => null);
@@ -116,14 +119,21 @@ export async function getSentryUser(accessToken: string): Promise<{
   id: string | null;
   email: string | null;
 }> {
-  const response = await fetch(`${SENTRY_BASE_URL}/api/0/user/`, {
+  const response = await fetch(`${SENTRY_BASE_URL}/api/0/users/me/`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
+      Accept: "application/json",
     },
   });
 
-  const payload = await response.json().catch(() => null);
+  const rawText = await response.text();
+  let payload: Record<string, unknown> | null = null;
+
+  if (rawText.trim().length > 0) {
+    payload = JSON.parse(rawText) as Record<string, unknown>;
+  }
+
   if (!response.ok || !payload) {
     throw new AppError({
       message: "Failed to fetch Sentry user",
@@ -134,8 +144,8 @@ export async function getSentryUser(accessToken: string): Promise<{
   }
 
   return {
-    id: typeof payload.id === "string" ? payload.id : null,
-    email: typeof payload.email === "string" ? payload.email : null,
+    id: typeof payload?.id === "string" ? payload.id : null,
+    email: typeof payload?.email === "string" ? payload.email : null,
   };
 }
 
