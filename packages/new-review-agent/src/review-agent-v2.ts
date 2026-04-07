@@ -10,6 +10,7 @@ import { runWithConcurrency } from "./v2/parallel-scheduler";
 import { loadSkills } from "./v2/skill-loader";
 import { routeSkills } from "./v2/skill-router";
 import { runSkillWorker } from "./v2/skill-worker";
+import { debug } from "./v2/debug";
 import type { ReviewAgentV2Options, ReviewAgentV2Result } from "./v2/types";
 
 async function isDirReadable(dir: string): Promise<boolean> {
@@ -59,8 +60,13 @@ export async function runReviewAgentV2(
     branchName,
     defaultBranch: options.defaultBranch,
   });
+  debug("branch", {
+    ...branch,
+    changedFiles: branch.changedFiles.slice(0, 10),
+  });
 
   if (branch.changedFiles.length === 0) {
+    debug("early-return", { reason: "no changed files" });
     return {
       findings: [],
       meta: {
@@ -78,6 +84,7 @@ export async function runReviewAgentV2(
     defaultBranch: branch.defaultBranch,
     changedFiles: branch.changedFiles,
   });
+  debug("patches", { fileCount: patchesByFile.size });
 
   const dependencyMap = await buildDependencyMap({
     sandboxManager: options.sandboxManager,
@@ -86,17 +93,39 @@ export async function runReviewAgentV2(
     patchesByFile,
     maxSymbols,
   });
+  debug("dependency-map", {
+    nodeCount: dependencyMap.nodes.length,
+    edgeCount: dependencyMap.edges.length,
+    tags: dependencyMap.tags,
+    hotFiles: dependencyMap.hotFiles.slice(0, 5),
+    topSymbols: dependencyMap.topSymbols.slice(0, 8),
+    summary: dependencyMap.summary,
+  });
 
   const skillsDir = await resolveSkillsDir(options.skillsDir);
   const skills = await loadSkills(skillsDir);
   if (skills.length === 0) {
     throw new Error(`No skills found in ${skillsDir}`);
   }
+  debug("skills-loaded", {
+    count: skills.length,
+    names: skills.map((s) => s.name),
+  });
 
   const routedSkills = routeSkills({
     dependencyMap,
     skills,
     maxSkills: 4,
+  });
+  debug("routed-skills", {
+    count: routedSkills.length,
+    routed: routedSkills.map((r) => ({
+      skill: r.skill.name,
+      score: r.score,
+      files: r.files.length,
+      symbols: r.symbols.length,
+      reasons: r.reasons,
+    })),
   });
 
   const evidenceStore = await harvestEvidence({
@@ -106,12 +135,26 @@ export async function runReviewAgentV2(
     routedSkills,
     changedFiles: branch.changedFiles,
   });
+  debug("evidence-harvest", {
+    totalEvidence: evidenceStore.list().length,
+    bySkill: routedSkills
+      .map((r) => ({
+        skill: r.skill.name,
+        count: evidenceStore.listBySkill(r.skill.name).length,
+      }))
+      .filter((b) => b.count > 0),
+  });
 
   const workerResults = await runWithConcurrency(
     routedSkills,
     maxSkillWorkers,
     async (routed) => {
-      return runSkillWorker({
+      debug("worker-start", {
+        skill: routed.skill.name,
+        files: routed.files.length,
+        symbols: routed.symbols.length,
+      });
+      const result = await runSkillWorker({
         model: options.model,
         skill: routed,
         dependencyMap,
@@ -122,12 +165,23 @@ export async function runReviewAgentV2(
           Math.ceil(maxFindings / Math.max(1, routedSkills.length)),
         ),
       });
+      debug("worker-end", {
+        skill: routed.skill.name,
+        findings: result.length,
+        severities: result.map((f) => f.severity),
+      });
+      return result;
     },
   );
 
   const findings = verifyAndDedupeFindings({
     findings: workerResults.flat(),
     maxFindings,
+  });
+  debug("final-findings", {
+    count: findings.length,
+    severities: findings.map((f) => f.severity),
+    skills: [...new Set(findings.map((f) => f.skill).filter(Boolean))],
   });
 
   return {

@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { PullRequestReviewResult as ReviewResult } from "@pfe-monorepo/new-review-agent";
+import type { PullRequestReviewResultV2 as ReviewResult } from "@pfe-monorepo/new-review-agent";
 import type { GitHubInstallation, PullRequestPayload } from "./types";
 
 export const REVIEW_COMMENT_MARKER = "<!-- pfe-review-agent -->";

@@ -7,9 +7,9 @@ import {
   upsertPullRequestComment,
 } from "@pfe-monorepo/github-api";
 import {
-  runPullRequestReview,
-  type PullRequestReviewFinding as ReviewFinding,
-  type PullRequestReviewResult as ReviewResult,
+  runPullRequestReviewV2,
+  type PullRequestReviewFindingV2 as ReviewFinding,
+  type PullRequestReviewResultV2 as ReviewResult,
 } from "@pfe-monorepo/new-review-agent";
 import { getGithubInstallationReviewer, savePullRequestReview } from "../db";
 import {
@@ -563,7 +563,7 @@ export const handlePullRequestEvent = async ({
     : null;
 
   try {
-    const review: ReviewResult = await runPullRequestReview({
+    const review: ReviewResult = await runPullRequestReviewV2({
       installationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
