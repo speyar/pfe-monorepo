@@ -21,8 +21,7 @@
     "review": "bun src/scripts/review.ts"
   },
   "dependencies": {
-    "@ceira/github-sdk-provider": "workspace:*",
-    "@github/copilot": "^0.0.417",
+    "@ceira/better-copilot-provider": "workspace:*",
     "ai": "^6.0.116",
     "zod": "^4.1.8"
   },

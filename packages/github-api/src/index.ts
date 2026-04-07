@@ -1,4 +1,5 @@
 export { createGitHubAppClient } from "./client";
+export { createCheckRun, updateCheckRun } from "./checks";
 export { cloneRepository } from "./clone";
 export {
   createPullRequestComment,
@@ -14,9 +15,16 @@ export {
   listPullRequestFiles,
 } from "./pull-requests";
 export { getRepositories } from "./repositories";
-export { registerRepositoryWebhook } from "./webhooks/register-repository-webhook";
 
 export type { CloneRepositoryInput, CloneRepositoryResult } from "./clone";
+
+export type {
+  CheckRunConclusion,
+  CheckRunResult,
+  CheckRunStatus,
+  CreateCheckRunInput,
+  UpdateCheckRunInput,
+} from "./checks";
 
 export type {
   CreatePullRequestCommentInput,
@@ -38,10 +46,4 @@ export type {
   Repository,
 } from "./types";
 
-export type {
-  PullRequestWebhookEvent,
-  RegisterRepositoryWebhookInput,
-  RegisterRepositoryWebhookResult,
-} from "./webhooks/register-repository-webhook";
-
-export * from "./lib/get-github-client";
+export { getGitHubClient } from "./lib/get-github-client";

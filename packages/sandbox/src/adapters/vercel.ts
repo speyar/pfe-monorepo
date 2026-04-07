@@ -64,6 +64,12 @@ export class VercelSandboxProvider implements SandboxProvider {
           typeof input.resourceProfile?.vcpus === "number"
             ? { vcpus: input.resourceProfile.vcpus }
             : undefined,
+        source: {
+          type: "git",
+          url: input.source.url,
+          username: input.source.username,
+          password: input.source.password,
+        },
       });
 
       return mapLiveSandbox(sandbox, {
@@ -170,6 +176,7 @@ export class VercelSandboxProvider implements SandboxProvider {
       const command = await sandbox.runCommand({
         cmd: input.command,
         cwd: input.cwd,
+        args: input.args,
         signal:
           typeof input.timeoutMs === "number"
             ? AbortSignal.timeout(input.timeoutMs)

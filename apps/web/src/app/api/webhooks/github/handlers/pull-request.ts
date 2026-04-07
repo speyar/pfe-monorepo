@@ -1,15 +1,16 @@
 import {
+  createCheckRun,
   createPullRequestReviewComment,
   getPullRequest,
   listPullRequestFiles,
+  updateCheckRun,
   upsertPullRequestComment,
 } from "@pfe-monorepo/github-api";
 import {
-  createGitHubReviewModel,
-  type ReviewFinding,
-  type ReviewResult,
-  runReview,
-} from "@pfe-monorepo/review-agent";
+  runPullRequestReview,
+  type PullRequestReviewFinding as ReviewFinding,
+  type PullRequestReviewResult as ReviewResult,
+} from "@pfe-monorepo/new-review-agent";
 import { getGithubInstallationReviewer, savePullRequestReview } from "../db";
 import {
   getInstallationId,
@@ -44,6 +45,31 @@ type InlineTargetResolution =
   | { ok: false; reason: string };
 
 const MAX_INLINE_SNIPPET_LINES = 5;
+const REVIEW_STATUS_MARKER = "<!-- pfe-review-agent-status -->";
+
+function buildReviewStatusComment(
+  state: "in_progress" | "completed" | "failed",
+): string {
+  if (state === "completed") {
+    return [
+      REVIEW_STATUS_MARKER,
+      "✅ Review completed. See review below.",
+    ].join("\n");
+  }
+
+  if (state === "failed") {
+    return [
+      REVIEW_STATUS_MARKER,
+      "⚠️ Review failed before completion. Please retry.",
+    ].join("\n");
+  }
+
+  return [REVIEW_STATUS_MARKER, "⏳ AI review in progress"].join("\n");
+}
+
+function buildCheckSummary(lines: string[]): string {
+  return lines.join("\n");
+}
 
 function looksLikeCode(value: string): boolean {
   const trimmed = value.trim();
@@ -415,57 +441,6 @@ function buildFallbackSummaryComment(input: {
     .join("\n");
 }
 
-function getErrorString(
-  error: unknown,
-  key: "name" | "message" | "code",
-): string {
-  if (!error || typeof error !== "object") {
-    return "";
-  }
-
-  const value = Reflect.get(error, key);
-
-  return typeof value === "string" ? value : "";
-}
-
-function hasCauseNamed(error: unknown, expectedName: string): boolean {
-  let current: unknown = error;
-
-  for (let depth = 0; depth < 6; depth += 1) {
-    if (!current || typeof current !== "object") {
-      return false;
-    }
-
-    const currentName = getErrorString(current, "name");
-    if (currentName === expectedName) {
-      return true;
-    }
-
-    current = Reflect.get(current, "cause");
-  }
-
-  return false;
-}
-
-function isReviewOutputValidationFailure(error: unknown): boolean {
-  const name = getErrorString(error, "name");
-  const code = getErrorString(error, "code");
-  const message = getErrorString(error, "message").toLowerCase();
-
-  return (
-    name === "AI_NoObjectGeneratedError" ||
-    name === "AI_TypeValidationError" ||
-    code === "AI_NO_OBJECT_GENERATED" ||
-    code === "AI_TYPE_VALIDATION_ERROR" ||
-    hasCauseNamed(error, "AI_NoObjectGeneratedError") ||
-    hasCauseNamed(error, "AI_TypeValidationError") ||
-    hasCauseNamed(error, "ZodError") ||
-    message.includes("no object generated") ||
-    message.includes("response did not match schema") ||
-    message.includes("type validation failed")
-  );
-}
-
 export const handlePullRequestEvent = async ({
   payload,
   deliveryId,
@@ -549,159 +524,218 @@ export const handlePullRequestEvent = async ({
     return null;
   }
 
-  const reviewInput = {
-    repository: {
-      owner: ownerRepo.owner,
-      name: ownerRepo.repo,
-      defaultBranch: body.repository?.default_branch,
-    },
-    pullRequest: {
-      number: pullRequest.number,
-      title: pullRequest.title,
-      body: body.pull_request?.body,
-      baseSha: body.pull_request?.base?.sha ?? "unknown-base-sha",
-      headSha: body.pull_request?.head?.sha ?? "unknown-head-sha",
-      baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
-      headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
-    },
-    files: filesForReview,
-    metadata: {
-      deliveryId,
-      eventName,
-      action: body.action,
-      sender: body.sender?.login,
-      pullRequestUrl: body.pull_request?.html_url,
-    },
-  };
+  const pullRequestUrl = body.pull_request?.html_url ?? pullRequest.htmlUrl;
+  await upsertPullRequestComment(installationId, {
+    owner: ownerRepo.owner,
+    repo: ownerRepo.repo,
+    pullRequestNumber,
+    marker: REVIEW_STATUS_MARKER,
+    body: buildReviewStatusComment("in_progress"),
+  });
 
-  const model = createGitHubReviewModel();
-
-  let review: ReviewResult;
-
-  try {
-    review = await runReview(reviewInput, {
-      model,
-      useRepositoryTools: true,
-    });
-  } catch (error) {
-    if (!isReviewOutputValidationFailure(error)) {
-      throw error;
-    }
-
-    console.warn(
-      "[github-webhook] pull_request tool review failed schema validation; retrying without tools",
-      {
-        deliveryId,
-        installationId,
+  const checkRunHeadSha = body.pull_request?.head?.sha;
+  const checkRun = checkRunHeadSha
+    ? await createCheckRun(installationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
-        pullRequestNumber,
-        errorName: getErrorString(error, "name") || "UnknownError",
-        errorCode: getErrorString(error, "code") || undefined,
-        errorMessage: getErrorString(error, "message") || "Unknown error",
-      },
-    );
+        name: "review-agent",
+        headSha: checkRunHeadSha,
+        detailsUrl: pullRequestUrl,
+        title: "Automated PR Review",
+        summary: buildCheckSummary([
+          "Review in progress",
+          "",
+          "[====      ] scanning changed files",
+          "[=======   ] tracing impacted code",
+          "[==========] generating findings",
+        ]),
+      }).catch((error) => {
+        console.warn("[github-webhook] failed to create review check run", {
+          deliveryId,
+          installationId,
+          owner: ownerRepo.owner,
+          repo: ownerRepo.repo,
+          pullRequestNumber,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      })
+    : null;
 
-    review = await runReview(reviewInput, {
-      model,
-      useRepositoryTools: false,
+  try {
+    const review: ReviewResult = await runPullRequestReview({
+      installationId,
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
+      baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
     });
-  }
 
-  const reviewText = toMarkdownReview(review);
-  const pullRequestUrl = body.pull_request?.html_url ?? pullRequest.htmlUrl;
-
-  const patchByPath = new Map<string, string>();
-  for (const file of files) {
-    if (!file.patch) {
-      continue;
+    if (checkRun) {
+      await updateCheckRun(installationId, {
+        owner: ownerRepo.owner,
+        repo: ownerRepo.repo,
+        checkRunId: checkRun.id,
+        status: "in_progress",
+        detailsUrl: pullRequestUrl,
+        title: "Automated PR Review",
+        summary: buildCheckSummary([
+          "Analysis complete",
+          "Publishing comments to GitHub",
+        ]),
+      }).catch(() => {
+        return;
+      });
     }
 
-    patchByPath.set(normalizePath(file.filename), file.patch);
-  }
+    const reviewText = toMarkdownReview(review);
 
-  const lineMapsByPath = new Map<string, DiffLineMaps>();
-  const skippedByReason: Record<string, number> = {};
-  let postedInline = 0;
-
-  const commitSha = body.pull_request?.head?.sha;
-  if (commitSha) {
-    for (const finding of review.findings) {
-      const targetResolution = resolveInlineTarget(
-        finding,
-        patchByPath,
-        lineMapsByPath,
-      );
-
-      if (!targetResolution.ok) {
-        skippedByReason[targetResolution.reason] =
-          (skippedByReason[targetResolution.reason] ?? 0) + 1;
+    const patchByPath = new Map<string, string>();
+    for (const file of files) {
+      if (!file.patch) {
         continue;
       }
 
-      const commentBody = buildInlineCommentBody(
-        finding,
-        targetResolution.target,
-      );
+      patchByPath.set(normalizePath(file.filename), file.patch);
+    }
 
-      await createPullRequestReviewComment(installationId, {
+    const lineMapsByPath = new Map<string, DiffLineMaps>();
+    const skippedByReason: Record<string, number> = {};
+    let postedInline = 0;
+
+    const commitSha = body.pull_request?.head?.sha;
+    if (commitSha) {
+      for (const finding of review.findings) {
+        const targetResolution = resolveInlineTarget(
+          finding,
+          patchByPath,
+          lineMapsByPath,
+        );
+
+        if (!targetResolution.ok) {
+          skippedByReason[targetResolution.reason] =
+            (skippedByReason[targetResolution.reason] ?? 0) + 1;
+          continue;
+        }
+
+        const commentBody = buildInlineCommentBody(
+          finding,
+          targetResolution.target,
+        );
+
+        await createPullRequestReviewComment(installationId, {
+          owner: ownerRepo.owner,
+          repo: ownerRepo.repo,
+          pullRequestNumber,
+          commitSha,
+          path: targetResolution.target.path,
+          line: targetResolution.target.line,
+          side: targetResolution.target.side,
+          body: commentBody,
+        });
+
+        postedInline += 1;
+      }
+    } else {
+      skippedByReason.missing_commit_sha = review.findings.length;
+    }
+
+    if (postedInline < review.findings.length) {
+      const fallbackComment = buildFallbackSummaryComment({
+        totalFindings: review.findings.length,
+        postedInline,
+        skippedByReason,
+      });
+
+      await upsertPullRequestComment(installationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         pullRequestNumber,
-        commitSha,
-        path: targetResolution.target.path,
-        line: targetResolution.target.line,
-        side: targetResolution.target.side,
-        body: commentBody,
+        marker: REVIEW_COMMENT_MARKER,
+        body: fallbackComment,
       });
-
-      postedInline += 1;
     }
-  } else {
-    skippedByReason.missing_commit_sha = review.findings.length;
-  }
 
-  if (postedInline < review.findings.length) {
-    const fallbackComment = buildFallbackSummaryComment({
-      totalFindings: review.findings.length,
-      postedInline,
-      skippedByReason,
+    const reviewDbStatus = await savePullRequestReview({
+      installationId,
+      repository: body.repository,
+      ownerRepo,
+      pullRequestNumber: pullRequest.number,
+      pullRequestTitle: pullRequest.title,
+      pullRequestUrl,
+      reviewText,
+      reviewerClerkUserId: githubInstallation.user.clerkUserId,
     });
+
+    console.info("[github-webhook] pull_request review completed", {
+      deliveryId,
+      action: body.action,
+      installationId,
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      pullRequestNumber,
+      findingsCount: review.findings.length,
+      inlineCommentsPosted: postedInline,
+      inlineCommentsSkipped: review.findings.length - postedInline,
+      skippedByReason,
+      verdict: review.summary.verdict,
+      db: reviewDbStatus,
+    });
+
+    if (checkRun) {
+      await updateCheckRun(installationId, {
+        owner: ownerRepo.owner,
+        repo: ownerRepo.repo,
+        checkRunId: checkRun.id,
+        status: "completed",
+        conclusion: "success",
+        detailsUrl: pullRequestUrl,
+        title: "Automated PR Review",
+        summary: buildCheckSummary([
+          "Review completed",
+          `Findings: ${review.findings.length}`,
+          `Inline comments posted: ${postedInline}`,
+        ]),
+      }).catch(() => {
+        return;
+      });
+    }
 
     await upsertPullRequestComment(installationId, {
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
-      marker: REVIEW_COMMENT_MARKER,
-      body: fallbackComment,
+      marker: REVIEW_STATUS_MARKER,
+      body: buildReviewStatusComment("completed"),
     });
+
+    return null;
+  } catch (error) {
+    if (checkRun) {
+      await updateCheckRun(installationId, {
+        owner: ownerRepo.owner,
+        repo: ownerRepo.repo,
+        checkRunId: checkRun.id,
+        status: "completed",
+        conclusion: "failure",
+        detailsUrl: pullRequestUrl,
+        title: "Automated PR Review",
+        summary: "Review failed before completion.",
+      }).catch(() => {
+        return;
+      });
+    }
+
+    await upsertPullRequestComment(installationId, {
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      pullRequestNumber,
+      marker: REVIEW_STATUS_MARKER,
+      body: buildReviewStatusComment("failed"),
+    }).catch(() => {
+      return;
+    });
+
+    throw error;
   }
-
-  const reviewDbStatus = await savePullRequestReview({
-    installationId,
-    repository: body.repository,
-    ownerRepo,
-    pullRequestNumber: pullRequest.number,
-    pullRequestTitle: pullRequest.title,
-    pullRequestUrl,
-    reviewText,
-    reviewerClerkUserId: githubInstallation.user.clerkUserId,
-  });
-
-  console.info("[github-webhook] pull_request review completed", {
-    deliveryId,
-    action: body.action,
-    installationId,
-    owner: ownerRepo.owner,
-    repo: ownerRepo.repo,
-    pullRequestNumber,
-    findingsCount: review.findings.length,
-    inlineCommentsPosted: postedInline,
-    inlineCommentsSkipped: review.findings.length - postedInline,
-    skippedByReason,
-    verdict: review.summary.verdict,
-    db: reviewDbStatus,
-  });
-
-  return null;
 };

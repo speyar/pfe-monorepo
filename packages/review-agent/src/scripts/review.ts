@@ -26,7 +26,7 @@ function printUsage(): void {
     "Options:",
     "  --input <path>              Path to a ReviewRequest JSON file.",
     "  --file <path>               Path to a source file for ad-hoc review.",
-    "  --model <name>              Copilot model (default: gpt-4.1).",
+    "  --model <name>              Copilot model (default: gpt-5.3-codex).",
     "  --temperature <number>      Temperature between 0 and 2.",
     "  --max-output-tokens <int>   Max output tokens for model generation.",
     "  -h, --help                  Show this help message.",
