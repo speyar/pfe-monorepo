@@ -15,6 +15,7 @@ import type {
   DependencyMap,
   DependencyNode,
 } from "./types";
+import { searchSymbolReferencesCached } from "./search-cache";
 
 const TAG_BY_EXTENSION: Record<string, string[]> = {
   ".ts": ["typescript"],
@@ -107,41 +108,42 @@ function churnScoreFromPatch(patch: string): number {
     .length;
 }
 
-async function searchSymbolReferences(
-  sandboxManager: SandboxManager,
-  sandboxId: string,
-  command: "rg" | "grep",
-  symbol: string,
-): Promise<number> {
-  const result =
-    command === "rg"
-      ? await runCommand(sandboxManager, sandboxId, "rg", [
-          "--line-number",
-          "--no-heading",
-          "--fixed-strings",
-          symbol,
-          ".",
-        ])
-      : await runCommand(sandboxManager, sandboxId, "grep", [
-          "-R",
-          "-n",
-          "-F",
-          symbol,
-          ".",
-        ]);
+// Using cached version from search-cache.ts
+// async function searchSymbolReferences(
+//   sandboxManager: SandboxManager,
+//   sandboxId: string,
+//   command: "rg" | "grep",
+//   symbol: string,
+// ): Promise<number> {
+//   const result =
+//     command === "rg"
+//       ? await runCommand(sandboxManager, sandboxId, "rg", [
+//           "--line-number",
+//           "--no-heading",
+//           "--fixed-strings",
+//           symbol,
+//           ".",
+//         ])
+//       : await runCommand(sandboxManager, sandboxId, "grep", [
+//           "-R",
+//           "-n",
+//           "-F",
+//           symbol,
+//           ".",
+//         ]);
 
-  if (result.exitCode !== 0 && result.exitCode !== 1) {
-    debug("dependency-map-symbol-scan-failed", {
-      symbol,
-      command,
-      exitCode: result.exitCode,
-      stderr: textPreview(result.stderr, 280),
-    });
-  }
+//   if (result.exitCode !== 0 && result.exitCode !== 1) {
+//     debug("dependency-map-symbol-scan-failed", {
+//       symbol,
+//       command,
+//       exitCode: result.exitCode,
+//       stderr: textPreview(result.stderr, 280),
+//     });
+//   }
 
-  const stdout = result.stdout ?? "";
-  return splitLines(stdout).length;
-}
+//   const stdout = result.stdout ?? "";
+//   return splitLines(stdout).length;
+// }
 
 export async function buildDependencyMap(input: {
   sandboxManager: SandboxManager;
@@ -184,19 +186,32 @@ export async function buildDependencyMap(input: {
     };
   });
 
+  // Limit symbols processed for large repositories to prevent excessive computation
+  const limitedMaxSymbols = Math.min(
+    maxSymbols,
+    input.branch.changedFiles.length > 20 ? 20 : maxSymbols,
+  );
   const allSymbols = uniqueSorted(nodes.flatMap((node) => node.symbols)).slice(
     0,
-    maxSymbols,
+    limitedMaxSymbols,
   );
-  const hits = await runWithConcurrency(allSymbols, 6, async (symbol) => {
-    const count = await searchSymbolReferences(
-      input.sandboxManager,
-      input.sandboxId,
-      searchCommand,
-      symbol,
-    );
-    return { symbol, count };
-  });
+
+  // Further limit concurrent symbol searches for large repositories
+  const maxConcurrent = input.branch.changedFiles.length > 20 ? 3 : 6;
+
+  const hits = await runWithConcurrency(
+    allSymbols,
+    maxConcurrent,
+    async (symbol) => {
+      const count = await searchSymbolReferencesCached(
+        input.sandboxManager,
+        input.sandboxId,
+        searchCommand,
+        symbol,
+      );
+      return { symbol, count };
+    },
+  );
 
   debug("dependency-map-symbol-scan", {
     command: searchCommand,
@@ -225,17 +240,21 @@ export async function buildDependencyMap(input: {
     }
   }
 
+  // For large repositories, reduce the scope of analysis to improve performance
+  const maxHotFiles = input.branch.changedFiles.length > 20 ? 5 : 10;
+  const maxTopSymbols = input.branch.changedFiles.length > 20 ? 10 : 20;
+
   const tags = uniqueSorted(nodes.flatMap((node) => node.tags));
   const hotFiles = nodes
     .slice()
     .sort((a, b) => b.churn + b.referenceHits - (a.churn + a.referenceHits))
-    .slice(0, 10)
+    .slice(0, maxHotFiles)
     .map((node) => node.path);
 
   const topSymbols = hits
     .slice()
     .sort((a, b) => b.count - a.count)
-    .slice(0, 20)
+    .slice(0, maxTopSymbols)
     .map((item) => item.symbol);
 
   const summary = [

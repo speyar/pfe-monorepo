@@ -213,67 +213,38 @@ export async function runReviewAgentV2(
     maxSkills: 8,
   });
 
-  if (routedSkills.length < 6) {
-    const selectedNames = new Set(routedSkills.map((item) => item.skill.name));
-    const additional = skills
-      .filter((skill) => !selectedNames.has(skill.name))
-      .slice(0, 6 - routedSkills.length)
-      .map((skill) => ({
-        skill,
-        score: 1,
-        reasons: ["coverage-fill"],
-        files: impactedFiles.slice(0, 12),
-        symbols: dependencyMap.topSymbols.slice(0, 8),
-      }));
+  // Removed forced quality skill assignment - let routing decide based on relevance
 
-    routedSkills.push(...additional);
-  }
+  const allWorkers = [...routedSkills];
 
-  const qualitySkillName = "review-agent-quality";
-  if (
-    branch.changedFiles.some((file) => file.includes("new-review-agent")) &&
-    !routedSkills.some((item) => item.skill.name === qualitySkillName)
-  ) {
-    const qualitySkill = skills.find(
-      (skill) => skill.name === qualitySkillName,
-    );
-    if (qualitySkill) {
-      routedSkills.unshift({
-        skill: qualitySkill,
-        score: 50,
-        reasons: ["pipeline-self-review"],
-        files: branch.changedFiles
-          .filter((file) => file.includes("new-review-agent"))
-          .slice(0, 10),
-        symbols: dependencyMap.topSymbols.slice(0, 10),
-      });
-    }
-  }
-
-  const coreRoutedSkill = {
-    skill: {
-      name: CORE_SKILL_NAME,
-      description:
-        "Baseline reviewer pass that is not limited to specialized skills.",
-      location: "internal://core-general-review",
-      content: [
-        "Focus on general high-value regressions even when no specific skill matches.",
-        "Look for behavioral breaks, cross-file impact, contract drift, runtime exceptions, and ordering bugs.",
-        "Prioritize concrete impact and reproducible scenarios over style commentary.",
-      ].join("\n"),
-      triggers: {
-        tags: [],
-        filePatterns: [],
-        symbolPatterns: [],
+  // Only add core skill as fallback if no skills were routed or all have very low scores
+  const hasHighScoreSkill = routedSkills.some((skill) => skill.score >= 20);
+  if (routedSkills.length === 0 || !hasHighScoreSkill) {
+    const coreRoutedSkill = {
+      skill: {
+        name: CORE_SKILL_NAME,
+        description:
+          "Baseline reviewer pass that is not limited to specialized skills.",
+        location: "internal://core-general-review",
+        content: [
+          "Focus on general high-value regressions even when no specific skill matches.",
+          "Look for behavioral breaks, cross-file impact, contract drift, runtime exceptions, and ordering bugs.",
+          "Prioritize concrete impact and reproducible scenarios over style commentary.",
+        ].join("\n"),
+        triggers: {
+          tags: [],
+          filePatterns: [],
+          symbolPatterns: [],
+        },
       },
-    },
-    score: 100,
-    reasons: ["core-pass"],
-    files: impactedFiles.slice(0, 20),
-    symbols: dependencyMap.topSymbols.slice(0, 20),
-  };
+      score: 100,
+      reasons: ["core-pass"],
+      files: impactedFiles.slice(0, 20),
+      symbols: dependencyMap.topSymbols.slice(0, 20),
+    };
 
-  const allWorkers = [coreRoutedSkill, ...routedSkills];
+    allWorkers.push(coreRoutedSkill);
+  }
 
   debug("routed-skills", {
     count: routedSkills.length,
