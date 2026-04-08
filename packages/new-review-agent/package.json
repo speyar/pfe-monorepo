@@ -17,7 +17,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "bun src/index.ts"
+    "start": "bun src/index.ts",
+    "review:pr:v2:local": "bun src/scripts/run-pr-review-v2-local.ts"
   },
   "dependencies": {
     "@ceira/better-copilot-provider": "workspace:*",

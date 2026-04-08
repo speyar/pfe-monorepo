@@ -67,11 +67,33 @@ export async function prepareBranchContext(input: {
   );
   const hasLocal = splitLines(localBranchResult.stdout).length > 0;
 
+  const remoteRefResult = await runCommand(
+    input.sandboxManager,
+    input.sandboxId,
+    "git",
+    ["show-ref", "--verify", `refs/remotes/origin/${target}`],
+  );
+  const hasRemoteRef = remoteRefResult.exitCode === 0;
+
+  if (!hasLocal && !hasRemoteRef) {
+    throw new Error(
+      `Target branch '${target}' not found locally or on origin.`,
+    );
+  }
+
   if (hasLocal) {
     await runCommand(input.sandboxManager, input.sandboxId, "git", [
       "switch",
       target,
     ]);
+    if (hasRemoteRef) {
+      await runCommand(input.sandboxManager, input.sandboxId, "git", [
+        "switch",
+        "-C",
+        target,
+        `origin/${target}`,
+      ]);
+    }
   } else {
     await runCommand(input.sandboxManager, input.sandboxId, "git", [
       "switch",

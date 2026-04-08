@@ -266,6 +266,7 @@ export async function runPullRequestReviewV2(
         `validated_findings_count=${review.meta.validatedFindingsCount ?? 0}`,
         `parent_rejected_findings_count=${review.meta.parentRejectedFindingsCount ?? 0}`,
         `partial_coverage=${review.meta.partialCoverage ? "1" : "0"}`,
+        `rejected_reasons=${JSON.stringify(review.meta.rejectedReasonCounts ?? {})}`,
         `skills_dir=${review.meta.skillsDir ?? "unknown"}`,
       ],
     };

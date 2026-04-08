@@ -5,6 +5,7 @@ import { runWithConcurrency } from "./v2/parallel-scheduler";
 import { buildReviewPlan } from "./v2/orchestration-planner";
 import { runTaskWorker } from "./v2/task-worker";
 import { validateWorkerReports } from "./v2/parent-validator";
+import { ensureRipgrepAvailable } from "./v2/sandbox-search";
 import type { ReviewAgentV2Options, ReviewAgentV2Result } from "./v2/types";
 
 export async function runReviewAgentV2(
@@ -12,7 +13,7 @@ export async function runReviewAgentV2(
   options: ReviewAgentV2Options,
 ): Promise<ReviewAgentV2Result> {
   const maxFindings = Math.max(1, options.maxFindings ?? 25);
-  const maxWorkers = Math.max(1, Math.min(options.maxSkillWorkers ?? 3, 6));
+  const maxWorkers = Math.max(1, Math.min(options.maxSkillWorkers ?? 3, 4));
 
   const branch = await prepareBranchContext({
     sandboxManager: options.sandboxManager,
@@ -50,12 +51,17 @@ export async function runReviewAgentV2(
     changedFiles: branch.changedFiles,
   });
 
+  const rgSetup = await ensureRipgrepAvailable({
+    sandboxManager: options.sandboxManager,
+    sandboxId: options.sandboxId,
+  });
+
   const plan = await buildReviewPlan({
     sandboxManager: options.sandboxManager,
     sandboxId: options.sandboxId,
     changedFiles: branch.changedFiles,
     patchesByFile: patchCollection.patchesByFile,
-    maxTasks: Math.min(20, branch.changedFiles.length),
+    maxTasks: Math.min(10, branch.changedFiles.length),
   });
 
   const crossFileChecksCount = plan.tasks.reduce(
@@ -68,6 +74,7 @@ export async function runReviewAgentV2(
     crossFileChecksCount,
     riskTags: plan.riskTags,
     partialCoverage: plan.partialCoverage,
+    ripgrep: rgSetup,
   });
 
   const reports = await runWithConcurrency(plan.tasks, maxWorkers, (task) =>
@@ -94,7 +101,17 @@ export async function runReviewAgentV2(
     sandboxId: options.sandboxId,
     reports,
     maxFindings,
+    patchesByFile: patchCollection.patchesByFile,
   });
+
+  const rejectedReasonCounts = validated.rejected.reduce(
+    (acc, item) => {
+      const key = item.reason || "unknown";
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>,
+  );
 
   return {
     findings: validated.accepted,
@@ -118,7 +135,9 @@ export async function runReviewAgentV2(
       crossFileChecksCount,
       validatedFindingsCount: validated.accepted.length,
       parentRejectedFindingsCount: validated.rejected.length,
+      rejectedReasonCounts,
       partialCoverage: plan.partialCoverage,
+      skillsDir: `rg:${rgSetup.method}`,
     },
   };
 }

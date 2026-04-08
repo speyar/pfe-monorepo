@@ -2,6 +2,8 @@ import type { LanguageModel } from "ai";
 import type { SandboxManager } from "@packages/sandbox";
 
 export interface V2ReviewFinding {
+  category?: "production_break" | "code_quality_break";
+  impact?: string;
   severity: "critical" | "high" | "medium" | "low" | "info";
   file?: string;
   line?: number;
@@ -33,6 +35,7 @@ export interface ReviewAgentV2Result {
     crossFileChecksCount?: number;
     validatedFindingsCount?: number;
     parentRejectedFindingsCount?: number;
+    rejectedReasonCounts?: Record<string, number>;
     partialCoverage?: boolean;
   };
 }
@@ -116,6 +119,13 @@ export interface CrossFileCheck {
   relatedFiles: string[];
 }
 
+export interface ReviewFocusRange {
+  file: string;
+  startLine: number;
+  endLine: number;
+  reason: string;
+}
+
 export interface ReviewWorkerTask {
   id: string;
   goal: string;
@@ -123,6 +133,7 @@ export interface ReviewWorkerTask {
   targetFiles: string[];
   patch: string;
   crossFileChecks: CrossFileCheck[];
+  focusRanges: ReviewFocusRange[];
   riskTags: string[];
 }
 
