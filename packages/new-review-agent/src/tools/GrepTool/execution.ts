@@ -99,6 +99,77 @@ export function createGrepExecutor(manager: SandboxManager, sandboxId: string) {
           rgResult.stderr.includes("executable_not_found")));
 
     if (shouldFallback) {
+      const fallbackPath = input.path ?? ".";
+      const fallbackPathLower = fallbackPath.toLowerCase();
+      const blockBroadFallback =
+        fallbackPathLower === "." ||
+        fallbackPathLower === "./" ||
+        fallbackPathLower === "/";
+      if (blockBroadFallback) {
+        const blockedMessage =
+          "Error: ripgrep unavailable and broad grep fallback is blocked. Narrow the search path.";
+        logToolEvent({
+          tool: "grep",
+          phase: "finish",
+          payload: { error: previewText(blockedMessage), blocked: true },
+        });
+        return blockedMessage;
+      }
+
+      const optionTokens = splitOptions(input.options);
+      const gitArgs: string[] = ["grep", "-n"];
+      if (optionTokens.includes("-i")) {
+        gitArgs.push("-i");
+      }
+      if (optionTokens.includes("-w")) {
+        gitArgs.push("-w");
+      }
+      if (input.maxResults && input.maxResults > 0) {
+        gitArgs.push("-m", String(input.maxResults));
+      }
+      gitArgs.push("-e", query, "--", searchPath);
+
+      try {
+        const gitGrepRaw = await manager.runCommand({
+          sandboxId,
+          command: "git",
+          args: gitArgs,
+        });
+        const gitGrepResult = normalizeCommandResult(gitGrepRaw);
+
+        if (gitGrepResult.exitCode === 0) {
+          const output = truncateByLines(
+            gitGrepResult.stdout || "No matches found.",
+            200,
+          );
+          logToolEvent({
+            tool: "grep",
+            phase: "finish",
+            payload: {
+              exitCode: gitGrepResult.exitCode,
+              fallback: "git-grep",
+              output: previewText(output),
+            },
+          });
+          return output;
+        }
+
+        if (gitGrepResult.exitCode === 1) {
+          logToolEvent({
+            tool: "grep",
+            phase: "finish",
+            payload: {
+              exitCode: gitGrepResult.exitCode,
+              fallback: "git-grep",
+              output: "No matches found.",
+            },
+          });
+          return "No matches found.";
+        }
+      } catch {
+        // Continue to legacy grep fallback only if git grep cannot run.
+      }
+
       const fallbackArgs = [
         ...splitOptions(input.options),
         "-R",

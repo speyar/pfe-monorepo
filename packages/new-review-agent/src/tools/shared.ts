@@ -3,10 +3,24 @@ export function normalizePath(path: string): string {
 }
 
 export function isToolDebugEnabled(): boolean {
-  return process.env.NEW_REVIEW_AGENT_DEBUG_TOOLS === "1";
+  const raw = String(
+    process.env.NEW_REVIEW_AGENT_DEBUG_TOOLS ?? "",
+  ).toLowerCase();
+  if (["1", "true", "yes", "on"].includes(raw)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(raw)) {
+    return false;
+  }
+
+  return process.env.NODE_ENV !== "production";
 }
 
 export function previewText(text: string, maxChars = 400): string {
+  if (process.env.NEW_REVIEW_AGENT_LOG_FULL_OUTPUT === "1") {
+    return text;
+  }
+
   if (text.length <= maxChars) {
     return text;
   }

@@ -5,7 +5,11 @@ This Turborepo starter is maintained by the Turborepo core team.
 ## Workspace notes
 
 - `packages/github-api`: typed GitHub primitives used by future agent packages.
-	- See `packages/github-api/README.md` for API surface and usage.
+  - See `packages/github-api/README.md` for API surface and usage.
+- `packages/new-review-agent`: PR reviewer package with two engines.
+  - `v1`: current baseline reviewer.
+  - `v2`: dependency-map + OpenCode-style skills architecture (`skills/**/SKILL.md`).
+  - See `packages/new-review-agent/README.md` for usage and architecture details.
 
 ## Using this example
 

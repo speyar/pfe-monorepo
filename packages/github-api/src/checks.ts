@@ -67,6 +67,19 @@ export const createCheckRun = async (
       conclusion: response.data.conclusion,
     };
   } catch (error) {
+    console.error("[github-api] Failed to create check run error details:", {
+      installationId,
+      owner: input.owner,
+      repo: input.repo,
+      name: input.name,
+      headSha: input.headSha,
+      error: error instanceof Error ? error.message : String(error),
+      errorCause: error instanceof Error ? error.cause : undefined,
+      errorInfo:
+        error instanceof Error && "info" in error
+          ? (error as any).info
+          : undefined,
+    });
     throw normalizeGitHubError(error, "Failed to create check run");
   }
 };

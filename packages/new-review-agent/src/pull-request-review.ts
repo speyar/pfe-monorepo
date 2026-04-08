@@ -126,8 +126,6 @@ export async function runPullRequestReview(
 ): Promise<PullRequestReviewResult> {
   const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
 
-  console.log("copilotToken", copilotToken);
-
   if (!copilotToken) {
     throw new Error("Missing COPILOT_GITHUB_TOKEN");
   }
@@ -166,8 +164,11 @@ export async function runPullRequestReview(
   const startedAt = Date.now();
 
   try {
+    const modelName =
+      options.modelName ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini";
+
     const review = await runReviewAgent(input.headRef, {
-      model: provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini"),
+      model: provider(modelName),
       sandboxManager: manager,
       sandboxId: sandbox.id,
       defaultBranch: input.baseRef,
@@ -181,7 +182,7 @@ export async function runPullRequestReview(
     const elapsedMs = Date.now() - startedAt;
 
     return {
-      summary: buildSummary(findings, "gpt-5.4-mini", elapsedMs),
+      summary: buildSummary(findings, modelName, elapsedMs),
       findings,
     };
   } catch (error) {
@@ -195,7 +196,7 @@ export async function runPullRequestReview(
         score: 0,
         overview: "An error occurred during the review process.",
         risk: "unknown",
-        model: "gpt-5.4-mini",
+        model: options.modelName ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini",
         elapsedMs: Date.now() - startedAt,
       },
       findings: [],

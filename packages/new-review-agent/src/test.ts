@@ -39,7 +39,7 @@ const generation = await generateText({
   stopWhen: stepCountIs(15),
   experimental_onToolCallFinish: async ({ toolCall }) => {
     console.log("Tool call finished:", toolCall.toolName);
-    }
+  },
 });
 
 console.log(generation.text);

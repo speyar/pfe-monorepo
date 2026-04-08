@@ -3,10 +3,9 @@ const READFILE_TOOL_NAME = "readFile";
 export const READFILE_TOOL_PROMPT = `The ${READFILE_TOOL_NAME} tool reads the contents of a file.
 
 Default behavior policy:
-- Prefer partial reads over full-file reads.
-- When investigating code, pass lineStart/lineEnd or maxLines.
-- Use grep/glob first to locate candidate lines/files, then read only the needed section.
-- Full-file reads are allowed only for very small files or when range-based reading is not feasible.
+- Full-file reads are allowed only for files up to 120 lines.
+- For larger files, use lineStart/lineEnd or maxLines (required).
+- Use grep/glob first when you need to narrow down candidates quickly, then use readFile for full context.
 
 When to use:
 - Inspect the implementation of a specific file
