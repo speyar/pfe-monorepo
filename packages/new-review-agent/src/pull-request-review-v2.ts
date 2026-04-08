@@ -261,6 +261,11 @@ export async function runPullRequestReviewV2(
         `core_findings_count=${review.meta.coreFindingsCount ?? 0}`,
         `skill_findings_count=${review.meta.skillFindingsCount ?? 0}`,
         `worker_errors_count=${review.meta.workerErrorsCount ?? 0}`,
+        `plan_tasks_count=${review.meta.planTasksCount ?? 0}`,
+        `cross_file_checks_count=${review.meta.crossFileChecksCount ?? 0}`,
+        `validated_findings_count=${review.meta.validatedFindingsCount ?? 0}`,
+        `parent_rejected_findings_count=${review.meta.parentRejectedFindingsCount ?? 0}`,
+        `partial_coverage=${review.meta.partialCoverage ? "1" : "0"}`,
         `skills_dir=${review.meta.skillsDir ?? "unknown"}`,
       ],
     };

@@ -29,6 +29,11 @@ export interface ReviewAgentV2Result {
     coreFindingsCount?: number;
     skillFindingsCount?: number;
     workerErrorsCount?: number;
+    planTasksCount?: number;
+    crossFileChecksCount?: number;
+    validatedFindingsCount?: number;
+    parentRejectedFindingsCount?: number;
+    partialCoverage?: boolean;
   };
 }
 
@@ -104,4 +109,40 @@ export interface EvidenceItem {
   file?: string;
   skillName?: string;
   text: string;
+}
+
+export interface CrossFileCheck {
+  symbol: string;
+  relatedFiles: string[];
+}
+
+export interface ReviewWorkerTask {
+  id: string;
+  goal: string;
+  changedFile: string;
+  targetFiles: string[];
+  patch: string;
+  crossFileChecks: CrossFileCheck[];
+  riskTags: string[];
+}
+
+export interface ReviewPlan {
+  tasks: ReviewWorkerTask[];
+  partialCoverage: boolean;
+  riskTags: string[];
+  changedFilesCovered: string[];
+}
+
+export interface ReviewWorkerReport {
+  taskId: string;
+  findings: V2ReviewFinding[];
+  inspectedFiles: string[];
+  evidenceItems: number;
+  errors: string[];
+}
+
+export interface ParentRejectedFinding {
+  finding: V2ReviewFinding;
+  reason: string;
+  taskId: string;
 }
