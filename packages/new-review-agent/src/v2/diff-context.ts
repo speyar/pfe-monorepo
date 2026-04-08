@@ -5,6 +5,7 @@ import { normalizePath, runCommand, textPreview } from "./utils";
 export interface DiffCollectionFailure {
   path: string;
   error: string;
+  degraded?: boolean;
 }
 
 export async function collectPatchesByFile(input: {
@@ -42,23 +43,7 @@ export async function collectPatchesByFile(input: {
         } as const;
       }
 
-      const retryAttempt = await runCommand(
-        input.sandboxManager,
-        input.sandboxId,
-        "git",
-        ["diff", "--unified=40", "HEAD~1..HEAD", "--", normalized],
-      );
-
-      if (retryAttempt.exitCode === 0) {
-        return {
-          path: normalized,
-          patch: textPreview(retryAttempt.stdout, 12_000),
-          failure: null,
-        } as const;
-      }
-
-      const errorText =
-        retryAttempt.stderr || firstAttempt.stderr || "git diff failed";
+      const errorText = firstAttempt.stderr || "git diff failed";
 
       return {
         path: normalized,
@@ -66,6 +51,7 @@ export async function collectPatchesByFile(input: {
         failure: {
           path: normalized,
           error: textPreview(errorText, 600),
+          degraded: true,
         },
       } as const;
     },

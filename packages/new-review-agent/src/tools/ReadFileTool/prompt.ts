@@ -3,8 +3,8 @@ const READFILE_TOOL_NAME = "readFile";
 export const READFILE_TOOL_PROMPT = `The ${READFILE_TOOL_NAME} tool reads the contents of a file.
 
 Default behavior policy:
-- Full-file reads are allowed.
-- Use lineStart/lineEnd or maxLines when you intentionally want a focused chunk.
+- Full-file reads are allowed only for files up to 120 lines.
+- For larger files, use lineStart/lineEnd or maxLines (required).
 - Use grep/glob first when you need to narrow down candidates quickly, then use readFile for full context.
 
 When to use:

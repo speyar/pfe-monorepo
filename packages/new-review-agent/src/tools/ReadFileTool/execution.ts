@@ -13,6 +13,7 @@ export function createReadFileExecutor(
   sandboxId: string,
 ) {
   const seen = new Set<string>();
+  const FULL_FILE_MAX_LINES = 120;
 
   return async (input: ReadFileInput): Promise<string> => {
     logToolEvent({ tool: "readFile", phase: "start", payload: input });
@@ -46,6 +47,32 @@ export function createReadFileExecutor(
         input.maxLines !== undefined;
 
       if (!hasLineRange) {
+        const wcResultRaw = await manager.runCommand({
+          sandboxId,
+          command: "wc",
+          args: ["-l", path],
+        });
+        const wcResult = normalizeCommandResult(wcResultRaw);
+        if (wcResult.exitCode === 0) {
+          const firstToken = wcResult.stdout.trim().split(/\s+/)[0] ?? "0";
+          const lineCount = Number.parseInt(firstToken, 10);
+          if (Number.isFinite(lineCount) && lineCount > FULL_FILE_MAX_LINES) {
+            const limitMessage =
+              `Error: Full-file reads are limited to ${FULL_FILE_MAX_LINES} lines. ` +
+              "Use lineStart/lineEnd or maxLines for focused reads.";
+            logToolEvent({
+              tool: "readFile",
+              phase: "finish",
+              payload: {
+                error: limitMessage,
+                file: path,
+                lineCount,
+              },
+            });
+            return limitMessage;
+          }
+        }
+
         const catRawResult = await manager.runCommand({
           sandboxId,
           command: "cat",

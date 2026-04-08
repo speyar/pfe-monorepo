@@ -25,6 +25,7 @@ export const ReadFileInputSchema = z.object({
     .number()
     .int()
     .min(1)
+    .max(1000)
     .optional()
     .describe(
       "Maximum number of lines to read. Alternative to lineStart/lineEnd.",
