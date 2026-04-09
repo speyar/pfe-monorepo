@@ -132,12 +132,4 @@ Rules:
 - no finding for pure style, formatting, or naming unless the name is actively misleading
 
 ---
-
-## INPUT
-
-The diff will be provided below, delimited by triple angle brackets:
-
-<
-{diff}
->>>
 `;
