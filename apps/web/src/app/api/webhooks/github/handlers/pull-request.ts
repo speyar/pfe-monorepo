@@ -511,6 +511,20 @@ export const handlePullRequestEvent = async ({
       patch: file.patch ?? undefined,
     }));
 
+  const initialDiff = filesForReview
+    .map((file) => {
+      const patch = file.patch ?? "";
+      return [
+        `diff --git a/${file.path} b/${file.path}`,
+        `--- a/${file.path}`,
+        `+++ b/${file.path}`,
+        patch,
+      ].join("\n");
+    })
+    .join("\n\n");
+
+  console.log("initial diff for review", initialDiff);
+
   if (filesForReview.length === 0) {
     console.warn("[github-webhook] pull_request review skipped", {
       deliveryId,
@@ -562,180 +576,182 @@ export const handlePullRequestEvent = async ({
       })
     : null;
 
-  try {
-    const review: ReviewResult = await runPullRequestReview({
-      installationId,
-      owner: ownerRepo.owner,
-      repo: ownerRepo.repo,
-      headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
-      baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
-    });
+  // try {
+  //   const review: ReviewResult = await runPullRequestReview({
+  //     installationId,
+  //     owner: ownerRepo.owner,
+  //     repo: ownerRepo.repo,
+  //     headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
+  //     baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
+  //     initialDiff,
+  //   });
 
-    if (checkRun) {
-      await updateCheckRun(installationId, {
-        owner: ownerRepo.owner,
-        repo: ownerRepo.repo,
-        checkRunId: checkRun.id,
-        status: "in_progress",
-        detailsUrl: pullRequestUrl,
-        title: "Automated PR Review",
-        summary: buildCheckSummary([
-          "Analysis complete",
-          "Publishing comments to GitHub",
-        ]),
-      }).catch(() => {
-        return;
-      });
-    }
+  //   if (checkRun) {
+  //     await updateCheckRun(installationId, {
+  //       owner: ownerRepo.owner,
+  //       repo: ownerRepo.repo,
+  //       checkRunId: checkRun.id,
+  //       status: "in_progress",
+  //       detailsUrl: pullRequestUrl,
+  //       title: "Automated PR Review",
+  //       summary: buildCheckSummary([
+  //         "Analysis complete",
+  //         "Publishing comments to GitHub",
+  //       ]),
+  //     }).catch(() => {
+  //       return;
+  //     });
+  //   }
 
-    const reviewText = toMarkdownReview(review);
+  //   const reviewText = toMarkdownReview(review);
 
-    const patchByPath = new Map<string, string>();
-    for (const file of files) {
-      if (!file.patch) {
-        continue;
-      }
+  //   const patchByPath = new Map<string, string>();
+  //   for (const file of files) {
+  //     if (!file.patch) {
+  //       continue;
+  //     }
 
-      patchByPath.set(normalizePath(file.filename), file.patch);
-    }
+  //     patchByPath.set(normalizePath(file.filename), file.patch);
+  //   }
 
-    const lineMapsByPath = new Map<string, DiffLineMaps>();
-    const skippedByReason: Record<string, number> = {};
-    let postedInline = 0;
+  //   const lineMapsByPath = new Map<string, DiffLineMaps>();
+  //   const skippedByReason: Record<string, number> = {};
+  //   let postedInline = 0;
 
-    const commitSha = body.pull_request?.head?.sha;
-    if (commitSha) {
-      for (const finding of review.findings) {
-        const targetResolution = resolveInlineTarget(
-          finding,
-          patchByPath,
-          lineMapsByPath,
-        );
+  //   const commitSha = body.pull_request?.head?.sha;
+  //   if (commitSha) {
+  //     for (const finding of review.findings) {
+  //       const targetResolution = resolveInlineTarget(
+  //         finding,
+  //         patchByPath,
+  //         lineMapsByPath,
+  //       );
 
-        if (!targetResolution.ok) {
-          skippedByReason[targetResolution.reason] =
-            (skippedByReason[targetResolution.reason] ?? 0) + 1;
-          continue;
-        }
+  //       if (!targetResolution.ok) {
+  //         skippedByReason[targetResolution.reason] =
+  //           (skippedByReason[targetResolution.reason] ?? 0) + 1;
+  //         continue;
+  //       }
 
-        const commentBody = buildInlineCommentBody(
-          finding,
-          targetResolution.target,
-        );
+  //       const commentBody = buildInlineCommentBody(
+  //         finding,
+  //         targetResolution.target,
+  //       );
 
-        await createPullRequestReviewComment(installationId, {
-          owner: ownerRepo.owner,
-          repo: ownerRepo.repo,
-          pullRequestNumber,
-          commitSha,
-          path: targetResolution.target.path,
-          line: targetResolution.target.line,
-          side: targetResolution.target.side,
-          body: commentBody,
-        });
+  //       await createPullRequestReviewComment(installationId, {
+  //         owner: ownerRepo.owner,
+  //         repo: ownerRepo.repo,
+  //         pullRequestNumber,
+  //         commitSha,
+  //         path: targetResolution.target.path,
+  //         line: targetResolution.target.line,
+  //         side: targetResolution.target.side,
+  //         body: commentBody,
+  //       });
 
-        postedInline += 1;
-      }
-    } else {
-      skippedByReason.missing_commit_sha = review.findings.length;
-    }
+  //       postedInline += 1;
+  //     }
+  //   } else {
+  //     skippedByReason.missing_commit_sha = review.findings.length;
+  //   }
 
-    if (postedInline < review.findings.length) {
-      const fallbackComment = buildFallbackSummaryComment({
-        totalFindings: review.findings.length,
-        postedInline,
-        skippedByReason,
-      });
+  //   if (postedInline < review.findings.length) {
+  //     const fallbackComment = buildFallbackSummaryComment({
+  //       totalFindings: review.findings.length,
+  //       postedInline,
+  //       skippedByReason,
+  //     });
 
-      await upsertPullRequestComment(installationId, {
-        owner: ownerRepo.owner,
-        repo: ownerRepo.repo,
-        pullRequestNumber,
-        marker: REVIEW_COMMENT_MARKER,
-        body: fallbackComment,
-      });
-    }
+  //     await upsertPullRequestComment(installationId, {
+  //       owner: ownerRepo.owner,
+  //       repo: ownerRepo.repo,
+  //       pullRequestNumber,
+  //       marker: REVIEW_COMMENT_MARKER,
+  //       body: fallbackComment,
+  //     });
+  //   }
 
-    const reviewDbStatus = await savePullRequestReview({
-      installationId,
-      repository: body.repository,
-      ownerRepo,
-      pullRequestNumber: pullRequest.number,
-      pullRequestTitle: pullRequest.title,
-      pullRequestUrl,
-      reviewText,
-      reviewerClerkUserId: githubInstallation.user.clerkUserId,
-    });
+  //   const reviewDbStatus = await savePullRequestReview({
+  //     installationId,
+  //     repository: body.repository,
+  //     ownerRepo,
+  //     pullRequestNumber: pullRequest.number,
+  //     pullRequestTitle: pullRequest.title,
+  //     pullRequestUrl,
+  //     reviewText,
+  //     reviewerClerkUserId: githubInstallation.user.clerkUserId,
+  //   });
 
-    console.info("[github-webhook] pull_request review completed", {
-      deliveryId,
-      action: body.action,
-      installationId,
-      owner: ownerRepo.owner,
-      repo: ownerRepo.repo,
-      pullRequestNumber,
-      findingsCount: review.findings.length,
-      inlineCommentsPosted: postedInline,
-      inlineCommentsSkipped: review.findings.length - postedInline,
-      skippedByReason,
-      verdict: review.summary.verdict,
-      db: reviewDbStatus,
-    });
+  //   console.info("[github-webhook] pull_request review completed", {
+  //     deliveryId,
+  //     action: body.action,
+  //     installationId,
+  //     owner: ownerRepo.owner,
+  //     repo: ownerRepo.repo,
+  //     pullRequestNumber,
+  //     findingsCount: review.findings.length,
+  //     inlineCommentsPosted: postedInline,
+  //     inlineCommentsSkipped: review.findings.length - postedInline,
+  //     skippedByReason,
+  //     verdict: review.summary.verdict,
+  //     db: reviewDbStatus,
+  //   });
 
-    if (checkRun) {
-      await updateCheckRun(installationId, {
-        owner: ownerRepo.owner,
-        repo: ownerRepo.repo,
-        checkRunId: checkRun.id,
-        status: "completed",
-        conclusion: "success",
-        detailsUrl: pullRequestUrl,
-        title: "Automated PR Review",
-        summary: buildCheckSummary([
-          "Review completed",
-          `Findings: ${review.findings.length}`,
-          `Inline comments posted: ${postedInline}`,
-        ]),
-      }).catch(() => {
-        return;
-      });
-    }
+  //   if (checkRun) {
+  //     await updateCheckRun(installationId, {
+  //       owner: ownerRepo.owner,
+  //       repo: ownerRepo.repo,
+  //       checkRunId: checkRun.id,
+  //       status: "completed",
+  //       conclusion: "success",
+  //       detailsUrl: pullRequestUrl,
+  //       title: "Automated PR Review",
+  //       summary: buildCheckSummary([
+  //         "Review completed",
+  //         `Findings: ${review.findings.length}`,
+  //         `Inline comments posted: ${postedInline}`,
+  //       ]),
+  //     }).catch(() => {
+  //       return;
+  //     });
+  //   }
 
-    await upsertPullRequestComment(installationId, {
-      owner: ownerRepo.owner,
-      repo: ownerRepo.repo,
-      pullRequestNumber,
-      marker: REVIEW_STATUS_MARKER,
-      body: buildReviewStatusComment("completed"),
-    });
+  //   await upsertPullRequestComment(installationId, {
+  //     owner: ownerRepo.owner,
+  //     repo: ownerRepo.repo,
+  //     pullRequestNumber,
+  //     marker: REVIEW_STATUS_MARKER,
+  //     body: buildReviewStatusComment("completed"),
+  //   });
 
-    return null;
-  } catch (error) {
-    if (checkRun) {
-      await updateCheckRun(installationId, {
-        owner: ownerRepo.owner,
-        repo: ownerRepo.repo,
-        checkRunId: checkRun.id,
-        status: "completed",
-        conclusion: "failure",
-        detailsUrl: pullRequestUrl,
-        title: "Automated PR Review",
-        summary: "Review failed before completion.",
-      }).catch(() => {
-        return;
-      });
-    }
+  //   return null;
+  // } catch (error) {
+  //   if (checkRun) {
+  //     await updateCheckRun(installationId, {
+  //       owner: ownerRepo.owner,
+  //       repo: ownerRepo.repo,
+  //       checkRunId: checkRun.id,
+  //       status: "completed",
+  //       conclusion: "failure",
+  //       detailsUrl: pullRequestUrl,
+  //       title: "Automated PR Review",
+  //       summary: "Review failed before completion.",
+  //     }).catch(() => {
+  //       return;
+  //     });
+  //   }
 
-    await upsertPullRequestComment(installationId, {
-      owner: ownerRepo.owner,
-      repo: ownerRepo.repo,
-      pullRequestNumber,
-      marker: REVIEW_STATUS_MARKER,
-      body: buildReviewStatusComment("failed"),
-    }).catch(() => {
-      return;
-    });
+  //   await upsertPullRequestComment(installationId, {
+  //     owner: ownerRepo.owner,
+  //     repo: ownerRepo.repo,
+  //     pullRequestNumber,
+  //     marker: REVIEW_STATUS_MARKER,
+  //     body: buildReviewStatusComment("failed"),
+  //   }).catch(() => {
+  //     return;
+  //   });
 
-    throw error;
-  }
+  //   throw error;
+  // }
+  return null;
 };

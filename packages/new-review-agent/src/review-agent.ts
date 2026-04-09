@@ -7,7 +7,6 @@ import { createLsTool } from "./tools/LsTool";
 import { createGrepTool } from "./tools/GrepTool";
 import { createGlobTool } from "./tools/GlobTool";
 import { createReadFileTool } from "./tools/ReadFileTool";
-import { createGitTool } from "./tools/GitTool";
 import type { SandboxManager } from "@packages/sandbox";
 
 function isStepDebugEnabled(): boolean {
@@ -27,6 +26,7 @@ export interface ReviewAgentOptions {
   model: LanguageModel;
   sandboxManager: SandboxManager;
   sandboxId: string;
+  initialDiff?: string;
   maxToolSteps?: number;
   minToolSteps?: number;
   signal?: AbortSignal;
@@ -265,7 +265,6 @@ export async function runReviewAgent(
     grep: createGrepTool(sandboxManager, sandboxId),
     glob: createGlobTool(sandboxManager, sandboxId),
     readFile: createReadFileTool(sandboxManager, sandboxId),
-    git: createGitTool(sandboxManager, sandboxId),
   };
   const maxSteps = options.maxToolSteps ?? 16;
   const minToolSteps = Math.max(
@@ -295,7 +294,7 @@ Prioritized changed files (high signal first):
 ${changedFiles.join("\n") || "(none)"}
 
 IMMEDIATE ACTION REQUIRED:
-1. First, call the git tool to fetch complete diff context for ${branchContext.defaultBranch}...HEAD.
+1. Start from the precomputed diff provided in the user prompt.
 2. Use grep first to discover impacted callers/usages and relevant symbols in changed files.
 3. Use readFile only for focused ranges (lineStart/lineEnd or maxLines) when validating evidence.
 4. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.`;
@@ -309,11 +308,7 @@ IMMEDIATE ACTION REQUIRED:
       defaultBranch: branchContext.defaultBranch,
       activeBranch: branchContext.activeBranch,
       changedFiles,
-      initialDiff: undefined,
-      evidence: "",
-      useTools: true,
-      maxModelRequests: maxSteps,
-      minExplorationSteps: minToolSteps,
+      initialDiff: options.initialDiff,
     }),
     tools,
     stopWhen: stepCountIs(maxSteps),
