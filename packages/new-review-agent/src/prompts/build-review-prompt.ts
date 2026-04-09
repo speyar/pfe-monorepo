@@ -13,7 +13,7 @@ export interface BuildReviewPromptInput {
 
 export function buildReviewPrompt(input: BuildReviewPromptInput): string {
   const evidenceSection = (input.evidence ?? "").trim();
-  const diffSection = (input.initialDiff ?? "").trim();
+  const diffSection =  (input.initialDiff ?? "").trim();
   const minExplorationSteps = input.minExplorationSteps ?? 4;
 
   return [
