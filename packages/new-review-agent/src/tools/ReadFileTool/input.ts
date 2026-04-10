@@ -30,14 +30,6 @@ export const ReadFileInputSchema = z.object({
     .describe(
       "Maximum number of lines to read. Alternative to lineStart/lineEnd.",
     ),
-  maxTokens: z
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .describe(
-      "Maximum number of tokens to return. If provided, the tool will limit output to this many tokens.",
-    ),
   options: z
     .string()
     .optional()
