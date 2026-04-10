@@ -511,6 +511,20 @@ export const handlePullRequestEvent = async ({
       patch: file.patch ?? undefined,
     }));
 
+  const initialDiff = filesForReview
+    .map((file) => {
+      const patch = file.patch ?? "";
+      return [
+        `diff --git a/${file.path} b/${file.path}`,
+        `--- a/${file.path}`,
+        `+++ b/${file.path}`,
+        patch,
+      ].join("\n");
+    })
+    .join("\n\n");
+
+  console.log("initial diff for review", initialDiff);
+
   if (filesForReview.length === 0) {
     console.warn("[github-webhook] pull_request review skipped", {
       deliveryId,
@@ -569,6 +583,7 @@ export const handlePullRequestEvent = async ({
       repo: ownerRepo.repo,
       headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
       baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
+      initialDiff,
     });
 
     if (checkRun) {

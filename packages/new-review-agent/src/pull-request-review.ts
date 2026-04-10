@@ -39,6 +39,7 @@ export interface PullRequestReviewInput {
   repo: string;
   headRef: string;
   baseRef?: string;
+  initialDiff?: string;
 }
 
 export interface PullRequestReviewOptions {
@@ -170,6 +171,7 @@ export async function runPullRequestReview(
       model: provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini"),
       sandboxManager: manager,
       sandboxId: sandbox.id,
+      initialDiff: input.initialDiff,
       defaultBranch: input.baseRef,
       maxFindings: options.maxFindings ?? 20,
       maxToolSteps: options.maxToolSteps ?? 24,

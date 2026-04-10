@@ -1,6 +1,7 @@
 import type { SandboxManager } from "@packages/sandbox";
 import type { ReadFileInput } from "./input";
 import {
+  estimateTokenCount,
   logToolEvent,
   normalizeCommandResult,
   previewText,
@@ -8,6 +9,8 @@ import {
   toSandboxPath,
   truncateByLines,
 } from "../shared";
+
+const MAX_TOKENS = 25000;
 
 export function createReadFileExecutor(
   manager: SandboxManager,
@@ -169,12 +172,32 @@ export function createReadFileExecutor(
         return emptyRangeMessage;
       }
 
+      const estimatedTokens = estimateTokenCount(output);
+
+      if (estimatedTokens > MAX_TOKENS) {
+        const lineCount = input.lineEnd
+          ? input.lineEnd - (input.lineStart ?? 1) + 1
+          : (input.maxLines ?? 250);
+        const errorMessage = `Error: Read would return ~${estimatedTokens} tokens which exceeds the ${MAX_TOKENS} token limit. To reduce costs, use lineStart/lineEnd or maxLines to read a specific chunk. For example, read lines 1-100, then 101-200, etc.`;
+        logToolEvent({
+          tool: "readFile",
+          phase: "finish",
+          payload: {
+            estimatedTokens,
+            maxTokens: MAX_TOKENS,
+            error: previewText(errorMessage),
+          },
+        });
+        return errorMessage;
+      }
+
       const truncatedOutput = truncateByLines(output, 250);
       logToolEvent({
         tool: "readFile",
         phase: "finish",
         payload: {
           exitCode: sedResult.exitCode,
+          estimatedTokens,
           output: previewText(truncatedOutput),
         },
       });
