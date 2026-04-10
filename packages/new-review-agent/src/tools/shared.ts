@@ -70,3 +70,66 @@ export function truncateByLines(text: string, maxLines: number): string {
 
   return `${lines.slice(0, maxLines).join("\n")}\n... [truncated ${lines.length - maxLines} lines]`;
 }
+
+/**
+ * Estimate token count for text using a simple approximation.
+ * This is a rough estimate - approximately 4 characters per token for English text.
+ * For more accurate counting, you would need to use a tokenizer specific to the model.
+ */
+export function estimateTokenCount(text: string): number {
+  // Simple approximation: 4 characters per token on average
+  // This works reasonably well for English text and code
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Truncate text to fit within a maximum token count.
+ * Returns the truncated text and information about the truncation.
+ */
+export function truncateByTokens(
+  text: string,
+  maxTokens: number,
+): {
+  text: string;
+  truncated: boolean;
+  estimatedTokens: number;
+} {
+  if (maxTokens <= 0) {
+    return {
+      text: "",
+      truncated: true,
+      estimatedTokens: 0,
+    };
+  }
+
+  const estimatedTokens = estimateTokenCount(text);
+
+  if (estimatedTokens <= maxTokens) {
+    return {
+      text,
+      truncated: false,
+      estimatedTokens,
+    };
+  }
+
+  // Approximate character limit based on token limit
+  const charLimit = maxTokens * 4;
+  const truncatedText = text.slice(0, charLimit);
+
+  // Try to end at a line boundary for better readability
+  const lastNewline = truncatedText.lastIndexOf("\n");
+  if (lastNewline > charLimit * 0.8) {
+    // Only if we don't lose too much content
+    return {
+      text: truncatedText.slice(0, lastNewline),
+      truncated: true,
+      estimatedTokens: estimateTokenCount(truncatedText.slice(0, lastNewline)),
+    };
+  }
+
+  return {
+    text: truncatedText,
+    truncated: true,
+    estimatedTokens: estimateTokenCount(truncatedText),
+  };
+}

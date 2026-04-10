@@ -1,12 +1,14 @@
 import type { SandboxManager } from "@packages/sandbox";
 import type { ReadFileInput } from "./input";
 import {
+  estimateTokenCount,
   logToolEvent,
   normalizeCommandResult,
   previewText,
   splitOptions,
   toSandboxPath,
   truncateByLines,
+  truncateByTokens,
 } from "../shared";
 
 export function createReadFileExecutor(
@@ -115,16 +117,70 @@ export function createReadFileExecutor(
           return emptyMessage;
         }
 
-        const output = truncateByLines(catResult.stdout, 250);
+        // Handle maxTokens parameter for full file reading
+        let output = catResult.stdout;
+        let tokenInfo = {};
+
+        if (input.maxTokens !== undefined) {
+          const {
+            text: truncatedText,
+            truncated,
+            estimatedTokens,
+          } = truncateByTokens(catResult.stdout, input.maxTokens);
+          output = truncatedText;
+
+          // Add token metadata to help guide chunked reading
+          const totalEstimatedTokens = estimateTokenCount(catResult.stdout);
+          tokenInfo = {
+            truncated,
+            estimatedTokens: estimatedTokens,
+            totalEstimatedTokens,
+            suggestedNextOffset: truncated
+              ? Math.floor(
+                  (estimatedTokens / totalEstimatedTokens) * lineCount,
+                ) + 1
+              : undefined,
+          };
+        } else {
+          output = truncateByLines(catResult.stdout, 250);
+        }
+
+        // Add metadata header if we have token info
+        let finalOutput = output;
+        if (Object.keys(tokenInfo).length > 0) {
+          const {
+            truncated,
+            estimatedTokens,
+            totalEstimatedTokens,
+            suggestedNextOffset,
+          } = tokenInfo as {
+            truncated: boolean;
+            estimatedTokens: number;
+            totalEstimatedTokens: number;
+            suggestedNextOffset?: number;
+          };
+
+          let metadata = `[FILE_TOKENS: estimated=${totalEstimatedTokens}|returned=${estimatedTokens}|max_limit=${input.maxTokens ?? "none"}]\n`;
+          metadata += `[FILE_LINES: total=${lineCount}|returned=1-${lineCount}]\n`;
+          metadata += `[TRUNCATED: ${truncated}]\n`;
+
+          if (truncated && suggestedNextOffset !== undefined) {
+            metadata += `[NEXT_SUGGESTED_OFFSET: ${suggestedNextOffset}]\n`;
+          }
+
+          metadata += "---\n";
+          finalOutput = metadata + output;
+        }
+
         logToolEvent({
           tool: "readFile",
           phase: "finish",
           payload: {
             exitCode: catResult.exitCode,
-            output: previewText(output),
+            output: previewText(finalOutput),
           },
         });
-        return output;
+        return finalOutput;
       }
 
       const startLine = input.lineStart ?? 1;
@@ -169,16 +225,76 @@ export function createReadFileExecutor(
         return emptyRangeMessage;
       }
 
-      const truncatedOutput = truncateByLines(output, 250);
+      // Handle maxTokens parameter for ranged reading
+      let finalOutput = output;
+      let tokenInfo = {};
+
+      if (input.maxTokens !== undefined) {
+        const {
+          text: truncatedText,
+          truncated,
+          estimatedTokens,
+        } = truncateByTokens(output, input.maxTokens);
+        finalOutput = truncatedText;
+
+        // Add token metadata to help guide chunked reading
+        const totalEstimatedTokens = estimateTokenCount(output);
+        // Calculate line count for the current range
+        const rangeLineCount = input.lineEnd
+          ? input.lineEnd - (input.lineStart ?? 1) + 1
+          : (input.maxLines ?? 250); // Default to truncation limit if neither specified
+        tokenInfo = {
+          truncated,
+          estimatedTokens: estimatedTokens,
+          totalEstimatedTokens,
+          suggestedNextOffset: truncated
+            ? Math.floor(
+                (estimatedTokens / totalEstimatedTokens) * rangeLineCount,
+              ) + (input.lineStart ?? 1)
+            : undefined,
+        };
+      } else {
+        finalOutput = truncateByLines(output, 250);
+      }
+
+      // Add metadata header if we have token info
+      if (Object.keys(tokenInfo).length > 0) {
+        const {
+          truncated,
+          estimatedTokens,
+          totalEstimatedTokens,
+          suggestedNextOffset,
+        } = tokenInfo as {
+          truncated: boolean;
+          estimatedTokens: number;
+          totalEstimatedTokens: number;
+          suggestedNextOffset?: number;
+        };
+
+        let metadata = `[FILE_TOKENS: estimated=${totalEstimatedTokens}|returned=${estimatedTokens}|max_limit=${input.maxTokens ?? "none"}]\n`;
+        const rangeLineCount = input.lineEnd
+          ? input.lineEnd - (input.lineStart ?? 1) + 1
+          : (input.maxLines ?? 250);
+        metadata += `[FILE_LINES: total=${rangeLineCount}|returned=${input.lineStart ?? 1}-${input.lineEnd ?? rangeLineCount}]\n`;
+        metadata += `[TRUNCATED: ${truncated}]\n`;
+
+        if (truncated && suggestedNextOffset !== undefined) {
+          metadata += `[NEXT_SUGGESTED_OFFSET: ${suggestedNextOffset}]\n`;
+        }
+
+        metadata += "---\n";
+        finalOutput = metadata + finalOutput;
+      }
+
       logToolEvent({
         tool: "readFile",
         phase: "finish",
         payload: {
           exitCode: sedResult.exitCode,
-          output: previewText(truncatedOutput),
+          output: previewText(finalOutput),
         },
       });
-      return truncatedOutput;
+      return finalOutput;
     } catch (error) {
       const errorMessage = `Error: ${error instanceof Error ? error.message : String(error)}`;
       logToolEvent({
