@@ -39,7 +39,8 @@ export async function GET(
     const url = new URL(request.url);
     const status = url.searchParams.get("status")?.trim() || undefined;
     const query = url.searchParams.get("query")?.trim() || undefined;
-    const statsPeriod = url.searchParams.get("statsPeriod")?.trim() || "14d";
+    const statsPeriod =
+      url.searchParams.get("statsPeriod")?.trim() || undefined;
     const cursor = url.searchParams.get("cursor")?.trim() || undefined;
 
     const accessToken = await getAccessTokenForUser(user.id);
@@ -54,10 +55,27 @@ export async function GET(
       cursor,
     });
 
+    const issuesWithoutEnvironment =
+      mapping.environment && issues.data.length === 0
+        ? await listSentryIssues({
+            accessToken,
+            orgSlug: mapping.sentryOrgSlug,
+            projectSlug: mapping.sentryProjectSlug,
+            status,
+            query,
+            statsPeriod,
+            cursor,
+          })
+        : null;
+
+    const data = issuesWithoutEnvironment?.data ?? issues.data;
+    const nextCursor =
+      issuesWithoutEnvironment?.nextCursor ?? issues.nextCursor;
+
     return Response.json(
       {
-        data: issues.data,
-        nextCursor: issues.nextCursor,
+        data,
+        nextCursor,
       },
       { status: 200 },
     );

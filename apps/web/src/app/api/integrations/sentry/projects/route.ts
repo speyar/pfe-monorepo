@@ -18,6 +18,8 @@ export async function GET(request: Request) {
     const accessToken = await getAccessTokenForUser(user.id);
     const projects = await listSentryProjects({ accessToken, orgSlug });
 
+    console.log("projects: ", projects);
+
     return Response.json({ data: projects }, { status: 200 });
   } catch (error) {
     const appError = toAppError(error, {

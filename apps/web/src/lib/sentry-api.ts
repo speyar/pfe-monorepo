@@ -286,9 +286,11 @@ export async function listSentryIssues(args: {
   statsPeriod?: string;
   cursor?: string;
 }): Promise<SentryIssueListResponse> {
-  const searchParams = new URLSearchParams({
-    statsPeriod: args.statsPeriod ?? "14d",
-  });
+  const searchParams = new URLSearchParams();
+
+  if (args.statsPeriod) {
+    searchParams.set("statsPeriod", args.statsPeriod);
+  }
 
   if (args.environment) {
     searchParams.set("environment", args.environment);

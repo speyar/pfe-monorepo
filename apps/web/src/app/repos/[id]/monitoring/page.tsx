@@ -75,7 +75,7 @@ export default function RepoMonitoringPage() {
   const params = useParams<{ id: string }>();
   const [selectedOrg, setSelectedOrg] = useState("");
   const [selectedProject, setSelectedProject] = useState("");
-  const [environment, setEnvironment] = useState("production");
+  const [environment, setEnvironment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const repoId = params.id ?? null;
@@ -107,7 +107,7 @@ export default function RepoMonitoringPage() {
   >(projectsUrl, fetcher);
 
   const issuesUrl = config?.data.sentry
-    ? `/api/repos/${config.data.repository.repoId}/monitoring/issues?statsPeriod=14d`
+    ? `/api/repos/${config.data.repository.repoId}/monitoring/issues`
     : null;
 
   const {
