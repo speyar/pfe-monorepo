@@ -2,6 +2,7 @@ import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runReviewAgent } from "./review-agent";
+import type { DiffSummary } from "./diff-summarize";
 
 export type PullRequestReviewVerdict =
   | "approve"
@@ -40,6 +41,7 @@ export interface PullRequestReviewInput {
   headRef: string;
   baseRef?: string;
   initialDiff?: string;
+  diffSummary?: DiffSummary;
 }
 
 export interface PullRequestReviewOptions {
@@ -172,6 +174,7 @@ export async function runPullRequestReview(
       sandboxManager: manager,
       sandboxId: sandbox.id,
       initialDiff: input.initialDiff,
+      diffSummary: input.diffSummary,
       defaultBranch: input.baseRef,
       maxFindings: options.maxFindings ?? 20,
       maxToolSteps: options.maxToolSteps ?? 24,
