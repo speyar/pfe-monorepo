@@ -387,7 +387,9 @@ export const ModelName = {
   User: 'User',
   GithubInstallation: 'GithubInstallation',
   Repository: 'Repository',
-  Review: 'Review'
+  Review: 'Review',
+  SentryConnection: 'SentryConnection',
+  RepositorySentryProject: 'RepositorySentryProject'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -403,7 +405,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "githubInstallation" | "repository" | "review"
+    modelProps: "user" | "githubInstallation" | "repository" | "review" | "sentryConnection" | "repositorySentryProject"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -703,6 +705,154 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    SentryConnection: {
+      payload: Prisma.$SentryConnectionPayload<ExtArgs>
+      fields: Prisma.SentryConnectionFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.SentryConnectionFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.SentryConnectionFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload>
+        }
+        findFirst: {
+          args: Prisma.SentryConnectionFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.SentryConnectionFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload>
+        }
+        findMany: {
+          args: Prisma.SentryConnectionFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload>[]
+        }
+        create: {
+          args: Prisma.SentryConnectionCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload>
+        }
+        createMany: {
+          args: Prisma.SentryConnectionCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.SentryConnectionCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload>[]
+        }
+        delete: {
+          args: Prisma.SentryConnectionDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload>
+        }
+        update: {
+          args: Prisma.SentryConnectionUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload>
+        }
+        deleteMany: {
+          args: Prisma.SentryConnectionDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.SentryConnectionUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.SentryConnectionUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload>[]
+        }
+        upsert: {
+          args: Prisma.SentryConnectionUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$SentryConnectionPayload>
+        }
+        aggregate: {
+          args: Prisma.SentryConnectionAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateSentryConnection>
+        }
+        groupBy: {
+          args: Prisma.SentryConnectionGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SentryConnectionGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.SentryConnectionCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.SentryConnectionCountAggregateOutputType> | number
+        }
+      }
+    }
+    RepositorySentryProject: {
+      payload: Prisma.$RepositorySentryProjectPayload<ExtArgs>
+      fields: Prisma.RepositorySentryProjectFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.RepositorySentryProjectFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.RepositorySentryProjectFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload>
+        }
+        findFirst: {
+          args: Prisma.RepositorySentryProjectFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.RepositorySentryProjectFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload>
+        }
+        findMany: {
+          args: Prisma.RepositorySentryProjectFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload>[]
+        }
+        create: {
+          args: Prisma.RepositorySentryProjectCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload>
+        }
+        createMany: {
+          args: Prisma.RepositorySentryProjectCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.RepositorySentryProjectCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload>[]
+        }
+        delete: {
+          args: Prisma.RepositorySentryProjectDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload>
+        }
+        update: {
+          args: Prisma.RepositorySentryProjectUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload>
+        }
+        deleteMany: {
+          args: Prisma.RepositorySentryProjectDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.RepositorySentryProjectUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.RepositorySentryProjectUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload>[]
+        }
+        upsert: {
+          args: Prisma.RepositorySentryProjectUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$RepositorySentryProjectPayload>
+        }
+        aggregate: {
+          args: Prisma.RepositorySentryProjectAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateRepositorySentryProject>
+        }
+        groupBy: {
+          args: Prisma.RepositorySentryProjectGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.RepositorySentryProjectGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.RepositorySentryProjectCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.RepositorySentryProjectCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -797,6 +947,35 @@ export const ReviewScalarFieldEnum = {
 } as const
 
 export type ReviewScalarFieldEnum = (typeof ReviewScalarFieldEnum)[keyof typeof ReviewScalarFieldEnum]
+
+
+export const SentryConnectionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  accessTokenCipher: 'accessTokenCipher',
+  tokenType: 'tokenType',
+  scope: 'scope',
+  sentryUserId: 'sentryUserId',
+  sentryEmail: 'sentryEmail',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type SentryConnectionScalarFieldEnum = (typeof SentryConnectionScalarFieldEnum)[keyof typeof SentryConnectionScalarFieldEnum]
+
+
+export const RepositorySentryProjectScalarFieldEnum = {
+  id: 'id',
+  repositoryId: 'repositoryId',
+  sentryOrgSlug: 'sentryOrgSlug',
+  sentryProjectSlug: 'sentryProjectSlug',
+  environment: 'environment',
+  enabled: 'enabled',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type RepositorySentryProjectScalarFieldEnum = (typeof RepositorySentryProjectScalarFieldEnum)[keyof typeof RepositorySentryProjectScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1004,6 +1183,8 @@ export type GlobalOmitConfig = {
   githubInstallation?: Prisma.GithubInstallationOmit
   repository?: Prisma.RepositoryOmit
   review?: Prisma.ReviewOmit
+  sentryConnection?: Prisma.SentryConnectionOmit
+  repositorySentryProject?: Prisma.RepositorySentryProjectOmit
 }
 
 /* Types for Logging */

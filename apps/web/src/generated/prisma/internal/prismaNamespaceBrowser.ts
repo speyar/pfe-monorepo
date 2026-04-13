@@ -54,7 +54,9 @@ export const ModelName = {
   User: 'User',
   GithubInstallation: 'GithubInstallation',
   Repository: 'Repository',
-  Review: 'Review'
+  Review: 'Review',
+  SentryConnection: 'SentryConnection',
+  RepositorySentryProject: 'RepositorySentryProject'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -128,6 +130,35 @@ export const ReviewScalarFieldEnum = {
 } as const
 
 export type ReviewScalarFieldEnum = (typeof ReviewScalarFieldEnum)[keyof typeof ReviewScalarFieldEnum]
+
+
+export const SentryConnectionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  accessTokenCipher: 'accessTokenCipher',
+  tokenType: 'tokenType',
+  scope: 'scope',
+  sentryUserId: 'sentryUserId',
+  sentryEmail: 'sentryEmail',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type SentryConnectionScalarFieldEnum = (typeof SentryConnectionScalarFieldEnum)[keyof typeof SentryConnectionScalarFieldEnum]
+
+
+export const RepositorySentryProjectScalarFieldEnum = {
+  id: 'id',
+  repositoryId: 'repositoryId',
+  sentryOrgSlug: 'sentryOrgSlug',
+  sentryProjectSlug: 'sentryProjectSlug',
+  environment: 'environment',
+  enabled: 'enabled',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type RepositorySentryProjectScalarFieldEnum = (typeof RepositorySentryProjectScalarFieldEnum)[keyof typeof RepositorySentryProjectScalarFieldEnum]
 
 
 export const SortOrder = {

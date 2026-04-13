@@ -6,6 +6,7 @@ const isPublicRoute = createRouteMatcher([
   "/",
   "/api/webhooks/clerk(.*)",
   "/api/webhooks/github(.*)",
+  "/api/integrations/sentry/callback(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
