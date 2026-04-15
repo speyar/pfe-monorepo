@@ -94,6 +94,8 @@ Dead code introduced or revealed: exported constants never imported, functions d
 
 **One problem per finding.** Do not bundle issues. Separate findings are easier to act on.
 
+**Suggestions must be concrete.** When you provide a suggestion, prefer an exact code-level change for the quoted line(s). Avoid vague advice like "handle this better" without showing what to change.
+
 ---
 
 ## OUTPUT FORMAT
@@ -130,6 +132,7 @@ Rules:
 - title must name the specific problem: "Division by zero when func() returns 0" not "Possible Bug"
 - findings must be ordered by severity descending (critical first, info last)
 - no finding for pure style, formatting, or naming unless the name is actively misleading
+- if suggestion is present, it should be a direct patch-ready code snippet or exact replacement guidance tied to the quoted code
 
 ---
 `;

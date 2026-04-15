@@ -8,6 +8,7 @@ import {
 } from "@pfe-monorepo/github-api";
 import {
   runPullRequestReview,
+  summarizeDiffWithDefaultModel,
   type PullRequestReviewFinding as ReviewFinding,
   type PullRequestReviewResult as ReviewResult,
 } from "@pfe-monorepo/new-review-agent";
@@ -37,6 +38,7 @@ type InlineTarget = {
   path: string;
   line: number;
   side: DiffSide;
+  matchedBy: "quote" | "line";
   snippet: string[];
 };
 
@@ -46,6 +48,7 @@ type InlineTargetResolution =
 
 const MAX_INLINE_SNIPPET_LINES = 5;
 const REVIEW_STATUS_MARKER = "<!-- pfe-review-agent-status -->";
+const MIN_INLINE_CONFIDENCE = 0.65;
 
 function buildReviewStatusComment(
   state: "in_progress" | "completed" | "failed",
@@ -166,7 +169,70 @@ function formatSuggestionSection(suggestion: string): string {
 }
 
 function normalizePath(path: string): string {
-  return path.replaceAll("\\", "/").replace(/^\.\//, "");
+  return path
+    .replaceAll("\\", "/")
+    .replace(/^\.\//, "")
+    .replace(/^\/+/, "")
+    .replace(/^[ab]\//, "")
+    .replace(/:\d+(?::\d+)?$/, "");
+}
+
+function resolvePatchPath(
+  patchByPath: Map<string, string>,
+  rawPath: string,
+): { path: string; patch: string } | null {
+  const normalizedPath = normalizePath(rawPath);
+  const directPatch = patchByPath.get(normalizedPath);
+  if (directPatch) {
+    return { path: normalizedPath, patch: directPatch };
+  }
+
+  const keys = [...patchByPath.keys()];
+  const normalizedPathLower = normalizedPath.toLowerCase();
+
+  const caseInsensitiveMatch = keys.find(
+    (key) => key.toLowerCase() === normalizedPathLower,
+  );
+  if (caseInsensitiveMatch) {
+    return {
+      path: caseInsensitiveMatch,
+      patch: patchByPath.get(caseInsensitiveMatch) ?? "",
+    };
+  }
+
+  const suffixMatches = keys.filter((key) => {
+    const keyLower = key.toLowerCase();
+    return (
+      keyLower.endsWith(`/${normalizedPathLower}`) ||
+      normalizedPathLower.endsWith(`/${keyLower}`)
+    );
+  });
+  if (suffixMatches.length === 1) {
+    const onlyMatch = suffixMatches[0];
+    return {
+      path: onlyMatch,
+      patch: patchByPath.get(onlyMatch) ?? "",
+    };
+  }
+
+  const basename = normalizedPathLower.split("/").pop();
+  if (!basename) {
+    return null;
+  }
+
+  const basenameMatches = keys.filter((key) => {
+    const keyLower = key.toLowerCase();
+    return keyLower === basename || keyLower.endsWith(`/${basename}`);
+  });
+  if (basenameMatches.length === 1) {
+    const onlyMatch = basenameMatches[0];
+    return {
+      path: onlyMatch,
+      patch: patchByPath.get(onlyMatch) ?? "",
+    };
+  }
+
+  return null;
 }
 
 function normalizeCodeForComparison(value: string): string {
@@ -337,16 +403,46 @@ function buildInlineCommentBody(
   return [finding.message, suggestionSection].filter(Boolean).join("\n\n");
 }
 
+function scoreInlineConfidence(
+  finding: ReviewFinding,
+  target: InlineTarget,
+): number {
+  let score = 0;
+
+  if (target.matchedBy === "quote") {
+    score += 0.5;
+  } else {
+    score += 0.25;
+  }
+
+  if (typeof finding.line === "number") {
+    score += 0.1;
+  }
+
+  if (finding.quote?.trim()) {
+    score += 0.15;
+  }
+
+  if (finding.suggestion?.trim()) {
+    const codeCandidate = extractCodeFromSuggestion(finding.suggestion);
+    score += codeCandidate ? 0.2 : 0.05;
+  }
+
+  return Math.min(1, score);
+}
+
 function resolveInlineTarget(
   finding: ReviewFinding,
   patchByPath: Map<string, string>,
   lineMapsByPath: Map<string, DiffLineMaps>,
 ): InlineTargetResolution {
-  const normalizedPath = normalizePath(finding.file);
-  const patch = patchByPath.get(normalizedPath);
-  if (!patch) {
+  const resolvedPatchPath = resolvePatchPath(patchByPath, finding.file);
+  if (!resolvedPatchPath) {
     return { ok: false, reason: "file_not_in_changed_diff" };
   }
+
+  const normalizedPath = resolvedPatchPath.path;
+  const patch = resolvedPatchPath.patch;
 
   let maps = lineMapsByPath.get(normalizedPath);
   if (!maps) {
@@ -368,6 +464,7 @@ function resolveInlineTarget(
           path: normalizedPath,
           line: rightQuotedLine,
           side: "RIGHT",
+          matchedBy: "quote",
           snippet: buildSnippet(maps.right, rightQuotedLine),
         },
       };
@@ -381,6 +478,7 @@ function resolveInlineTarget(
           path: normalizedPath,
           line: leftQuotedLine,
           side: "LEFT",
+          matchedBy: "quote",
           snippet: buildSnippet(maps.left, leftQuotedLine),
         },
       };
@@ -399,6 +497,7 @@ function resolveInlineTarget(
         path: normalizedPath,
         line: finding.line,
         side: "RIGHT",
+        matchedBy: "line",
         snippet: buildSnippet(maps.right, finding.line),
       },
     };
@@ -412,6 +511,7 @@ function resolveInlineTarget(
         path: normalizedPath,
         line: finding.line,
         side: "LEFT",
+        matchedBy: "line",
         snippet: buildSnippet(maps.left, finding.line),
       },
     };
@@ -523,7 +623,20 @@ export const handlePullRequestEvent = async ({
     })
     .join("\n\n");
 
-  console.log("initial diff for review", initialDiff);
+  const diffSummary = await summarizeDiffWithDefaultModel({
+    diff: initialDiff,
+  }).catch((error) => {
+    console.warn("[github-webhook] diff summarizer failed", {
+      deliveryId,
+      installationId,
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      pullRequestNumber,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    return null;
+  });
 
   if (filesForReview.length === 0) {
     console.warn("[github-webhook] pull_request review skipped", {
@@ -584,6 +697,7 @@ export const handlePullRequestEvent = async ({
       headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
       baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
       initialDiff,
+      diffSummary: diffSummary ?? undefined,
     });
 
     if (checkRun) {
@@ -617,6 +731,7 @@ export const handlePullRequestEvent = async ({
     const lineMapsByPath = new Map<string, DiffLineMaps>();
     const skippedByReason: Record<string, number> = {};
     let postedInline = 0;
+    const inlineTargetStats: Record<string, number> = {};
 
     const commitSha = body.pull_request?.head?.sha;
     if (commitSha) {
@@ -630,6 +745,19 @@ export const handlePullRequestEvent = async ({
         if (!targetResolution.ok) {
           skippedByReason[targetResolution.reason] =
             (skippedByReason[targetResolution.reason] ?? 0) + 1;
+          continue;
+        }
+
+        const confidence = scoreInlineConfidence(
+          finding,
+          targetResolution.target,
+        );
+        const matchKey = `matched_by_${targetResolution.target.matchedBy}`;
+        inlineTargetStats[matchKey] = (inlineTargetStats[matchKey] ?? 0) + 1;
+
+        if (confidence < MIN_INLINE_CONFIDENCE) {
+          skippedByReason.low_inline_confidence =
+            (skippedByReason.low_inline_confidence ?? 0) + 1;
           continue;
         }
 
@@ -693,6 +821,7 @@ export const handlePullRequestEvent = async ({
       inlineCommentsPosted: postedInline,
       inlineCommentsSkipped: review.findings.length - postedInline,
       skippedByReason,
+      inlineTargetStats,
       verdict: review.summary.verdict,
       db: reviewDbStatus,
     });

@@ -14,3 +14,9 @@ export {
   type PullRequestReviewSummary,
   type PullRequestReviewVerdict,
 } from "./pull-request-review";
+
+export {
+  summarizeDiff,
+  summarizeDiffWithDefaultModel,
+  type DiffSummary,
+} from "./diff-summarize";

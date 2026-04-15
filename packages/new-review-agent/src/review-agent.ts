@@ -8,6 +8,7 @@ import { createGrepTool } from "./tools/GrepTool";
 import { createGlobTool } from "./tools/GlobTool";
 import { createReadFileTool } from "./tools/ReadFileTool";
 import type { SandboxManager } from "@packages/sandbox";
+import type { DiffSummary } from "./diff-summarize";
 
 function isStepDebugEnabled(): boolean {
   return process.env.NEW_REVIEW_AGENT_DEBUG_STEPS === "1";
@@ -27,6 +28,7 @@ export interface ReviewAgentOptions {
   sandboxManager: SandboxManager;
   sandboxId: string;
   initialDiff?: string;
+  diffSummary?: DiffSummary;
   maxToolSteps?: number;
   minToolSteps?: number;
   signal?: AbortSignal;
@@ -63,6 +65,27 @@ function splitLines(text: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
+}
+
+function formatDiffSummaryForSystemPrompt(diffSummary?: DiffSummary): string {
+  if (!diffSummary) {
+    return "(none)";
+  }
+
+  const formatList = (items: string[]): string =>
+    items.length > 0 ? items.map((item) => `- ${item}`).join("\n") : "- (none)";
+
+  return [
+    `intent: ${diffSummary.intent}`,
+    "keyChanges:",
+    formatList(diffSummary.keyChanges),
+    "riskPoints:",
+    formatList(diffSummary.riskPoints),
+    "openQuestions:",
+    formatList(diffSummary.openQuestions),
+    "evidence:",
+    formatList(diffSummary.evidence),
+  ].join("\n");
 }
 
 async function runCommand(
@@ -292,6 +315,15 @@ ${changedFiles.join("\n") || "(none)"}
 
 Prioritized changed files (high signal first):
 ${changedFiles.join("\n") || "(none)"}
+
+Diff summary context (advisory, not source of truth):
+${formatDiffSummaryForSystemPrompt(options.diffSummary)}
+
+Diff summary usage rules:
+- Treat diff summary as orientation only; raw precomputed diff and files are authoritative.
+- Never copy summary wording as evidence. Validate with diff hunks and file reads.
+- If summary conflicts with code or diff, trust the code/diff.
+- Prefer concrete code-level suggestions over abstract advice.
 
 IMMEDIATE ACTION REQUIRED:
 1. Start from the precomputed diff provided in the user prompt.
