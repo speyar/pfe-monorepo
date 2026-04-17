@@ -1,0 +1,33 @@
+{
+  "name": "@pfe-monorepo/codebase-graph",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript codebase graph generator with monorepo support",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "codebase-graph": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "graph": "bun src/cli.ts"
+  },
+  "dependencies": {
+    "ts-morph": "^24.0.0"
+  },
+  "devDependencies": {
+    "@pfe-monorepo/typescript-config": "workspace:*",
+    "@types/node": "^24.5.2"
+  }
+}
