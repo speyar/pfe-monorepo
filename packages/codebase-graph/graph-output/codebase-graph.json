@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-04-17T18:09:26.072Z",
+  "metadata": {
+    "workspace": {
+      "id": "workspace:_pfe-monorepo/codebase-graph",
+      "name": "@pfe-monorepo/codebase-graph",
+      "rootPath": "C:/Users/Origin Systems/Desktop/pfe-monorepo/packages/codebase-graph"
+    },
+    "packageCount": 0,
+    "fileCount": 0,
+    "nodeCount": 1,
+    "edgeCount": 0
+  },
+  "nodes": [
+    {
+      "id": "workspace:_pfe-monorepo/codebase-graph",
+      "kind": "workspace",
+      "name": "@pfe-monorepo/codebase-graph",
+      "workspaceId": "workspace:_pfe-monorepo/codebase-graph",
+      "filePath": "C:/Users/Origin Systems/Desktop/pfe-monorepo/packages/codebase-graph"
+    }
+  ],
+  "edges": []
+}
