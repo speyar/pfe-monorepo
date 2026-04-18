@@ -4,7 +4,6 @@ import { reviewResultSchema } from "./schema/review-result";
 import { REVIEW_AGENT_SYSTEM_PROMPT } from "./prompts/review-agent";
 import { buildReviewPrompt } from "./prompts/build-review-prompt";
 import { createLsTool } from "./tools/LsTool";
-import { createGrepTool } from "./tools/GrepTool";
 import { createGlobTool } from "./tools/GlobTool";
 import { createReadFileTool } from "./tools/ReadFileTool";
 import type { SandboxManager } from "@packages/sandbox";
@@ -34,6 +33,7 @@ export interface ReviewAgentOptions {
   signal?: AbortSignal;
   defaultBranch?: string;
   maxFindings?: number;
+  graphPath?: string;
 }
 
 export interface ReviewFinding {
@@ -285,15 +285,44 @@ export async function runReviewAgent(
 
   const tools = {
     ls: createLsTool(sandboxManager, sandboxId),
-    grep: createGrepTool(sandboxManager, sandboxId),
     glob: createGlobTool(sandboxManager, sandboxId),
     readFile: createReadFileTool(sandboxManager, sandboxId),
   };
+
   const maxSteps = options.maxToolSteps ?? 16;
   const minToolSteps = Math.max(
     1,
     Math.min(options.minToolSteps ?? 5, maxSteps),
   );
+
+  let graphContextInfo = "";
+  if (options.graphPath) {
+    try {
+      const graphResult = await runCommand(sandboxManager, sandboxId, "cat", [
+        options.graphPath,
+      ]);
+      if (graphResult.exitCode === 0 && graphResult.stdout) {
+        const graphData = JSON.parse(graphResult.stdout);
+        graphContextInfo = `
+
+CODEBASE GRAPH AVAILABLE:
+The codebase has been pre-analyzed. Graph stats:
+- Files: ${graphData.metadata?.fileCount ?? "unknown"}
+- Nodes: ${graphData.metadata?.nodeCount ?? "unknown"}
+- Edges: ${graphData.metadata?.edgeCount ?? "unknown"}
+
+Precomputed graph available at: ${options.graphPath}
+Use this graph to understand the codebase structure, find callers of functions, and trace dependencies.
+Instead of grep, use the graph data to find:
+- Which functions call a specific function (callers)
+- Which files are affected by changes (impact analysis)
+- Type references and imports`;
+      }
+    } catch (error) {
+      console.log("[review-agent] Failed to load graph:", error);
+    }
+  }
+
   let toolStepCount = 0;
 
   const systemPrompt = `${REVIEW_AGENT_SYSTEM_PROMPT}
@@ -327,9 +356,9 @@ Diff summary usage rules:
 
 IMMEDIATE ACTION REQUIRED:
 1. Start from the precomputed diff provided in the user prompt.
-2. Use grep first to discover impacted callers/usages and relevant symbols in changed files.
+2. Use the precomputed codebase graph to discover impacted callers/usages and relevant symbols in changed files.
 3. Use readFile only for focused ranges (lineStart/lineEnd or maxLines) when validating evidence.
-4. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.`;
+4. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.${graphContextInfo}`;
 
   const generation = await generateText({
     model: options.model,

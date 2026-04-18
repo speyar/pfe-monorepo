@@ -3,6 +3,7 @@ import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runReviewAgent } from "./review-agent";
 import type { DiffSummary } from "./diff-summarize";
+import { generateCodebaseGraph } from "./graph-generator";
 
 export type PullRequestReviewVerdict =
   | "approve"
@@ -169,6 +170,21 @@ export async function runPullRequestReview(
   const startedAt = Date.now();
 
   try {
+    const cwdResult = await manager.runCommand({
+      sandboxId: sandbox.id,
+      command: "pwd",
+    });
+    const workingDir = cwdResult.stdout.trim() || "/home/user";
+    const graphPath = `${workingDir}/codebase-graph.json`;
+
+    console.log("Generating codebase graph...");
+    await generateCodebaseGraph(manager, sandbox.id, {
+      rootPath: workingDir,
+      outPath: graphPath,
+      pretty: true,
+    });
+    console.log("Codebase graph generated at:", graphPath);
+
     const review = await runReviewAgent(input.headRef, {
       model: provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini"),
       sandboxManager: manager,
@@ -180,6 +196,7 @@ export async function runPullRequestReview(
       maxToolSteps: options.maxToolSteps ?? 24,
       minToolSteps: options.minToolSteps ?? 5,
       signal: options.signal,
+      graphPath,
     });
 
     const findings = toFindings(review.findings);

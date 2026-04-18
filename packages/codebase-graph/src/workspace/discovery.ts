@@ -132,5 +132,18 @@ export function scanWorkspace(rootPath: string): WorkspaceScanResult {
     });
   }
 
+  // If no packages found via workspace globs, treat root as a single app
+  if (packages.length === 0) {
+    packages.push({
+      id: safeNodeId(["package", workspaceName]),
+      name: workspaceName,
+      rootPath: absoluteRootPath,
+      packageJsonPath: normalizePath(rootPackageJsonPath),
+      tsconfigPath: pickTsconfigPath(absoluteRootPath),
+      dependencies: Object.keys(rootPackageJson.dependencies ?? {}),
+      devDependencies: Object.keys(rootPackageJson.devDependencies ?? {}),
+    });
+  }
+
   return { workspace, packages };
 }
