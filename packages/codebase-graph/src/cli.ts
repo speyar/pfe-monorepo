@@ -70,6 +70,8 @@ async function main(): Promise<void> {
   }
 
   const args = parseArgs(process.argv.slice(2));
+  console.error(`[codebase-graph] root=${args.root} out=${args.out}`);
+  console.error(`[codebase-graph] cwd=${process.cwd()}`);
   const startedAt = Date.now();
 
   const { graph } = buildCodebaseGraph({
