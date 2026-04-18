@@ -6,6 +6,7 @@ import { buildReviewPrompt } from "./prompts/build-review-prompt";
 import { createLsTool } from "./tools/LsTool";
 import { createGlobTool } from "./tools/GlobTool";
 import { createReadFileTool } from "./tools/ReadFileTool";
+import { createCodebaseGraphTool } from "./tools/CodebaseGraphTool";
 import type { SandboxManager } from "@packages/sandbox";
 import type { DiffSummary } from "./diff-summarize";
 
@@ -287,6 +288,15 @@ export async function runReviewAgent(
     ls: createLsTool(sandboxManager, sandboxId),
     glob: createGlobTool(sandboxManager, sandboxId),
     readFile: createReadFileTool(sandboxManager, sandboxId),
+    ...(options.graphPath
+      ? {
+          codebaseGraph: createCodebaseGraphTool(
+            sandboxManager,
+            sandboxId,
+            options.graphPath,
+          ),
+        }
+      : {}),
   };
 
   const maxSteps = options.maxToolSteps ?? 16;
@@ -296,12 +306,6 @@ export async function runReviewAgent(
   );
 
   let graphContextInfo = "";
-  let graphStats = {
-    nodeCount: 0,
-    edgeCount: 0,
-    fileCount: 0,
-    packageCount: 0,
-  };
   if (options.graphPath) {
     try {
       const graphResult = await runCommand(sandboxManager, sandboxId, "cat", [
@@ -309,89 +313,31 @@ export async function runReviewAgent(
       ]);
       if (graphResult.exitCode === 0 && graphResult.stdout) {
         const graphData = JSON.parse(graphResult.stdout);
-        graphStats = {
-          nodeCount: graphData.metadata?.nodeCount ?? 0,
-          edgeCount: graphData.metadata?.edgeCount ?? 0,
-          fileCount: graphData.metadata?.fileCount ?? 0,
-          packageCount: graphData.metadata?.packageCount ?? 0,
-        };
+        const nodeCount = graphData.metadata?.nodeCount ?? 0;
+        const edgeCount = graphData.metadata?.edgeCount ?? 0;
+        const fileCount = graphData.metadata?.fileCount ?? 0;
+        const packageCount = graphData.metadata?.packageCount ?? 0;
         console.log(
-          `[review-agent] Codebase graph loaded — packages=${graphStats.packageCount}, files=${graphStats.fileCount}, nodes=${graphStats.nodeCount}, edges=${graphStats.edgeCount}`,
+          `[review-agent] Codebase graph loaded — packages=${packageCount}, files=${fileCount}, nodes=${nodeCount}, edges=${edgeCount}`,
         );
-
-        const changedFileNodes =
-          graphData.nodes?.filter(
-            (node: { kind: string; filePath?: string }) =>
-              node.kind === "file" &&
-              changedFiles.some(
-                (cf: string) =>
-                  node.filePath?.endsWith(cf) ||
-                  node.filePath?.includes(cf.replace(/^src\//, "")),
-              ),
-          ) ?? [];
-        const changedFileIds = new Set(
-          changedFileNodes.map((n: { id: string }) => n.id),
-        );
-
-        const callersOfChanged: string[] = [];
-        const impactedByChanged: string[] = [];
-        for (const edge of graphData.edges ?? []) {
-          if (changedFileIds.has(edge.to)) {
-            const fromNode = graphData.nodes?.find(
-              (n: { id: string }) => n.id === edge.from,
-            );
-            if (fromNode && !changedFileIds.has(fromNode.id)) {
-              if (edge.kind === "calls" || edge.kind === "imports") {
-                callersOfChanged.push(
-                  `${fromNode.name} (${fromNode.kind}) [${edge.kind}] -> ${edge.to}`,
-                );
-              }
-            }
-          }
-          if (changedFileIds.has(edge.from)) {
-            const toNode = graphData.nodes?.find(
-              (n: { id: string }) => n.id === edge.to,
-            );
-            if (toNode && !changedFileIds.has(toNode.id)) {
-              if (
-                edge.kind === "calls" ||
-                edge.kind === "imports" ||
-                edge.kind === "typeReference"
-              ) {
-                impactedByChanged.push(
-                  `${edge.from} [${edge.kind}] -> ${toNode.name} (${toNode.kind})`,
-                );
-              }
-            }
-          }
-        }
-
-        console.log(
-          `[review-agent] Graph analysis for ${changedFiles.length} changed files: ${changedFileNodes.length} file nodes matched, ${callersOfChanged.length} external callers, ${impactedByChanged.length} external dependencies`,
-        );
-
-        const callersPreview = callersOfChanged.slice(0, 30).join("\n");
-        const impactedPreview = impactedByChanged.slice(0, 30).join("\n");
 
         graphContextInfo = `
 
-CODEBASE GRAPH AVAILABLE:
-The codebase has been pre-analyzed. Graph stats:
-- Packages: ${graphStats.packageCount}
-- Files: ${graphStats.fileCount}
-- Nodes: ${graphStats.nodeCount}
-- Edges: ${graphStats.edgeCount}
+CODEBASE GRAPH TOOL AVAILABLE:
+A codebaseGraph tool is available with precomputed dependency graph data.
+Graph stats: ${packageCount} packages, ${fileCount} files, ${nodeCount} nodes, ${edgeCount} edges.
 
-Precomputed graph available at: ${options.graphPath}
-You can read this file with readFile to query the graph data.
+USE THE codebaseGraph TOOL for structural queries instead of grep:
+- findCallersOf: find who calls a changed function
+- findImpactOf: find all files affected by a change to a file
+- findDependenciesOf: find what a function depends on
+- findUnusedFunctions: find dead code
+- getChangedFileNodes: get all graph nodes inside changed files
+- getNodesByName: search for symbols by name
+- getCrossPackageDeps: list monorepo boundary crossings
+- getNodeDetails: get full details of a specific node
 
-USE THE GRAPH instead of grep for structural queries:
-- Read the graph file to find: callers of changed functions, files affected by changes, type references, import chains
-- Changed files matched ${changedFileNodes.length} nodes in the graph
-- External callers of changed code (${callersOfChanged.length} found):
-${callersPreview || "(none found in graph)"}
-- External dependencies impacted by changes (${impactedByChanged.length} found):
-${impactedPreview || "(none found in graph)"}`;
+Prefer codebaseGraph over grep for dependency, caller, and impact questions.`;
       }
     } catch (error) {
       console.log("[review-agent] Failed to load graph:", error);
@@ -454,10 +400,9 @@ IMMEDIATE ACTION REQUIRED:
       description: "Structured pull request review findings.",
     }),
     abortSignal: options.signal,
-    experimental_onToolCallFinish: async ({ toolCall, output }) => {
-      console.log(
-        `[toolCall] ${toolCall.toolName}-${JSON.stringify(toolCall.input)}`,
-      );
+    experimental_onToolCallFinish: async ({ toolCall: tc, output }) => {
+      if (!tc) return;
+      console.log(`[toolCall] ${tc.toolName}-${JSON.stringify(tc.input)}`);
     },
     onStepFinish: (step) => {
       const toolResults =
@@ -477,9 +422,9 @@ IMMEDIATE ACTION REQUIRED:
         console.log(
           `[step ${step.stepNumber}] toolCalls detail`,
           step.toolCalls.map((call) => ({
-            toolName: call.toolName,
-            toolCallId: call.toolCallId,
-            input: preview(call.input),
+            toolName: call?.toolName ?? "unknown",
+            toolCallId: call?.toolCallId ?? "unknown",
+            input: preview(call?.input ?? {}),
           })),
         );
       }
