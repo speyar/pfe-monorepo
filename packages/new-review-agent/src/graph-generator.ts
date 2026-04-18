@@ -6,8 +6,8 @@ export interface GraphGeneratorOptions {
   pretty?: boolean;
 }
 
-const PACKAGE_URL =
-  "https://github.com/speyar/pfe-monorepo/releases/download/v0.0.1/codebase-graph-pkg.tar.gz";
+const GRAPH_CLI_URL =
+  "https://github.com/speyar/pfe-monorepo/releases/download/v0.0.1/codebase-graph-cli.cjs";
 
 async function runCmd(
   manager: SandboxManager,
@@ -34,46 +34,17 @@ export async function generateCodebaseGraph(
   sandboxId: string,
   options: GraphGeneratorOptions,
 ): Promise<void> {
-  const cliDir = `${options.rootPath}/.codebase-graph`;
-
   console.log("[graph-generator] Downloading codebase-graph CLI...");
-  await runCmd(manager, sandboxId, "mkdir", ["-p", cliDir]);
-
   const downloadResult = await runCmd(manager, sandboxId, "curl", [
     "-L",
     "-o",
-    `${cliDir}/pkg.tar.gz`,
-    PACKAGE_URL,
+    "/tmp/codebase-graph-cli.cjs",
+    GRAPH_CLI_URL,
   ]);
   if (downloadResult.exitCode !== 0) {
     throw new Error(
       `Failed to download graph CLI: ${downloadResult.stderr || downloadResult.stdout}`,
     );
-  }
-
-  console.log("[graph-generator] Extracting...");
-  const extractResult = await runCmd(manager, sandboxId, "tar", [
-    "-xzf",
-    `${cliDir}/pkg.tar.gz`,
-    "-C",
-    cliDir,
-  ]);
-  if (extractResult.exitCode !== 0) {
-    throw new Error(`Failed to extract: ${extractResult.stderr}`);
-  }
-
-  await runCmd(manager, sandboxId, "rm", [`${cliDir}/pkg.tar.gz`]);
-
-  console.log("[graph-generator] Installing ts-morph...");
-  const installResult = await runCmd(
-    manager,
-    sandboxId,
-    "npm",
-    ["install", "--no-audit", "--no-fund", "ts-morph"],
-    cliDir,
-  );
-  if (installResult.exitCode !== 0) {
-    throw new Error(`Failed to install ts-morph: ${installResult.stderr}`);
   }
 
   const prettyFlag = options.pretty !== false ? "--pretty" : "";
@@ -84,7 +55,7 @@ export async function generateCodebaseGraph(
     sandboxId,
     "node",
     [
-      `${cliDir}/cli.js`,
+      "/tmp/codebase-graph-cli.cjs",
       "--root",
       options.rootPath,
       "--out",
