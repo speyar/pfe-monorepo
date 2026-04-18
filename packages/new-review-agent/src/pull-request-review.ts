@@ -178,12 +178,14 @@ export async function runPullRequestReview(
     const graphPath = `${workingDir}/codebase-graph.json`;
 
     console.log("Generating codebase graph...");
-    await generateCodebaseGraph(manager, sandbox.id, {
+    const graphResult = await generateCodebaseGraph(manager, sandbox.id, {
       rootPath: workingDir,
       outPath: graphPath,
       pretty: true,
     });
-    console.log("Codebase graph generated at:", graphPath);
+    console.log(
+      `Codebase graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
+    );
 
     const review = await runReviewAgent(input.headRef, {
       model: provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini"),

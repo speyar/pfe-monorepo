@@ -296,6 +296,12 @@ export async function runReviewAgent(
   );
 
   let graphContextInfo = "";
+  let graphStats = {
+    nodeCount: 0,
+    edgeCount: 0,
+    fileCount: 0,
+    packageCount: 0,
+  };
   if (options.graphPath) {
     try {
       const graphResult = await runCommand(sandboxManager, sandboxId, "cat", [
@@ -303,20 +309,89 @@ export async function runReviewAgent(
       ]);
       if (graphResult.exitCode === 0 && graphResult.stdout) {
         const graphData = JSON.parse(graphResult.stdout);
+        graphStats = {
+          nodeCount: graphData.metadata?.nodeCount ?? 0,
+          edgeCount: graphData.metadata?.edgeCount ?? 0,
+          fileCount: graphData.metadata?.fileCount ?? 0,
+          packageCount: graphData.metadata?.packageCount ?? 0,
+        };
+        console.log(
+          `[review-agent] Codebase graph loaded — packages=${graphStats.packageCount}, files=${graphStats.fileCount}, nodes=${graphStats.nodeCount}, edges=${graphStats.edgeCount}`,
+        );
+
+        const changedFileNodes =
+          graphData.nodes?.filter(
+            (node: { kind: string; filePath?: string }) =>
+              node.kind === "file" &&
+              changedFiles.some(
+                (cf: string) =>
+                  node.filePath?.endsWith(cf) ||
+                  node.filePath?.includes(cf.replace(/^src\//, "")),
+              ),
+          ) ?? [];
+        const changedFileIds = new Set(
+          changedFileNodes.map((n: { id: string }) => n.id),
+        );
+
+        const callersOfChanged: string[] = [];
+        const impactedByChanged: string[] = [];
+        for (const edge of graphData.edges ?? []) {
+          if (changedFileIds.has(edge.to)) {
+            const fromNode = graphData.nodes?.find(
+              (n: { id: string }) => n.id === edge.from,
+            );
+            if (fromNode && !changedFileIds.has(fromNode.id)) {
+              if (edge.kind === "calls" || edge.kind === "imports") {
+                callersOfChanged.push(
+                  `${fromNode.name} (${fromNode.kind}) [${edge.kind}] -> ${edge.to}`,
+                );
+              }
+            }
+          }
+          if (changedFileIds.has(edge.from)) {
+            const toNode = graphData.nodes?.find(
+              (n: { id: string }) => n.id === edge.to,
+            );
+            if (toNode && !changedFileIds.has(toNode.id)) {
+              if (
+                edge.kind === "calls" ||
+                edge.kind === "imports" ||
+                edge.kind === "typeReference"
+              ) {
+                impactedByChanged.push(
+                  `${edge.from} [${edge.kind}] -> ${toNode.name} (${toNode.kind})`,
+                );
+              }
+            }
+          }
+        }
+
+        console.log(
+          `[review-agent] Graph analysis for ${changedFiles.length} changed files: ${changedFileNodes.length} file nodes matched, ${callersOfChanged.length} external callers, ${impactedByChanged.length} external dependencies`,
+        );
+
+        const callersPreview = callersOfChanged.slice(0, 30).join("\n");
+        const impactedPreview = impactedByChanged.slice(0, 30).join("\n");
+
         graphContextInfo = `
 
 CODEBASE GRAPH AVAILABLE:
 The codebase has been pre-analyzed. Graph stats:
-- Files: ${graphData.metadata?.fileCount ?? "unknown"}
-- Nodes: ${graphData.metadata?.nodeCount ?? "unknown"}
-- Edges: ${graphData.metadata?.edgeCount ?? "unknown"}
+- Packages: ${graphStats.packageCount}
+- Files: ${graphStats.fileCount}
+- Nodes: ${graphStats.nodeCount}
+- Edges: ${graphStats.edgeCount}
 
 Precomputed graph available at: ${options.graphPath}
-Use this graph to understand the codebase structure, find callers of functions, and trace dependencies.
-Instead of grep, use the graph data to find:
-- Which functions call a specific function (callers)
-- Which files are affected by changes (impact analysis)
-- Type references and imports`;
+You can read this file with readFile to query the graph data.
+
+USE THE GRAPH instead of grep for structural queries:
+- Read the graph file to find: callers of changed functions, files affected by changes, type references, import chains
+- Changed files matched ${changedFileNodes.length} nodes in the graph
+- External callers of changed code (${callersOfChanged.length} found):
+${callersPreview || "(none found in graph)"}
+- External dependencies impacted by changes (${impactedByChanged.length} found):
+${impactedPreview || "(none found in graph)"}`;
       }
     } catch (error) {
       console.log("[review-agent] Failed to load graph:", error);

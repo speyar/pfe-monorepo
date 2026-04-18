@@ -29,11 +29,22 @@ async function runCmd(
   };
 }
 
+export interface GraphGenerationResult {
+  graphPath: string;
+  nodeCount: number;
+  edgeCount: number;
+  fileCount: number;
+  packageCount: number;
+  elapsedMs: number;
+}
+
 export async function generateCodebaseGraph(
   manager: SandboxManager,
   sandboxId: string,
   options: GraphGeneratorOptions,
-): Promise<void> {
+): Promise<GraphGenerationResult> {
+  const startedAt = Date.now();
+
   console.log("[graph-generator] Downloading codebase-graph CLI...");
   const downloadResult = await runCmd(manager, sandboxId, "curl", [
     "-L",
@@ -46,10 +57,11 @@ export async function generateCodebaseGraph(
       `Failed to download graph CLI: ${downloadResult.stderr || downloadResult.stdout}`,
     );
   }
+  console.log("[graph-generator] CLI downloaded successfully.");
 
   const prettyFlag = options.pretty !== false ? "--pretty" : "";
 
-  console.log("[graph-generator] Running codebase-graph...");
+  console.log("[graph-generator] Running codebase-graph on:", options.rootPath);
   const result = await runCmd(
     manager,
     sandboxId,
@@ -71,5 +83,47 @@ export async function generateCodebaseGraph(
     );
   }
 
-  console.log("[graph-generator] Graph generated successfully.");
+  console.log("[graph-generator] CLI stdout:", result.stdout.trim());
+  if (result.stderr.trim()) {
+    console.log("[graph-generator] CLI stderr:", result.stderr.trim());
+  }
+
+  console.log("[graph-generator] Reading graph metadata...");
+  const catResult = await runCmd(manager, sandboxId, "cat", [options.outPath]);
+  if (catResult.exitCode !== 0) {
+    console.log(
+      "[graph-generator] Could not read graph file for metadata logging.",
+    );
+  }
+
+  let nodeCount = 0;
+  let edgeCount = 0;
+  let fileCount = 0;
+  let packageCount = 0;
+
+  if (catResult.exitCode === 0 && catResult.stdout) {
+    try {
+      const graphData = JSON.parse(catResult.stdout);
+      nodeCount = graphData.metadata?.nodeCount ?? 0;
+      edgeCount = graphData.metadata?.edgeCount ?? 0;
+      fileCount = graphData.metadata?.fileCount ?? 0;
+      packageCount = graphData.metadata?.packageCount ?? 0;
+    } catch {
+      console.log("[graph-generator] Could not parse graph JSON for metadata.");
+    }
+  }
+
+  const elapsedMs = Date.now() - startedAt;
+  console.log(
+    `[graph-generator] Graph generated in ${elapsedMs}ms — packages=${packageCount}, files=${fileCount}, nodes=${nodeCount}, edges=${edgeCount}`,
+  );
+
+  return {
+    graphPath: options.outPath,
+    nodeCount,
+    edgeCount,
+    fileCount,
+    packageCount,
+    elapsedMs,
+  };
 }
