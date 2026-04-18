@@ -9,6 +9,34 @@ export interface GraphGeneratorOptions {
 const GRAPH_CLI_URL =
   "https://github.com/speyar/pfe-monorepo/releases/download/v0.0.1/codebase-graph-cli.js";
 
+async function ensureBunInstalled(
+  manager: SandboxManager,
+  sandboxId: string,
+): Promise<string> {
+  const checkResult = await manager.runCommand({
+    sandboxId,
+    command: "which",
+    args: ["bun"],
+  });
+
+  if (checkResult.exitCode === 0 && checkResult.stdout.trim()) {
+    return checkResult.stdout.trim();
+  }
+
+  console.log("[graph-generator] Installing bun in sandbox...");
+  const installResult = await manager.runCommand({
+    sandboxId,
+    command: "bash",
+    args: ["-c", "curl -fsSL https://bun.sh/install | bash"],
+  });
+
+  if (installResult.exitCode !== 0) {
+    throw new Error(`Failed to install bun: ${installResult.stderr}`);
+  }
+
+  return "$HOME/.bun/bin/bun";
+}
+
 export async function generateCodebaseGraph(
   manager: SandboxManager,
   sandboxId: string,
@@ -26,11 +54,13 @@ export async function generateCodebaseGraph(
     );
   }
 
+  const bunPath = await ensureBunInstalled(manager, sandboxId);
+
   const prettyFlag = options.pretty !== false ? "--pretty" : "";
 
   const result = await manager.runCommand({
     sandboxId,
-    command: "bun",
+    command: bunPath,
     args: [
       "/tmp/codebase-graph-cli.js",
       "--root",
