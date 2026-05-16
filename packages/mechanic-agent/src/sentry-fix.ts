@@ -225,6 +225,23 @@ export async function runSentryFix(
     const shortId = input.issue.id.slice(0, 8);
     const branchName = `fix/sentry-${shortId}`;
 
+    console.log(`[sentry-fix] Setting git remote with auth token...`);
+    const authUrl = `https://x-access-token:${token}@github.com/${input.repo.owner}/${input.repo.repo}.git`;
+    const remoteResult = await manager.runCommand({
+      sandboxId: sandbox.id,
+      command: "git",
+      args: ["remote", "set-url", "origin", authUrl],
+    });
+    console.log(`[sentry-fix] Remote set-url: exitCode=${remoteResult.exitCode}`);
+
+    const remoteVResult = await manager.runCommand({
+      sandboxId: sandbox.id,
+      command: "git",
+      args: ["remote", "-v"],
+    });
+    const remoteClean = (remoteVResult.stdout ?? "").replace(/x-access-token:[^@]+@/g, "x-access-token:***@");
+    console.log(`[sentry-fix] Remote: ${remoteClean.trim()}`);
+
     console.log(`[sentry-fix] Creating branch: ${branchName}`);
     try {
       const branchResult = await manager.runCommand({
