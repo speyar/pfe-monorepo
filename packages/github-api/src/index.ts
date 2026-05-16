@@ -10,6 +10,7 @@ export {
 } from "./comments";
 export { GitHubApiError, normalizeGitHubError } from "./errors";
 export {
+  createPullRequest,
   getPullRequest,
   getPullRequestDiff,
   listPullRequestFiles,

@@ -69,6 +69,39 @@ export const listPullRequestFiles = async (
   }
 };
 
+export type CreatePullRequestInput = GitHubOwnerRepo & {
+  title: string;
+  head: string;
+  base: string;
+  body?: string;
+  draft?: boolean;
+};
+
+export const createPullRequest = async (
+  installationId: number,
+  input: CreatePullRequestInput,
+): Promise<{ htmlUrl: string; number: number }> => {
+  try {
+    const client = await getGitHubClient(installationId);
+    const response = await client.rest.pulls.create({
+      owner: input.owner,
+      repo: input.repo,
+      title: input.title,
+      head: input.head,
+      base: input.base,
+      body: input.body,
+      draft: input.draft ?? false,
+    });
+
+    return {
+      htmlUrl: response.data.html_url,
+      number: response.data.number,
+    };
+  } catch (error) {
+    throw normalizeGitHubError(error, "Failed to create pull request");
+  }
+};
+
 export const getPullRequestDiff = async (
   client: GitHubClient,
   input: GetPullRequestInput,

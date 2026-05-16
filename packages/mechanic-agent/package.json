@@ -1,0 +1,32 @@
+{
+  "name": "@pfe-monorepo/mechanic-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Autonomous bug-fixing agent — traces Sentry issues, edits files, and opens PRs",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ceira/better-copilot-provider": "workspace:*",
+    "@packages/sandbox": "workspace:*",
+    "@pfe-monorepo/github-api": "workspace:*",
+    "ai": "^6.0.116",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@pfe-monorepo/typescript-config": "workspace:*",
+    "bun-types": "^1.0.0"
+  }
+}
