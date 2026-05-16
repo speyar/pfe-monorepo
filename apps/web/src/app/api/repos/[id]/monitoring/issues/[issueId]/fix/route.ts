@@ -6,7 +6,7 @@ import {
   getLatestSentryEvent,
 } from "@/lib/sentry-api";
 import type { SentryIssue } from "@/lib/sentry-api";
-import { getOwnedRepository, parseRepoId } from "../../helpers";
+import { getOwnedRepository, parseRepoId } from "../../../helpers";
 
 export async function POST(
   request: Request,
