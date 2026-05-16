@@ -14,36 +14,31 @@ export function createEditFileExecutor(
     logToolEvent({ tool: "editFile", phase: "start", payload: input });
 
     try {
-      const searchEscaped = input.search
-        .replace(/\\/g, "\\\\")
-        .replace(/\//g, "\\/")
-        .replace(/\./g, "\\.")
-        .replace(/\*/g, "\\*")
-        .replace(/\[/g, "\\[")
-        .replace(/\]/g, "\\]")
-        .replace(/\$/g, "\\$")
-        .replace(/&/g, "\\&");
+      const script = [
+        `const fs = require('fs');`,
+        `const p = ${JSON.stringify(input.path)};`,
+        `const s = ${JSON.stringify(input.search)};`,
+        `const r = ${JSON.stringify(input.replace)};`,
+        `let c = fs.readFileSync(p, 'utf-8');`,
+        `const idx = c.indexOf(s);`,
+        `if (idx === -1) {`,
+        `  console.log('NOT_FOUND: search text not found in file');`,
+        `  process.exit(1);`,
+        `}`,
+        `c = c.slice(0, idx) + r + c.slice(idx + s.length);`,
+        `fs.writeFileSync(p, c, 'utf-8');`,
+        `console.log('EDITED ' + p);`,
+      ].join("\n");
 
-      const replaceEscaped = input.replace
-        .replace(/\\/g, "\\\\")
-        .replace(/&/g, "\\&")
-        .replace(/\//g, "\\/")
-        .replace(/\n/g, "\\n");
-
-      const sedResult = await manager.runCommand({
+      const result = await manager.runCommand({
         sandboxId,
-        command: "sed",
-        args: [
-          "-i",
-          "",
-          `s/${searchEscaped}/${replaceEscaped}/`,
-          input.path,
-        ],
+        command: "node",
+        args: ["-e", script],
       });
-      const normalized = normalizeCommandResult(sedResult);
+      const normalized = normalizeCommandResult(result);
 
       if (normalized.exitCode !== 0) {
-        const errorMessage = `Error editing file: ${normalized.stderr || "sed failed"}`;
+        const errorMessage = `Error editing file: ${normalized.stderr || normalized.stdout || "edit failed"}`;
         logToolEvent({
           tool: "editFile",
           phase: "finish",

@@ -189,25 +189,30 @@ export async function runSentryFix(
 
     const elapsedMs = Date.now() - startedAt;
     console.log(
-      `[sentry-fix] Fix completed in ${elapsedMs}ms, confident=${fix.confident}, verificationPassed=${fix.verificationPassed}`,
+      `[sentry-fix] Fix completed in ${elapsedMs}ms, confident=${fix.confident}, verificationPassed=${fix.verificationPassed}, filesChanged=${fix.filesChanged.length}`,
     );
 
-    if (!fix.confident && !fix.verificationPassed) {
-      return {
-        success: true,
-        fix,
-        error: "Agent completed but is not confident in the fix.",
-      };
-    }
-
+    console.log("[sentry-fix] Running git diff to detect changes...");
     const diffResult = await manager.runCommand({
       sandboxId: sandbox.id,
       command: "git",
       args: ["diff"],
     });
     const diffOutput = diffResult.stdout ?? "";
+    console.log(
+      `[sentry-fix] git diff length: ${diffOutput.length}, exitCode: ${diffResult.exitCode}`,
+    );
 
     if (!diffOutput.trim()) {
+      const statusResult = await manager.runCommand({
+        sandboxId: sandbox.id,
+        command: "git",
+        args: ["status", "--porcelain"],
+      });
+      console.log(
+        `[sentry-fix] git status: ${(statusResult.stdout ?? "").trim() || "(clean)"}`,
+      );
+
       return {
         success: true,
         fix,
@@ -215,23 +220,28 @@ export async function runSentryFix(
       };
     }
 
+    console.log("[sentry-fix] Changes detected, proceeding to git branch/commit/push...");
+
     const shortId = input.issue.id.slice(0, 8);
     const branchName = `fix/sentry-${shortId}`;
 
+    console.log(`[sentry-fix] Creating branch: ${branchName}`);
     try {
-      await manager.runCommand({
+      const branchResult = await manager.runCommand({
         sandboxId: sandbox.id,
         command: "git",
         args: ["checkout", "-b", branchName],
       });
+      console.log(`[sentry-fix] Branch created: exitCode=${branchResult.exitCode}`);
 
-      await manager.runCommand({
+      const addResult = await manager.runCommand({
         sandboxId: sandbox.id,
         command: "git",
         args: ["add", "-A"],
       });
+      console.log(`[sentry-fix] Git add: exitCode=${addResult.exitCode}`);
 
-      await manager.runCommand({
+      const commitResult = await manager.runCommand({
         sandboxId: sandbox.id,
         command: "git",
         args: [
@@ -244,19 +254,24 @@ Sentry issue: ${input.issue.permalink}
 ${fix.rootCause}`,
         ],
       });
+      console.log(`[sentry-fix] Git commit: exitCode=${commitResult.exitCode}, stdout=${commitResult.stdout?.trim()}`);
 
-      await manager.runCommand({
+      const pushResult = await manager.runCommand({
         sandboxId: sandbox.id,
         command: "git",
         args: ["push", "origin", branchName],
       });
+      console.log(`[sentry-fix] Git push: exitCode=${pushResult.exitCode}`);
     } catch (error) {
+      console.error("[sentry-fix] Git operations failed", error);
       return {
         success: true,
         fix,
         error: `Fix was applied but git operations failed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+
+    console.log("[sentry-fix] Creating pull request...");
 
     const prBody = [
       `## Fix for Sentry Issue`,
@@ -300,6 +315,7 @@ ${fix.rootCause}`,
         draft: true,
       });
 
+      console.log(`[sentry-fix] PR created: ${pr.data.html_url}`);
       return {
         success: true,
         fix,
@@ -307,6 +323,7 @@ ${fix.rootCause}`,
         branchName,
       };
     } catch (error) {
+      console.error("[sentry-fix] PR creation failed", error);
       return {
         success: true,
         fix,

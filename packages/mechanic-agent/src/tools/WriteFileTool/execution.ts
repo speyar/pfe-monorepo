@@ -14,11 +14,18 @@ export function createWriteFileExecutor(
     logToolEvent({ tool: "writeFile", phase: "start", payload: input });
 
     try {
-      const escapedContent = input.content.replace(/'/g, "'\\''");
+      const script = [
+        `const fs = require('fs');`,
+        `const p = ${JSON.stringify(input.path)};`,
+        `const c = ${JSON.stringify(input.content)};`,
+        `fs.writeFileSync(p, c, 'utf-8');`,
+        `console.log('WROTE ' + p);`,
+      ].join("\n");
+
       const result = await manager.runCommand({
         sandboxId,
-        command: "bash",
-        args: ["-c", `cat > '${input.path}' << 'ENDOFFILE'\n${input.content}\nENDOFFILE`],
+        command: "node",
+        args: ["-e", script],
       });
       const normalized = normalizeCommandResult(result);
 
