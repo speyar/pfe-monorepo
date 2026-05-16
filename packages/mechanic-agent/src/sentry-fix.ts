@@ -226,7 +226,8 @@ export async function runSentryFix(
     const branchName = `fix/sentry-${shortId}`;
 
     console.log(`[sentry-fix] Setting git remote with auth token...`);
-    const authUrl = `https://x-access-token:${token}@github.com/${input.repo.owner}/${input.repo.repo}.git`;
+    const encodedToken = encodeURIComponent(token);
+    const authUrl = `https://x-access-token:${encodedToken}@github.com/${input.repo.owner}/${input.repo.repo}.git`;
     const remoteResult = await manager.runCommand({
       sandboxId: sandbox.id,
       command: "git",
@@ -234,13 +235,17 @@ export async function runSentryFix(
     });
     console.log(`[sentry-fix] Remote set-url: exitCode=${remoteResult.exitCode}`);
 
-    const remoteVResult = await manager.runCommand({
+    console.log(`[sentry-fix] Setting git user config...`);
+    await manager.runCommand({
       sandboxId: sandbox.id,
       command: "git",
-      args: ["remote", "-v"],
+      args: ["config", "user.email", "mechanic-agent[bot]@users.noreply.github.com"],
     });
-    const remoteClean = (remoteVResult.stdout ?? "").replace(/x-access-token:[^@]+@/g, "x-access-token:***@");
-    console.log(`[sentry-fix] Remote: ${remoteClean.trim()}`);
+    await manager.runCommand({
+      sandboxId: sandbox.id,
+      command: "git",
+      args: ["config", "user.name", "Mechanic Agent"],
+    });
 
     console.log(`[sentry-fix] Creating branch: ${branchName}`);
     try {
