@@ -283,7 +283,16 @@ ${fix.rootCause}`,
         command: "git",
         args: ["push", "origin", branchName],
       });
-      console.log(`[sentry-fix] Git push: exitCode=${pushResult.exitCode}`);
+      const pushStderr = (pushResult.stderr ?? "").replace(/x-access-token:[^@]+@/g, "x-access-token:***@");
+      console.log(`[sentry-fix] Git push: exitCode=${pushResult.exitCode}, stderr=${pushStderr.slice(0, 1000)}`);
+
+      if (pushResult.exitCode !== 0) {
+        return {
+          success: true,
+          fix,
+          error: `Git push failed (exit ${pushResult.exitCode}): ${pushStderr.slice(0, 500)}`,
+        };
+      }
     } catch (error) {
       console.error("[sentry-fix] Git operations failed", error);
       return {
