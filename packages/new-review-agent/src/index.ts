@@ -20,3 +20,8 @@ export {
   summarizeDiffWithDefaultModel,
   type DiffSummary,
 } from "./diff-summarize";
+
+export {
+  generateCodebaseGraph,
+  type GraphGeneratorOptions,
+} from "./graph-generator";

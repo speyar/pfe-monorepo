@@ -4,9 +4,9 @@ import { reviewResultSchema } from "./schema/review-result";
 import { REVIEW_AGENT_SYSTEM_PROMPT } from "./prompts/review-agent";
 import { buildReviewPrompt } from "./prompts/build-review-prompt";
 import { createLsTool } from "./tools/LsTool";
-import { createGrepTool } from "./tools/GrepTool";
 import { createGlobTool } from "./tools/GlobTool";
 import { createReadFileTool } from "./tools/ReadFileTool";
+import { createCodebaseGraphTool } from "./tools/CodebaseGraphTool";
 import type { SandboxManager } from "@packages/sandbox";
 import type { DiffSummary } from "./diff-summarize";
 
@@ -34,6 +34,7 @@ export interface ReviewAgentOptions {
   signal?: AbortSignal;
   defaultBranch?: string;
   maxFindings?: number;
+  graphPath?: string;
 }
 
 export interface ReviewFinding {
@@ -285,15 +286,64 @@ export async function runReviewAgent(
 
   const tools = {
     ls: createLsTool(sandboxManager, sandboxId),
-    grep: createGrepTool(sandboxManager, sandboxId),
     glob: createGlobTool(sandboxManager, sandboxId),
     readFile: createReadFileTool(sandboxManager, sandboxId),
+    ...(options.graphPath
+      ? {
+          codebaseGraph: createCodebaseGraphTool(
+            sandboxManager,
+            sandboxId,
+            options.graphPath,
+          ),
+        }
+      : {}),
   };
+
   const maxSteps = options.maxToolSteps ?? 16;
   const minToolSteps = Math.max(
     1,
     Math.min(options.minToolSteps ?? 5, maxSteps),
   );
+
+  let graphContextInfo = "";
+  if (options.graphPath) {
+    try {
+      const graphResult = await runCommand(sandboxManager, sandboxId, "cat", [
+        options.graphPath,
+      ]);
+      if (graphResult.exitCode === 0 && graphResult.stdout) {
+        const graphData = JSON.parse(graphResult.stdout);
+        const nodeCount = graphData.metadata?.nodeCount ?? 0;
+        const edgeCount = graphData.metadata?.edgeCount ?? 0;
+        const fileCount = graphData.metadata?.fileCount ?? 0;
+        const packageCount = graphData.metadata?.packageCount ?? 0;
+        console.log(
+          `[review-agent] Codebase graph loaded — packages=${packageCount}, files=${fileCount}, nodes=${nodeCount}, edges=${edgeCount}`,
+        );
+
+        graphContextInfo = `
+
+CODEBASE GRAPH TOOL AVAILABLE:
+A codebaseGraph tool is available with precomputed dependency graph data.
+Graph stats: ${packageCount} packages, ${fileCount} files, ${nodeCount} nodes, ${edgeCount} edges.
+
+USE THE codebaseGraph TOOL for structural queries instead of grep:
+- findCallersOf: find who calls a changed function
+- findImpactOf: find all files affected by a change to a file
+- findDependenciesOf: find what a function depends on
+- findUnusedFunctions: find dead code
+- getChangedFileNodes: get all graph nodes inside changed files
+- getNodesByName: search for symbols by name
+- getCrossPackageDeps: list monorepo boundary crossings
+- getNodeDetails: get full details of a specific node
+
+Prefer codebaseGraph over grep for dependency, caller, and impact questions.`;
+      }
+    } catch (error) {
+      console.log("[review-agent] Failed to load graph:", error);
+    }
+  }
+
   let toolStepCount = 0;
 
   const systemPrompt = `${REVIEW_AGENT_SYSTEM_PROMPT}
@@ -327,9 +377,9 @@ Diff summary usage rules:
 
 IMMEDIATE ACTION REQUIRED:
 1. Start from the precomputed diff provided in the user prompt.
-2. Use grep first to discover impacted callers/usages and relevant symbols in changed files.
+2. Use the precomputed codebase graph to discover impacted callers/usages and relevant symbols in changed files.
 3. Use readFile only for focused ranges (lineStart/lineEnd or maxLines) when validating evidence.
-4. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.`;
+4. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.${graphContextInfo}`;
 
   const generation = await generateText({
     model: options.model,
@@ -350,10 +400,9 @@ IMMEDIATE ACTION REQUIRED:
       description: "Structured pull request review findings.",
     }),
     abortSignal: options.signal,
-    experimental_onToolCallFinish: async ({ toolCall, output }) => {
-      console.log(
-        `[toolCall] ${toolCall.toolName}-${JSON.stringify(toolCall.input)}`,
-      );
+    experimental_onToolCallFinish: async ({ toolCall: tc, output }) => {
+      if (!tc) return;
+      console.log(`[toolCall] ${tc.toolName}-${JSON.stringify(tc.input)}`);
     },
     onStepFinish: (step) => {
       const toolResults =
@@ -373,9 +422,9 @@ IMMEDIATE ACTION REQUIRED:
         console.log(
           `[step ${step.stepNumber}] toolCalls detail`,
           step.toolCalls.map((call) => ({
-            toolName: call.toolName,
-            toolCallId: call.toolCallId,
-            input: preview(call.input),
+            toolName: call?.toolName ?? "unknown",
+            toolCallId: call?.toolCallId ?? "unknown",
+            input: preview(call?.input ?? {}),
           })),
         );
       }
