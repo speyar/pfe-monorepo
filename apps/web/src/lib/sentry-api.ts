@@ -334,6 +334,29 @@ export async function listSentryIssues(args: {
   };
 }
 
+export async function getLatestSentryEvent(args: {
+  accessToken: string;
+  orgSlug: string;
+  projectSlug: string;
+  issueId: string;
+}): Promise<string | null> {
+  const response = await fetch(
+    `${SENTRY_BASE_URL}/api/0/issues/${args.issueId}/events/latest/`,
+    {
+      headers: {
+        Authorization: `Bearer ${args.accessToken}`,
+        "Content-Type": "application/json",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return response.text();
+}
+
 export async function getAccessTokenForUser(userId: string): Promise<string> {
   const connection = await getSentryConnectionByUserId(userId);
   if (!connection) {

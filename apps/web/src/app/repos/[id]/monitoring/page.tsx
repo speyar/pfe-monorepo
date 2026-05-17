@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import useSWR from "swr";
+import { FixButton } from "./_components/FixButton";
 
 type MonitoringConfigResponse = {
   data: {
@@ -412,16 +413,19 @@ export default function RepoMonitoringPage() {
                           {issue.culprit || "-"}
                         </p>
                       </div>
-                      <a
-                        href={issue.permalink}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      >
-                        <Button variant="ghost" size="sm">
-                          Open
-                          <ExternalLink className="size-3.5" />
-                        </Button>
-                      </a>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <FixButton issue={issue} repoId={repoId} />
+                        <a
+                          href={issue.permalink}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                        >
+                          <Button variant="ghost" size="sm">
+                            Open
+                            <ExternalLink className="size-3.5" />
+                          </Button>
+                        </a>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap text-xs">
                       <Badge variant="outline">Status: {issue.status}</Badge>
