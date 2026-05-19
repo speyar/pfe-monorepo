@@ -1,23 +1,20 @@
-import prisma from "@/lib/db";
-import { AppError } from "@/lib/error";
+import prisma from '@/lib/db'
+import { AppError } from '@/lib/error'
 
 export function parseRepoId(rawId: string): number {
-  const repoId = Number(rawId);
+  const repoId = Number(rawId)
   if (!Number.isInteger(repoId) || repoId <= 0) {
     throw new AppError({
-      message: "Invalid repository id",
-      code: "BAD_REQUEST",
+      message: 'Invalid repository id',
+      code: 'BAD_REQUEST',
       statusCode: 400,
-    });
+    })
   }
 
-  return repoId;
+  return repoId
 }
 
-export async function getOwnedRepository(args: {
-  repoId: number;
-  userId: string;
-}) {
+export async function getOwnedRepository(args: { repoId: number; userId: string }) {
   const repository = await prisma.repository.findFirst({
     where: {
       repoId: args.repoId,
@@ -30,15 +27,15 @@ export async function getOwnedRepository(args: {
       repoId: true,
       fullName: true,
     },
-  });
+  })
 
   if (!repository) {
     throw new AppError({
-      message: "Repository not found",
-      code: "NOT_FOUND",
+      message: 'Repository not found',
+      code: 'NOT_FOUND',
       statusCode: 404,
-    });
+    })
   }
 
-  return repository;
+  return repository
 }

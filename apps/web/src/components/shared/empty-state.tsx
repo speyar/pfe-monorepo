@@ -1,14 +1,14 @@
-import type { LucideIcon } from "lucide-react";
-import { Inbox } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import type { LucideIcon } from 'lucide-react'
+import { Inbox } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 
 type EmptyStateProps = {
-  title: string;
-  description: string;
-  icon?: LucideIcon;
-  className?: string;
-};
+  title: string
+  description: string
+  icon?: LucideIcon
+  className?: string
+}
 
 export default function EmptyState({
   title,
@@ -17,7 +17,7 @@ export default function EmptyState({
   className,
 }: EmptyStateProps) {
   return (
-    <Card className={cn("border-dashed", className)}>
+    <Card className={cn('border-dashed', className)}>
       <CardContent className="flex flex-col items-center justify-center gap-3 py-10 text-center">
         <span className="flex size-12 items-center justify-center rounded-full bg-muted">
           <Icon className="size-6 text-muted-foreground" />
@@ -29,5 +29,5 @@ export default function EmptyState({
         </div>
       </CardContent>
     </Card>
-  );
+  )
 }

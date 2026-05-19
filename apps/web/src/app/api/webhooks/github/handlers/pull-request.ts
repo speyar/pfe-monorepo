@@ -5,258 +5,241 @@ import {
   listPullRequestFiles,
   updateCheckRun,
   upsertPullRequestComment,
-} from "@pfe-monorepo/github-api";
+} from '@pfe-monorepo/github-api'
 import {
   runPullRequestReview,
   summarizeDiffWithDefaultModel,
   type PullRequestReviewFinding as ReviewFinding,
   type PullRequestReviewResult as ReviewResult,
-} from "@pfe-monorepo/new-review-agent";
-import { getGithubInstallationReviewer, savePullRequestReview } from "../db";
+} from '@pfe-monorepo/new-review-agent'
+import { getGithubInstallationReviewer, savePullRequestReview } from '../db'
 import {
   getInstallationId,
   getOwnerRepo,
   REVIEW_COMMENT_MARKER,
   toMarkdownReview,
-} from "../helpers";
-import type { PullRequestPayload } from "../types";
+} from '../helpers'
+import type { PullRequestPayload } from '../types'
 
 type HandlePullRequestEventArgs = {
-  payload: unknown;
-  deliveryId: string;
-  eventName: string;
-};
+  payload: unknown
+  deliveryId: string
+  eventName: string
+}
 
-type DiffSide = "LEFT" | "RIGHT";
+type DiffSide = 'LEFT' | 'RIGHT'
 
 type DiffLineMaps = {
-  right: Map<number, string>;
-  left: Map<number, string>;
-};
+  right: Map<number, string>
+  left: Map<number, string>
+}
 
 type InlineTarget = {
-  path: string;
-  line: number;
-  side: DiffSide;
-  matchedBy: "quote" | "line";
-  snippet: string[];
-};
+  path: string
+  line: number
+  side: DiffSide
+  matchedBy: 'quote' | 'line'
+  snippet: string[]
+}
 
-type InlineTargetResolution =
-  | { ok: true; target: InlineTarget }
-  | { ok: false; reason: string };
+type InlineTargetResolution = { ok: true; target: InlineTarget } | { ok: false; reason: string }
 
-const MAX_INLINE_SNIPPET_LINES = 5;
-const REVIEW_STATUS_MARKER = "<!-- pfe-review-agent-status -->";
-const MIN_INLINE_CONFIDENCE = 0.65;
+const MAX_INLINE_SNIPPET_LINES = 5
+const REVIEW_STATUS_MARKER = '<!-- pfe-review-agent-status -->'
+const MIN_INLINE_CONFIDENCE = 0.65
 
-function buildReviewStatusComment(
-  state: "in_progress" | "completed" | "failed",
-): string {
-  if (state === "completed") {
-    return [
-      REVIEW_STATUS_MARKER,
-      "✅ Review completed. See review below.",
-    ].join("\n");
+function buildReviewStatusComment(state: 'in_progress' | 'completed' | 'failed'): string {
+  if (state === 'completed') {
+    return [REVIEW_STATUS_MARKER, '✅ Review completed. See review below.'].join('\n')
   }
 
-  if (state === "failed") {
-    return [
-      REVIEW_STATUS_MARKER,
-      "⚠️ Review failed before completion. Please retry.",
-    ].join("\n");
+  if (state === 'failed') {
+    return [REVIEW_STATUS_MARKER, '⚠️ Review failed before completion. Please retry.'].join('\n')
   }
 
-  return [REVIEW_STATUS_MARKER, "⏳ AI review in progress"].join("\n");
+  return [REVIEW_STATUS_MARKER, '⏳ AI review in progress'].join('\n')
 }
 
 function buildCheckSummary(lines: string[]): string {
-  return lines.join("\n");
+  return lines.join('\n')
 }
 
 function looksLikeCode(value: string): boolean {
-  const trimmed = value.trim();
+  const trimmed = value.trim()
   if (!trimmed) {
-    return false;
+    return false
   }
 
-  const wordCount = trimmed.split(/\s+/).length;
-  const startsLikeSentence = /^[A-Z][a-z]+(\s|$)/.test(trimmed);
-  const hasInlineCodeTicks = trimmed.includes("`");
+  const wordCount = trimmed.split(/\s+/).length
+  const startsLikeSentence = /^[A-Z][a-z]+(\s|$)/.test(trimmed)
+  const hasInlineCodeTicks = trimmed.includes('`')
   const startsLikeCode =
     /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class)\b/.test(
       trimmed,
-    ) || /^[A-Za-z_$][\w$.\]]*\s*(=|\+=|-=|\*=|\/=|\(|\[)/.test(trimmed);
-  const endsLikeCode = /[;{}]$/.test(trimmed);
+    ) || /^[A-Za-z_$][\w$.\]]*\s*(=|\+=|-=|\*=|\/=|\(|\[)/.test(trimmed)
+  const endsLikeCode = /[;{}]$/.test(trimmed)
 
   if (startsLikeSentence && wordCount >= 5 && !endsLikeCode) {
-    return false;
+    return false
   }
 
   if (hasInlineCodeTicks && startsLikeSentence) {
-    return false;
+    return false
   }
 
-  return startsLikeCode || endsLikeCode;
+  return startsLikeCode || endsLikeCode
 }
 
 function extractCodeFromSuggestion(text: string): string | null {
-  const trimmed = text.trim();
+  const trimmed = text.trim()
   if (!trimmed) {
-    return null;
+    return null
   }
 
-  const hrefMatch = /^change\s+href\s+to\s+["']([^"']+)["']/i.exec(trimmed);
+  const hrefMatch = /^change\s+href\s+to\s+["']([^"']+)["']/i.exec(trimmed)
   if (hrefMatch) {
-    return `href="${hrefMatch[1]}"`;
+    return `href="${hrefMatch[1]}"`
   }
 
-  const srcMatch = /^update\s+src\s+to\s+["']([^"']+)["']/i.exec(trimmed);
+  const srcMatch = /^update\s+src\s+to\s+["']([^"']+)["']/i.exec(trimmed)
   if (srcMatch) {
-    return `src="${srcMatch[1]}"`;
+    return `src="${srcMatch[1]}"`
   }
 
-  const callMatch = /^call\s+([A-Za-z_$][\w$]*\([^)]*\))/i.exec(trimmed);
+  const callMatch = /^call\s+([A-Za-z_$][\w$]*\([^)]*\))/i.exec(trimmed)
   if (callMatch) {
-    return callMatch[1];
+    return callMatch[1]
   }
 
-  const passMatch =
-    /^pass\s+([A-Za-z_$][\w$]*)\s+to\s+([A-Za-z_$][\w$]*)/i.exec(trimmed);
+  const passMatch = /^pass\s+([A-Za-z_$][\w$]*)\s+to\s+([A-Za-z_$][\w$]*)/i.exec(trimmed)
   if (passMatch) {
-    return `${passMatch[2]}(${passMatch[1]})`;
+    return `${passMatch[2]}(${passMatch[1]})`
   }
 
   const backtickMatches = [...trimmed.matchAll(/`([^`]+)`/g)]
     .map((match) => match[1].trim())
-    .filter(Boolean);
+    .filter(Boolean)
 
   const backtickCode = backtickMatches.find((candidate) => {
     if (!/[A-Za-z_$]/.test(candidate)) {
-      return false;
+      return false
     }
 
-    return /[().=!+\-/*\[\]{}'"<>]|\./.test(candidate);
-  });
+    return /[().=!+\-/*\[\]{}'"<>]|\./.test(candidate)
+  })
 
   if (backtickCode) {
-    return backtickCode;
+    return backtickCode
   }
 
   if (looksLikeCode(trimmed)) {
-    return trimmed;
+    return trimmed
   }
 
-  return null;
+  return null
 }
 
 function formatSuggestionSection(suggestion: string): string {
-  const normalized = suggestion.trim();
+  const normalized = suggestion.trim()
   if (!normalized) {
-    return "";
+    return ''
   }
 
-  const lineCount = normalized.split(/\r?\n/).length;
+  const lineCount = normalized.split(/\r?\n/).length
 
   if (lineCount === 1) {
-    const codeCandidate = extractCodeFromSuggestion(normalized);
+    const codeCandidate = extractCodeFromSuggestion(normalized)
     if (codeCandidate) {
-      return ["```suggestion", codeCandidate, "```"].join("\n");
+      return ['```suggestion', codeCandidate, '```'].join('\n')
     }
   }
 
-  return normalized;
+  return normalized
 }
 
 function normalizePath(path: string): string {
   return path
-    .replaceAll("\\", "/")
-    .replace(/^\.\//, "")
-    .replace(/^\/+/, "")
-    .replace(/^[ab]\//, "")
-    .replace(/:\d+(?::\d+)?$/, "");
+    .replaceAll('\\', '/')
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '')
+    .replace(/^[ab]\//, '')
+    .replace(/:\d+(?::\d+)?$/, '')
 }
 
 function resolvePatchPath(
   patchByPath: Map<string, string>,
   rawPath: string,
 ): { path: string; patch: string } | null {
-  const normalizedPath = normalizePath(rawPath);
-  const directPatch = patchByPath.get(normalizedPath);
+  const normalizedPath = normalizePath(rawPath)
+  const directPatch = patchByPath.get(normalizedPath)
   if (directPatch) {
-    return { path: normalizedPath, patch: directPatch };
+    return { path: normalizedPath, patch: directPatch }
   }
 
-  const keys = [...patchByPath.keys()];
-  const normalizedPathLower = normalizedPath.toLowerCase();
+  const keys = [...patchByPath.keys()]
+  const normalizedPathLower = normalizedPath.toLowerCase()
 
-  const caseInsensitiveMatch = keys.find(
-    (key) => key.toLowerCase() === normalizedPathLower,
-  );
+  const caseInsensitiveMatch = keys.find((key) => key.toLowerCase() === normalizedPathLower)
   if (caseInsensitiveMatch) {
     return {
       path: caseInsensitiveMatch,
-      patch: patchByPath.get(caseInsensitiveMatch) ?? "",
-    };
+      patch: patchByPath.get(caseInsensitiveMatch) ?? '',
+    }
   }
 
   const suffixMatches = keys.filter((key) => {
-    const keyLower = key.toLowerCase();
+    const keyLower = key.toLowerCase()
     return (
-      keyLower.endsWith(`/${normalizedPathLower}`) ||
-      normalizedPathLower.endsWith(`/${keyLower}`)
-    );
-  });
+      keyLower.endsWith(`/${normalizedPathLower}`) || normalizedPathLower.endsWith(`/${keyLower}`)
+    )
+  })
   if (suffixMatches.length === 1) {
-    const onlyMatch = suffixMatches[0];
+    const onlyMatch = suffixMatches[0]
     return {
       path: onlyMatch,
-      patch: patchByPath.get(onlyMatch) ?? "",
-    };
+      patch: patchByPath.get(onlyMatch) ?? '',
+    }
   }
 
-  const basename = normalizedPathLower.split("/").pop();
+  const basename = normalizedPathLower.split('/').pop()
   if (!basename) {
-    return null;
+    return null
   }
 
   const basenameMatches = keys.filter((key) => {
-    const keyLower = key.toLowerCase();
-    return keyLower === basename || keyLower.endsWith(`/${basename}`);
-  });
+    const keyLower = key.toLowerCase()
+    return keyLower === basename || keyLower.endsWith(`/${basename}`)
+  })
   if (basenameMatches.length === 1) {
-    const onlyMatch = basenameMatches[0];
+    const onlyMatch = basenameMatches[0]
     return {
       path: onlyMatch,
-      patch: patchByPath.get(onlyMatch) ?? "",
-    };
+      patch: patchByPath.get(onlyMatch) ?? '',
+    }
   }
 
-  return null;
+  return null
 }
 
 function normalizeCodeForComparison(value: string): string {
-  return value.trim().replace(/\s+/g, " ");
+  return value.trim().replace(/\s+/g, ' ')
 }
 
-function chooseClosestLine(
-  lines: number[],
-  preferredLine?: number,
-): number | undefined {
+function chooseClosestLine(lines: number[], preferredLine?: number): number | undefined {
   if (lines.length === 0) {
-    return undefined;
+    return undefined
   }
 
-  if (typeof preferredLine !== "number") {
-    return lines[0];
+  if (typeof preferredLine !== 'number') {
+    return lines[0]
   }
 
   return lines.reduce((closest, current) => {
-    const currentDistance = Math.abs(current - preferredLine);
-    const closestDistance = Math.abs(closest - preferredLine);
+    const currentDistance = Math.abs(current - preferredLine)
+    const closestDistance = Math.abs(closest - preferredLine)
 
-    return currentDistance < closestDistance ? current : closest;
-  }, lines[0]);
+    return currentDistance < closestDistance ? current : closest
+  }, lines[0])
 }
 
 function findLineByQuote(
@@ -264,41 +247,41 @@ function findLineByQuote(
   quote: string,
   preferredLine?: number,
 ): number | undefined {
-  const quoteTrimmed = quote.trim();
+  const quoteTrimmed = quote.trim()
   if (!quoteTrimmed) {
-    return undefined;
+    return undefined
   }
 
-  const exactMatches: number[] = [];
-  const normalizedMatches: number[] = [];
-  const includeMatches: number[] = [];
-  const normalizedQuote = normalizeCodeForComparison(quoteTrimmed);
-  const normalizedQuoteLower = normalizedQuote.toLowerCase();
+  const exactMatches: number[] = []
+  const normalizedMatches: number[] = []
+  const includeMatches: number[] = []
+  const normalizedQuote = normalizeCodeForComparison(quoteTrimmed)
+  const normalizedQuoteLower = normalizedQuote.toLowerCase()
 
   for (const [lineNumber, rawLine] of sideMap.entries()) {
-    const content = rawLine.slice(1);
-    const contentTrimmed = content.trim();
+    const content = rawLine.slice(1)
+    const contentTrimmed = content.trim()
     if (!contentTrimmed) {
-      continue;
+      continue
     }
 
     if (contentTrimmed === quoteTrimmed) {
-      exactMatches.push(lineNumber);
-      continue;
+      exactMatches.push(lineNumber)
+      continue
     }
 
-    const normalizedContent = normalizeCodeForComparison(contentTrimmed);
+    const normalizedContent = normalizeCodeForComparison(contentTrimmed)
     if (normalizedContent === normalizedQuote) {
-      normalizedMatches.push(lineNumber);
-      continue;
+      normalizedMatches.push(lineNumber)
+      continue
     }
 
-    const normalizedContentLower = normalizedContent.toLowerCase();
+    const normalizedContentLower = normalizedContent.toLowerCase()
     if (
       normalizedContentLower.includes(normalizedQuoteLower) ||
       normalizedQuoteLower.includes(normalizedContentLower)
     ) {
-      includeMatches.push(lineNumber);
+      includeMatches.push(lineNumber)
     }
   }
 
@@ -306,129 +289,113 @@ function findLineByQuote(
     chooseClosestLine(exactMatches, preferredLine) ??
     chooseClosestLine(normalizedMatches, preferredLine) ??
     chooseClosestLine(includeMatches, preferredLine)
-  );
+  )
 }
 
 function parsePatchLineMaps(patch: string): DiffLineMaps {
-  const right = new Map<number, string>();
-  const left = new Map<number, string>();
+  const right = new Map<number, string>()
+  const left = new Map<number, string>()
 
-  const lines = patch.split(/\r?\n/);
-  let oldLine = 0;
-  let newLine = 0;
-  let inHunk = false;
+  const lines = patch.split(/\r?\n/)
+  let oldLine = 0
+  let newLine = 0
+  let inHunk = false
 
   for (const rawLine of lines) {
-    const hunkHeader = /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/.exec(
-      rawLine,
-    );
+    const hunkHeader = /^@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/.exec(rawLine)
 
     if (hunkHeader) {
-      oldLine = Number.parseInt(hunkHeader[1], 10);
-      newLine = Number.parseInt(hunkHeader[2], 10);
-      inHunk = true;
-      continue;
+      oldLine = Number.parseInt(hunkHeader[1], 10)
+      newLine = Number.parseInt(hunkHeader[2], 10)
+      inHunk = true
+      continue
     }
 
     if (!inHunk) {
-      continue;
+      continue
     }
 
     if (!rawLine) {
-      continue;
+      continue
     }
 
-    const marker = rawLine[0];
+    const marker = rawLine[0]
 
-    if (marker === "+") {
-      right.set(newLine, rawLine);
-      newLine += 1;
-      continue;
+    if (marker === '+') {
+      right.set(newLine, rawLine)
+      newLine += 1
+      continue
     }
 
-    if (marker === "-") {
-      left.set(oldLine, rawLine);
-      oldLine += 1;
-      continue;
+    if (marker === '-') {
+      left.set(oldLine, rawLine)
+      oldLine += 1
+      continue
     }
 
-    if (marker === " ") {
-      right.set(newLine, rawLine);
-      left.set(oldLine, rawLine);
-      oldLine += 1;
-      newLine += 1;
+    if (marker === ' ') {
+      right.set(newLine, rawLine)
+      left.set(oldLine, rawLine)
+      oldLine += 1
+      newLine += 1
     }
   }
 
-  return { right, left };
+  return { right, left }
 }
 
-function buildSnippet(
-  sideMap: Map<number, string>,
-  targetLine: number,
-): string[] {
-  const snippet: string[] = [];
+function buildSnippet(sideMap: Map<number, string>, targetLine: number): string[] {
+  const snippet: string[] = []
 
   for (let offset = -1; offset <= 1; offset += 1) {
-    const lineNumber = targetLine + offset;
-    const line = sideMap.get(lineNumber);
+    const lineNumber = targetLine + offset
+    const line = sideMap.get(lineNumber)
 
     if (!line) {
-      continue;
+      continue
     }
 
-    const marker =
-      line[0] === "+" || line[0] === "-" || line[0] === " " ? line[0] : " ";
-    const content = line.slice(1);
+    const marker = line[0] === '+' || line[0] === '-' || line[0] === ' ' ? line[0] : ' '
+    const content = line.slice(1)
 
-    snippet.push(
-      `${lineNumber.toString().padStart(4, " ")} ${marker} ${content}`,
-    );
+    snippet.push(`${lineNumber.toString().padStart(4, ' ')} ${marker} ${content}`)
     if (snippet.length >= MAX_INLINE_SNIPPET_LINES) {
-      break;
+      break
     }
   }
 
-  return snippet;
+  return snippet
 }
 
-function buildInlineCommentBody(
-  finding: ReviewFinding,
-  target: InlineTarget,
-): string {
-  const suggestionSection = finding.suggestion
-    ? formatSuggestionSection(finding.suggestion)
-    : "";
+function buildInlineCommentBody(finding: ReviewFinding, target: InlineTarget): string {
+  const suggestionSection = finding.suggestion ? formatSuggestionSection(finding.suggestion) : ''
 
-  return [finding.message, suggestionSection].filter(Boolean).join("\n\n");
+  return [finding.message, suggestionSection].filter(Boolean).join('\n\n')
 }
 
-function scoreInlineConfidence(
-  finding: ReviewFinding,
-  target: InlineTarget,
-): number {
-  let score = 0;
+function scoreInlineConfidence(finding: ReviewFinding, target: InlineTarget): number {
+  let score = 0
 
-  if (target.matchedBy === "quote") {
-    score += 0.5;
+  if (target.matchedBy === 'quote') {
+    score += 0.5
   } else {
-    score += 0.25;
+    score += 0.25
   }
 
-  if (typeof finding.line === "number") {
-    score += 0.1;
+  if (typeof finding.line === 'number') {
+    score += 0.1
   }
 
   if (finding.quote?.trim()) {
-    score += 0.15;
+    score += 0.15
   }
 
   if (finding.suggestion?.trim()) {
-    const codeCandidate = extractCodeFromSuggestion(finding.suggestion);
-    score += codeCandidate ? 0.2 : 0.05;
+    const codeCandidate = extractCodeFromSuggestion(finding.suggestion)
+    score += codeCandidate ? 0.2 : 0.05
   }
 
-  return Math.min(1, score);
+  return Math.min(1, score)
 }
 
 function resolveInlineTarget(
@@ -436,109 +403,105 @@ function resolveInlineTarget(
   patchByPath: Map<string, string>,
   lineMapsByPath: Map<string, DiffLineMaps>,
 ): InlineTargetResolution {
-  const resolvedPatchPath = resolvePatchPath(patchByPath, finding.file);
+  const resolvedPatchPath = resolvePatchPath(patchByPath, finding.file)
   if (!resolvedPatchPath) {
-    return { ok: false, reason: "file_not_in_changed_diff" };
+    return { ok: false, reason: 'file_not_in_changed_diff' }
   }
 
-  const normalizedPath = resolvedPatchPath.path;
-  const patch = resolvedPatchPath.patch;
+  const normalizedPath = resolvedPatchPath.path
+  const patch = resolvedPatchPath.patch
 
-  let maps = lineMapsByPath.get(normalizedPath);
+  let maps = lineMapsByPath.get(normalizedPath)
   if (!maps) {
-    maps = parsePatchLineMaps(patch);
-    lineMapsByPath.set(normalizedPath, maps);
+    maps = parsePatchLineMaps(patch)
+    lineMapsByPath.set(normalizedPath, maps)
   }
 
-  const quotedCode = finding.quote?.trim();
+  const quotedCode = finding.quote?.trim()
   if (quotedCode) {
-    const rightQuotedLine = findLineByQuote(
-      maps.right,
-      quotedCode,
-      finding.line,
-    );
-    if (typeof rightQuotedLine === "number") {
+    const rightQuotedLine = findLineByQuote(maps.right, quotedCode, finding.line)
+    if (typeof rightQuotedLine === 'number') {
       return {
         ok: true,
         target: {
           path: normalizedPath,
           line: rightQuotedLine,
-          side: "RIGHT",
-          matchedBy: "quote",
+          side: 'RIGHT',
+          matchedBy: 'quote',
           snippet: buildSnippet(maps.right, rightQuotedLine),
         },
-      };
+      }
     }
 
-    const leftQuotedLine = findLineByQuote(maps.left, quotedCode, finding.line);
-    if (typeof leftQuotedLine === "number") {
+    const leftQuotedLine = findLineByQuote(maps.left, quotedCode, finding.line)
+    if (typeof leftQuotedLine === 'number') {
       return {
         ok: true,
         target: {
           path: normalizedPath,
           line: leftQuotedLine,
-          side: "LEFT",
-          matchedBy: "quote",
+          side: 'LEFT',
+          matchedBy: 'quote',
           snippet: buildSnippet(maps.left, leftQuotedLine),
         },
-      };
+      }
     }
   }
 
-  if (typeof finding.line !== "number") {
-    return { ok: false, reason: "missing_line" };
+  if (typeof finding.line !== 'number') {
+    return { ok: false, reason: 'missing_line' }
   }
 
-  const rightLine = maps.right.get(finding.line);
+  const rightLine = maps.right.get(finding.line)
   if (rightLine) {
     return {
       ok: true,
       target: {
         path: normalizedPath,
         line: finding.line,
-        side: "RIGHT",
-        matchedBy: "line",
+        side: 'RIGHT',
+        matchedBy: 'line',
         snippet: buildSnippet(maps.right, finding.line),
       },
-    };
+    }
   }
 
-  const leftLine = maps.left.get(finding.line);
+  const leftLine = maps.left.get(finding.line)
   if (leftLine) {
     return {
       ok: true,
       target: {
         path: normalizedPath,
         line: finding.line,
-        side: "LEFT",
-        matchedBy: "line",
+        side: 'LEFT',
+        matchedBy: 'line',
         snippet: buildSnippet(maps.left, finding.line),
       },
-    };
+    }
   }
 
-  return { ok: false, reason: "line_not_in_changed_hunks" };
+  return { ok: false, reason: 'line_not_in_changed_hunks' }
 }
 
 function buildFallbackSummaryComment(input: {
-  totalFindings: number;
-  postedInline: number;
-  skippedByReason: Record<string, number>;
+  totalFindings: number
+  postedInline: number
+  skippedByReason: Record<string, number>
 }): string {
-  const skipped = input.totalFindings - input.postedInline;
+  const skipped = input.totalFindings - input.postedInline
   const reasonLines = Object.entries(input.skippedByReason)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([reason, count]) => `- ${reason}: ${count}`);
+    .map(([reason, count]) => `- ${reason}: ${count}`)
 
   return [
     REVIEW_COMMENT_MARKER,
-    "## Automated PR Review",
+    '## Automated PR Review',
     `Inline comments posted: ${input.postedInline}/${input.totalFindings}`,
-    skipped > 0 ? "Skipped findings:" : "",
-    skipped > 0 ? reasonLines.join("\n") : "",
+    skipped > 0 ? 'Skipped findings:' : '',
+    skipped > 0 ? reasonLines.join('\n') : '',
   ]
     .filter(Boolean)
-    .join("\n");
+    .join('\n')
 }
 
 export const handlePullRequestEvent = async ({
@@ -546,48 +509,47 @@ export const handlePullRequestEvent = async ({
   deliveryId,
   eventName,
 }: HandlePullRequestEventArgs): Promise<Response | null> => {
-  const body = payload as PullRequestPayload;
+  const body = payload as PullRequestPayload
 
-  if (body.action !== "opened" && body.action !== "synchronize") {
-    return null;
+  if (body.action !== 'opened' && body.action !== 'synchronize') {
+    return null
   }
 
-  const installationId = getInstallationId(body.installation);
-  const ownerRepo = getOwnerRepo(body.repository);
-  const pullRequestNumber = body.pull_request?.number;
+  const installationId = getInstallationId(body.installation)
+  const ownerRepo = getOwnerRepo(body.repository)
+  const pullRequestNumber = body.pull_request?.number
 
   if (
     !installationId ||
     !ownerRepo ||
-    typeof pullRequestNumber !== "number" ||
+    typeof pullRequestNumber !== 'number' ||
     !Number.isInteger(pullRequestNumber)
   ) {
-    console.warn("[github-webhook] pull_request ignored", {
+    console.warn('[github-webhook] pull_request ignored', {
       deliveryId,
       action: body.action,
       installationId,
       owner: ownerRepo?.owner,
       repo: ownerRepo?.repo,
       pullRequestNumber,
-      reason: "missing_or_invalid_review_payload",
-    });
-    return null;
+      reason: 'missing_or_invalid_review_payload',
+    })
+    return null
   }
 
-  const githubInstallation =
-    await getGithubInstallationReviewer(installationId);
+  const githubInstallation = await getGithubInstallationReviewer(installationId)
 
   if (!githubInstallation) {
-    console.warn("[github-webhook] pull_request ignored", {
+    console.warn('[github-webhook] pull_request ignored', {
       deliveryId,
       action: body.action,
       installationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
-      reason: "installation_not_linked_in_db",
-    });
-    return null;
+      reason: 'installation_not_linked_in_db',
+    })
+    return null
   }
 
   const [pullRequest, files] = await Promise.all([
@@ -601,93 +563,93 @@ export const handlePullRequestEvent = async ({
       repo: ownerRepo.repo,
       pullRequestNumber,
     }),
-  ]);
+  ])
 
   const filesForReview = files
-    .filter((file) => typeof file.patch === "string" && file.patch.length > 0)
+    .filter((file) => typeof file.patch === 'string' && file.patch.length > 0)
     .map((file) => ({
       path: file.filename,
       status: file.status,
       patch: file.patch ?? undefined,
-    }));
+    }))
 
   const initialDiff = filesForReview
     .map((file) => {
-      const patch = file.patch ?? "";
+      const patch = file.patch ?? ''
       return [
         `diff --git a/${file.path} b/${file.path}`,
         `--- a/${file.path}`,
         `+++ b/${file.path}`,
         patch,
-      ].join("\n");
+      ].join('\n')
     })
-    .join("\n\n");
+    .join('\n\n')
 
   const diffSummary = await summarizeDiffWithDefaultModel({
     diff: initialDiff,
   }).catch((error) => {
-    console.warn("[github-webhook] diff summarizer failed", {
+    console.warn('[github-webhook] diff summarizer failed', {
       deliveryId,
       installationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
       error: error instanceof Error ? error.message : String(error),
-    });
+    })
 
-    return null;
-  });
+    return null
+  })
 
   if (filesForReview.length === 0) {
-    console.warn("[github-webhook] pull_request review skipped", {
+    console.warn('[github-webhook] pull_request review skipped', {
       deliveryId,
       action: body.action,
       installationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
-      reason: "no_patch_files_available",
-    });
-    return null;
+      reason: 'no_patch_files_available',
+    })
+    return null
   }
 
-  const pullRequestUrl = body.pull_request?.html_url ?? pullRequest.htmlUrl;
+  const pullRequestUrl = body.pull_request?.html_url ?? pullRequest.htmlUrl
   await upsertPullRequestComment(installationId, {
     owner: ownerRepo.owner,
     repo: ownerRepo.repo,
     pullRequestNumber,
     marker: REVIEW_STATUS_MARKER,
-    body: buildReviewStatusComment("in_progress"),
-  });
+    body: buildReviewStatusComment('in_progress'),
+  })
 
-  const checkRunHeadSha = body.pull_request?.head?.sha;
+  const checkRunHeadSha = body.pull_request?.head?.sha
   const checkRun = checkRunHeadSha
     ? await createCheckRun(installationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
-        name: "review-agent",
+        name: 'review-agent',
         headSha: checkRunHeadSha,
         detailsUrl: pullRequestUrl,
-        title: "Automated PR Review",
+        title: 'Automated PR Review',
         summary: buildCheckSummary([
-          "Review in progress",
-          "",
-          "[====      ] scanning changed files",
-          "[=======   ] tracing impacted code",
-          "[==========] generating findings",
+          'Review in progress',
+          '',
+          '[====      ] scanning changed files',
+          '[=======   ] tracing impacted code',
+          '[==========] generating findings',
         ]),
       }).catch((error) => {
-        console.warn("[github-webhook] failed to create review check run", {
+        console.warn('[github-webhook] failed to create review check run', {
           deliveryId,
           installationId,
           owner: ownerRepo.owner,
           repo: ownerRepo.repo,
           pullRequestNumber,
           error: error instanceof Error ? error.message : String(error),
-        });
-        return null;
+        })
+        return null
       })
-    : null;
+    : null
 
   try {
     const review: ReviewResult = await runPullRequestReview({
@@ -698,73 +660,67 @@ export const handlePullRequestEvent = async ({
       baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
       initialDiff,
       diffSummary: diffSummary ?? undefined,
-    });
+    })
 
     if (checkRun) {
       await updateCheckRun(installationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         checkRunId: checkRun.id,
-        status: "in_progress",
+        status: 'in_progress',
         detailsUrl: pullRequestUrl,
-        title: "Automated PR Review",
-        summary: buildCheckSummary([
-          "Analysis complete",
-          "Publishing comments to GitHub",
-        ]),
+        title: 'Automated PR Review',
+        summary: buildCheckSummary(['Analysis complete', 'Publishing comments to GitHub']),
       }).catch(() => {
-        return;
-      });
+        return
+      })
     }
 
-    const reviewText = toMarkdownReview(review);
+    const reviewText = toMarkdownReview(review)
 
-    const patchByPath = new Map<string, string>();
+    const patchByPath = new Map<string, string>()
     for (const file of files) {
       if (!file.patch) {
-        continue;
+        continue
       }
 
-      patchByPath.set(normalizePath(file.filename), file.patch);
+      patchByPath.set(normalizePath(file.filename), file.patch)
     }
 
-    const lineMapsByPath = new Map<string, DiffLineMaps>();
-    const skippedByReason: Record<string, number> = {};
-    let postedInline = 0;
-    const inlineTargetStats: Record<string, number> = {};
+    const lineMapsByPath = new Map<string, DiffLineMaps>()
+    const skippedByReason: Record<string, number> = {}
+    let postedInline = 0
+    const inlineTargetStats: Record<string, number> = {}
 
-    const commitSha = body.pull_request?.head?.sha;
+    const findingStatuses: Array<{
+      finding: ReviewFinding
+      postedToGitHub: boolean
+      skipReason: string | null
+    }> = []
+
+    const commitSha = body.pull_request?.head?.sha
     if (commitSha) {
       for (const finding of review.findings) {
-        const targetResolution = resolveInlineTarget(
-          finding,
-          patchByPath,
-          lineMapsByPath,
-        );
+        const targetResolution = resolveInlineTarget(finding, patchByPath, lineMapsByPath)
 
         if (!targetResolution.ok) {
           skippedByReason[targetResolution.reason] =
-            (skippedByReason[targetResolution.reason] ?? 0) + 1;
-          continue;
+            (skippedByReason[targetResolution.reason] ?? 0) + 1
+          findingStatuses.push({ finding, postedToGitHub: false, skipReason: targetResolution.reason })
+          continue
         }
 
-        const confidence = scoreInlineConfidence(
-          finding,
-          targetResolution.target,
-        );
-        const matchKey = `matched_by_${targetResolution.target.matchedBy}`;
-        inlineTargetStats[matchKey] = (inlineTargetStats[matchKey] ?? 0) + 1;
+        const confidence = scoreInlineConfidence(finding, targetResolution.target)
+        const matchKey = `matched_by_${targetResolution.target.matchedBy}`
+        inlineTargetStats[matchKey] = (inlineTargetStats[matchKey] ?? 0) + 1
 
         if (confidence < MIN_INLINE_CONFIDENCE) {
-          skippedByReason.low_inline_confidence =
-            (skippedByReason.low_inline_confidence ?? 0) + 1;
-          continue;
+          skippedByReason.low_inline_confidence = (skippedByReason.low_inline_confidence ?? 0) + 1
+          findingStatuses.push({ finding, postedToGitHub: false, skipReason: 'low_inline_confidence' })
+          continue
         }
 
-        const commentBody = buildInlineCommentBody(
-          finding,
-          targetResolution.target,
-        );
+        const commentBody = buildInlineCommentBody(finding, targetResolution.target)
 
         await createPullRequestReviewComment(installationId, {
           owner: ownerRepo.owner,
@@ -775,12 +731,16 @@ export const handlePullRequestEvent = async ({
           line: targetResolution.target.line,
           side: targetResolution.target.side,
           body: commentBody,
-        });
+        })
 
-        postedInline += 1;
+        postedInline += 1
+        findingStatuses.push({ finding, postedToGitHub: true, skipReason: null })
       }
     } else {
-      skippedByReason.missing_commit_sha = review.findings.length;
+      skippedByReason.missing_commit_sha = review.findings.length
+      for (const finding of review.findings) {
+        findingStatuses.push({ finding, postedToGitHub: false, skipReason: 'missing_commit_sha' })
+      }
     }
 
     if (postedInline < review.findings.length) {
@@ -788,7 +748,7 @@ export const handlePullRequestEvent = async ({
         totalFindings: review.findings.length,
         postedInline,
         skippedByReason,
-      });
+      })
 
       await upsertPullRequestComment(installationId, {
         owner: ownerRepo.owner,
@@ -796,7 +756,7 @@ export const handlePullRequestEvent = async ({
         pullRequestNumber,
         marker: REVIEW_COMMENT_MARKER,
         body: fallbackComment,
-      });
+      })
     }
 
     const reviewDbStatus = await savePullRequestReview({
@@ -808,9 +768,20 @@ export const handlePullRequestEvent = async ({
       pullRequestUrl,
       reviewText,
       reviewerClerkUserId: githubInstallation.user.clerkUserId,
-    });
+      findings: findingStatuses.map((fs) => ({
+        severity: fs.finding.severity,
+        file: fs.finding.file,
+        line: fs.finding.line ?? null,
+        quote: fs.finding.quote ?? null,
+        title: fs.finding.title,
+        message: fs.finding.message,
+        suggestion: fs.finding.suggestion ?? null,
+        postedToGitHub: fs.postedToGitHub,
+        skipReason: fs.skipReason,
+      })),
+    })
 
-    console.info("[github-webhook] pull_request review completed", {
+    console.info('[github-webhook] pull_request review completed', {
       deliveryId,
       action: body.action,
       installationId,
@@ -824,25 +795,25 @@ export const handlePullRequestEvent = async ({
       inlineTargetStats,
       verdict: review.summary.verdict,
       db: reviewDbStatus,
-    });
+    })
 
     if (checkRun) {
       await updateCheckRun(installationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         checkRunId: checkRun.id,
-        status: "completed",
-        conclusion: "success",
+        status: 'completed',
+        conclusion: 'success',
         detailsUrl: pullRequestUrl,
-        title: "Automated PR Review",
+        title: 'Automated PR Review',
         summary: buildCheckSummary([
-          "Review completed",
+          'Review completed',
           `Findings: ${review.findings.length}`,
           `Inline comments posted: ${postedInline}`,
         ]),
       }).catch(() => {
-        return;
-      });
+        return
+      })
     }
 
     await upsertPullRequestComment(installationId, {
@@ -850,24 +821,24 @@ export const handlePullRequestEvent = async ({
       repo: ownerRepo.repo,
       pullRequestNumber,
       marker: REVIEW_STATUS_MARKER,
-      body: buildReviewStatusComment("completed"),
-    });
+      body: buildReviewStatusComment('completed'),
+    })
 
-    return null;
+    return null
   } catch (error) {
     if (checkRun) {
       await updateCheckRun(installationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         checkRunId: checkRun.id,
-        status: "completed",
-        conclusion: "failure",
+        status: 'completed',
+        conclusion: 'failure',
         detailsUrl: pullRequestUrl,
-        title: "Automated PR Review",
-        summary: "Review failed before completion.",
+        title: 'Automated PR Review',
+        summary: 'Review failed before completion.',
       }).catch(() => {
-        return;
-      });
+        return
+      })
     }
 
     await upsertPullRequestComment(installationId, {
@@ -875,11 +846,11 @@ export const handlePullRequestEvent = async ({
       repo: ownerRepo.repo,
       pullRequestNumber,
       marker: REVIEW_STATUS_MARKER,
-      body: buildReviewStatusComment("failed"),
+      body: buildReviewStatusComment('failed'),
     }).catch(() => {
-      return;
-    });
+      return
+    })
 
-    throw error;
+    throw error
   }
-};
+}

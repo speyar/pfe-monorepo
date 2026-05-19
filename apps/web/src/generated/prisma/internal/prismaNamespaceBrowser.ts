@@ -55,8 +55,10 @@ export const ModelName = {
   GithubInstallation: 'GithubInstallation',
   Repository: 'Repository',
   Review: 'Review',
+  Finding: 'Finding',
   SentryConnection: 'SentryConnection',
-  RepositorySentryProject: 'RepositorySentryProject'
+  RepositorySentryProject: 'RepositorySentryProject',
+  FixRun: 'FixRun'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -132,6 +134,24 @@ export const ReviewScalarFieldEnum = {
 export type ReviewScalarFieldEnum = (typeof ReviewScalarFieldEnum)[keyof typeof ReviewScalarFieldEnum]
 
 
+export const FindingScalarFieldEnum = {
+  id: 'id',
+  reviewId: 'reviewId',
+  severity: 'severity',
+  file: 'file',
+  line: 'line',
+  quote: 'quote',
+  title: 'title',
+  message: 'message',
+  suggestion: 'suggestion',
+  postedToGitHub: 'postedToGitHub',
+  skipReason: 'skipReason',
+  createdAt: 'createdAt'
+} as const
+
+export type FindingScalarFieldEnum = (typeof FindingScalarFieldEnum)[keyof typeof FindingScalarFieldEnum]
+
+
 export const SentryConnectionScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
@@ -159,6 +179,23 @@ export const RepositorySentryProjectScalarFieldEnum = {
 } as const
 
 export type RepositorySentryProjectScalarFieldEnum = (typeof RepositorySentryProjectScalarFieldEnum)[keyof typeof RepositorySentryProjectScalarFieldEnum]
+
+
+export const FixRunScalarFieldEnum = {
+  id: 'id',
+  issueId: 'issueId',
+  issueTitle: 'issueTitle',
+  repoId: 'repoId',
+  status: 'status',
+  prUrl: 'prUrl',
+  summary: 'summary',
+  error: 'error',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  repositoryId: 'repositoryId'
+} as const
+
+export type FixRunScalarFieldEnum = (typeof FixRunScalarFieldEnum)[keyof typeof FixRunScalarFieldEnum]
 
 
 export const SortOrder = {

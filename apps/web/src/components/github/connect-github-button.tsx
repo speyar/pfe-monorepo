@@ -1,6 +1,6 @@
-import { Button } from "../ui/button";
+import { Button } from '../ui/button'
 
-const APP_INSTALLATION_URL = process.env.APP_INSTALLATION_URL || "";
+const APP_INSTALLATION_URL = process.env.APP_INSTALLATION_URL || ''
 
 export default function ConnectGithubButton() {
   return (
@@ -9,5 +9,5 @@ export default function ConnectGithubButton() {
         Connect Repositories
       </a>
     </Button>
-  );
+  )
 }

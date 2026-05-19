@@ -43,6 +43,7 @@ model Repository {
   installation   GithubInstallation @relation(fields: [installationId], references: [installationId])
   reviews        Review[]
   sentryProject  RepositorySentryProject?
+  fixRuns        FixRun[]
 }
 
 model Review {
@@ -58,8 +59,25 @@ model Review {
   updatedAt           DateTime     @updatedAt
   repository          Repository?  @relation(fields: [repositoryId], references: [id])
   repositoryId        String?
+  findings            Finding[]
 
   @@unique([repositoryId, prNumber])
+}
+
+model Finding {
+  id             String   @id @default(cuid())
+  reviewId       String
+  review         Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  severity       String
+  file           String
+  line           Int?
+  quote          String?
+  title          String
+  message        String
+  suggestion     String?
+  postedToGitHub Boolean  @default(false)
+  skipReason     String?
+  createdAt      DateTime @default(now())
 }
 
 enum ReviewStatus {
@@ -91,4 +109,25 @@ model RepositorySentryProject {
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   repository       Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+}
+
+model FixRun {
+  id          String   @id @default(cuid())
+  issueId     String
+  issueTitle  String
+  repoId      String
+  status      FixRunStatus @default(running)
+  prUrl       String?
+  summary     String?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  repository  Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  repositoryId String
+}
+
+enum FixRunStatus {
+  running
+  success
+  failed
 }

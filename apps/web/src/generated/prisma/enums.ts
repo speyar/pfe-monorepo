@@ -16,3 +16,12 @@ export const ReviewStatus = {
 } as const
 
 export type ReviewStatus = (typeof ReviewStatus)[keyof typeof ReviewStatus]
+
+
+export const FixRunStatus = {
+  running: 'running',
+  success: 'success',
+  failed: 'failed'
+} as const
+
+export type FixRunStatus = (typeof FixRunStatus)[keyof typeof FixRunStatus]

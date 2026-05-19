@@ -388,8 +388,10 @@ export const ModelName = {
   GithubInstallation: 'GithubInstallation',
   Repository: 'Repository',
   Review: 'Review',
+  Finding: 'Finding',
   SentryConnection: 'SentryConnection',
-  RepositorySentryProject: 'RepositorySentryProject'
+  RepositorySentryProject: 'RepositorySentryProject',
+  FixRun: 'FixRun'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -405,7 +407,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "githubInstallation" | "repository" | "review" | "sentryConnection" | "repositorySentryProject"
+    modelProps: "user" | "githubInstallation" | "repository" | "review" | "finding" | "sentryConnection" | "repositorySentryProject" | "fixRun"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -705,6 +707,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    Finding: {
+      payload: Prisma.$FindingPayload<ExtArgs>
+      fields: Prisma.FindingFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.FindingFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.FindingFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload>
+        }
+        findFirst: {
+          args: Prisma.FindingFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.FindingFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload>
+        }
+        findMany: {
+          args: Prisma.FindingFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload>[]
+        }
+        create: {
+          args: Prisma.FindingCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload>
+        }
+        createMany: {
+          args: Prisma.FindingCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.FindingCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload>[]
+        }
+        delete: {
+          args: Prisma.FindingDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload>
+        }
+        update: {
+          args: Prisma.FindingUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload>
+        }
+        deleteMany: {
+          args: Prisma.FindingDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.FindingUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.FindingUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload>[]
+        }
+        upsert: {
+          args: Prisma.FindingUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FindingPayload>
+        }
+        aggregate: {
+          args: Prisma.FindingAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateFinding>
+        }
+        groupBy: {
+          args: Prisma.FindingGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FindingGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.FindingCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FindingCountAggregateOutputType> | number
+        }
+      }
+    }
     SentryConnection: {
       payload: Prisma.$SentryConnectionPayload<ExtArgs>
       fields: Prisma.SentryConnectionFieldRefs
@@ -853,6 +929,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    FixRun: {
+      payload: Prisma.$FixRunPayload<ExtArgs>
+      fields: Prisma.FixRunFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.FixRunFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.FixRunFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload>
+        }
+        findFirst: {
+          args: Prisma.FixRunFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.FixRunFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload>
+        }
+        findMany: {
+          args: Prisma.FixRunFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload>[]
+        }
+        create: {
+          args: Prisma.FixRunCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload>
+        }
+        createMany: {
+          args: Prisma.FixRunCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.FixRunCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload>[]
+        }
+        delete: {
+          args: Prisma.FixRunDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload>
+        }
+        update: {
+          args: Prisma.FixRunUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload>
+        }
+        deleteMany: {
+          args: Prisma.FixRunDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.FixRunUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.FixRunUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload>[]
+        }
+        upsert: {
+          args: Prisma.FixRunUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$FixRunPayload>
+        }
+        aggregate: {
+          args: Prisma.FixRunAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateFixRun>
+        }
+        groupBy: {
+          args: Prisma.FixRunGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FixRunGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.FixRunCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.FixRunCountAggregateOutputType> | number
+        }
+      }
+    }
   }
 } & {
   other: {
@@ -949,6 +1099,24 @@ export const ReviewScalarFieldEnum = {
 export type ReviewScalarFieldEnum = (typeof ReviewScalarFieldEnum)[keyof typeof ReviewScalarFieldEnum]
 
 
+export const FindingScalarFieldEnum = {
+  id: 'id',
+  reviewId: 'reviewId',
+  severity: 'severity',
+  file: 'file',
+  line: 'line',
+  quote: 'quote',
+  title: 'title',
+  message: 'message',
+  suggestion: 'suggestion',
+  postedToGitHub: 'postedToGitHub',
+  skipReason: 'skipReason',
+  createdAt: 'createdAt'
+} as const
+
+export type FindingScalarFieldEnum = (typeof FindingScalarFieldEnum)[keyof typeof FindingScalarFieldEnum]
+
+
 export const SentryConnectionScalarFieldEnum = {
   id: 'id',
   userId: 'userId',
@@ -976,6 +1144,23 @@ export const RepositorySentryProjectScalarFieldEnum = {
 } as const
 
 export type RepositorySentryProjectScalarFieldEnum = (typeof RepositorySentryProjectScalarFieldEnum)[keyof typeof RepositorySentryProjectScalarFieldEnum]
+
+
+export const FixRunScalarFieldEnum = {
+  id: 'id',
+  issueId: 'issueId',
+  issueTitle: 'issueTitle',
+  repoId: 'repoId',
+  status: 'status',
+  prUrl: 'prUrl',
+  summary: 'summary',
+  error: 'error',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+  repositoryId: 'repositoryId'
+} as const
+
+export type FixRunScalarFieldEnum = (typeof FixRunScalarFieldEnum)[keyof typeof FixRunScalarFieldEnum]
 
 
 export const SortOrder = {
@@ -1068,6 +1253,20 @@ export type EnumReviewStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$Pri
  * Reference to a field of type 'ReviewStatus[]'
  */
 export type ListEnumReviewStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ReviewStatus[]'>
+    
+
+
+/**
+ * Reference to a field of type 'FixRunStatus'
+ */
+export type EnumFixRunStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'FixRunStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'FixRunStatus[]'
+ */
+export type ListEnumFixRunStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'FixRunStatus[]'>
     
 
 
@@ -1183,8 +1382,10 @@ export type GlobalOmitConfig = {
   githubInstallation?: Prisma.GithubInstallationOmit
   repository?: Prisma.RepositoryOmit
   review?: Prisma.ReviewOmit
+  finding?: Prisma.FindingOmit
   sentryConnection?: Prisma.SentryConnectionOmit
   repositorySentryProject?: Prisma.RepositorySentryProjectOmit
+  fixRun?: Prisma.FixRunOmit
 }
 
 /* Types for Logging */

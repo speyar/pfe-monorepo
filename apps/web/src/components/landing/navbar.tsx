@@ -1,12 +1,12 @@
-"use client";
+'use client'
 
-import { UserButton, useUser } from "@clerk/nextjs";
-import Link from "next/link";
-import { Button } from "../ui/button";
-import ConnectGithubButton from "../github/connect-github-button";
+import { UserButton, useUser } from '@clerk/nextjs'
+import Link from 'next/link'
+import { Button } from '../ui/button'
+import ConnectGithubButton from '../github/connect-github-button'
 
 export function Navbar() {
-  const { user } = useUser();
+  const { user } = useUser()
   return (
     <header className="w-full border-b ">
       <div className="flex items-center justify-between py-4 container mx-auto">
@@ -31,5 +31,5 @@ export function Navbar() {
         </nav>
       </div>
     </header>
-  );
+  )
 }

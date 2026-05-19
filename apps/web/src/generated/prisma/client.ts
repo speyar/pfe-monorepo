@@ -62,6 +62,11 @@ export type Repository = Prisma.RepositoryModel
  */
 export type Review = Prisma.ReviewModel
 /**
+ * Model Finding
+ * 
+ */
+export type Finding = Prisma.FindingModel
+/**
  * Model SentryConnection
  * 
  */
@@ -71,3 +76,8 @@ export type SentryConnection = Prisma.SentryConnectionModel
  * 
  */
 export type RepositorySentryProject = Prisma.RepositorySentryProjectModel
+/**
+ * Model FixRun
+ * 
+ */
+export type FixRun = Prisma.FixRunModel

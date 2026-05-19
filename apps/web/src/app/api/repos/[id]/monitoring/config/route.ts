@@ -1,17 +1,14 @@
-import { requireCurrentUser } from "@/lib/current-user";
-import prisma from "@/lib/db";
-import { toAppError } from "@/lib/error";
-import { getOwnedRepository, parseRepoId } from "../helpers";
+import { requireCurrentUser } from '@/lib/current-user'
+import prisma from '@/lib/db'
+import { toAppError } from '@/lib/error'
+import { getOwnedRepository, parseRepoId } from '../helpers'
 
-export async function GET(
-  _: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireCurrentUser();
-    const { id } = await params;
-    const repoId = parseRepoId(id);
-    const repository = await getOwnedRepository({ repoId, userId: user.id });
+    const user = await requireCurrentUser()
+    const { id } = await params
+    const repoId = parseRepoId(id)
+    const repository = await getOwnedRepository({ repoId, userId: user.id })
 
     const mapping = await prisma.repositorySentryProject.findUnique({
       where: {
@@ -24,7 +21,7 @@ export async function GET(
         enabled: true,
         updatedAt: true,
       },
-    });
+    })
 
     return Response.json(
       {
@@ -38,13 +35,13 @@ export async function GET(
         },
       },
       { status: 200 },
-    );
+    )
   } catch (error) {
     const appError = toAppError(error, {
-      message: "Failed to load repository monitoring config",
-      code: "INTERNAL_ERROR",
+      message: 'Failed to load repository monitoring config',
+      code: 'INTERNAL_ERROR',
       statusCode: 500,
-    });
+    })
 
     return Response.json(
       {
@@ -52,6 +49,6 @@ export async function GET(
         code: appError.code,
       },
       { status: appError.statusCode },
-    );
+    )
   }
 }
