@@ -2,9 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useUser } from '@clerk/nextjs'
+import { useUser, SignOutButton } from '@clerk/nextjs'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, GitBranch, GitPullRequest, Bug, Settings, Search } from 'lucide-react'
+import { LayoutDashboard, GitBranch, GitPullRequest, Bug, Settings, LogOut } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import Image from 'next/image'
 
@@ -44,16 +44,6 @@ export function Sidebar() {
         <Image src="/logo.png" alt="Logo" width={150} height={32} />
       </div>
 
-      <div className="px-2 pt-2">
-        <div className="flex items-center gap-2 rounded-md bg-foreground/[0.04] px-2.5 text-sm">
-          <Search className="size-3.5 shrink-0 text-muted-foreground" />
-          <input
-            placeholder="Search..."
-            className="w-full bg-transparent py-1.5 text-foreground placeholder-muted-foreground outline-none"
-          />
-        </div>
-      </div>
-
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
         {navItems.slice(0, 4).map((item) => (
           <NavItem key={item.href} item={item} pathname={pathname} />
@@ -64,15 +54,23 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="mt-auto px-4 py-3">
-        <div className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground">
-          <Avatar className="size-6">
-            <AvatarImage src={user?.imageUrl} />
-            <AvatarFallback className="text-[10px]">
-              {user?.firstName?.charAt(0) || 'U'}
-            </AvatarFallback>
-          </Avatar>
-          <span className="truncate">{user?.firstName || 'User'}</span>
+      <div className="mt-auto border-t px-4 py-3">
+        <div className="flex items-center justify-between rounded-lg px-3 py-2 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Avatar className="size-6 shrink-0">
+              <AvatarImage src={user?.imageUrl} />
+              <AvatarFallback className="text-[10px]">
+                {user?.firstName?.charAt(0) || 'U'}
+              </AvatarFallback>
+            </Avatar>
+            <span className="truncate">{user?.firstName || 'User'}</span>
+          </div>
+          <SignOutButton>
+            <button className="flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:text-foreground hover:bg-foreground/5 transition-colors">
+              <LogOut className="size-3.5" />
+              Logout
+            </button>
+          </SignOutButton>
         </div>
       </div>
     </aside>

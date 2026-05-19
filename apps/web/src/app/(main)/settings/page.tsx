@@ -1,10 +1,8 @@
 'use client'
 
-import { useUser } from '@clerk/nextjs'
+import { UserProfile } from '@clerk/nextjs'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Github, Bug, CheckCircle, XCircle, ExternalLink } from 'lucide-react'
 import useSWR from 'swr'
@@ -18,7 +16,6 @@ function IntegrationCardSkeleton() {
 }
 
 export default function SettingsPage() {
-  const { user } = useUser()
   const { data: reposData, isLoading: reposLoading } = useSWR<ReposResponse>(
     '/api/repos',
     fetcher,
@@ -37,27 +34,7 @@ export default function SettingsPage() {
         <p className="text-sm text-muted-foreground">Manage your account and connections</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>Your account information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-1.5">
-            <Label htmlFor="name">Full Name</Label>
-            <Input id="name" defaultValue={user?.fullName ?? ''} />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              defaultValue={user?.primaryEmailAddress?.emailAddress ?? ''}
-            />
-          </div>
-          <Button>Save Changes</Button>
-        </CardContent>
-      </Card>
+      <UserProfile />
 
       <Card>
         <CardHeader>
@@ -94,10 +71,16 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground mb-2">
                 GitHub App not installed. Install to enable AI code reviews.
               </p>
-              <Button variant="default" size="sm">
-                Install GitHub App
-                <ExternalLink className="size-3 ml-1" />
-              </Button>
+              <a
+                href={process.env.NEXT_PUBLIC_APP_INSTALLATION_URL || '#'}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Button variant="default" size="sm">
+                  Install GitHub App
+                  <ExternalLink className="size-3 ml-1" />
+                </Button>
+              </a>
             </div>
           )}
 

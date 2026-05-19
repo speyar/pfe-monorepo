@@ -8,23 +8,33 @@ import RepositoryRow from './repository-row'
 import ReposLoading from './repos-loading'
 import EmptyState from '@/components/shared/empty-state'
 import ErrorCard from '@/components/error/error-card'
+import Pagination from '@/components/filters/pagination'
 import { FolderGit2, Search, X, LayoutGrid, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const APP_INSTALLATION_URL = process.env.NEXT_PUBLIC_APP_INSTALLATION_URL || ''
 
 export default function RepositoriesList() {
-  const { page, limit } = useReposFilters()
+  const { page, limit, setPage } = useReposFilters()
   const { data, isLoading, error } = useRepos(page, limit)
   const [search, setSearch] = useState('')
   const [view, setView] = useState<'grid' | 'list'>('grid')
+  const [visibility, setVisibility] = useState<'all' | 'public' | 'private'>('all')
 
   const filtered = useMemo(() => {
     const items = data?.data ?? []
-    if (!search.trim()) return items
-    const q = search.toLowerCase()
-    return items.filter((r) => r.full_name.toLowerCase().includes(q))
-  }, [data?.data, search])
+    let result = items
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter((r) => r.full_name.toLowerCase().includes(q))
+    }
+    if (visibility === 'public') {
+      result = result.filter((r) => !r.private)
+    } else if (visibility === 'private') {
+      result = result.filter((r) => r.private)
+    }
+    return result
+  }, [data?.data, search, visibility])
 
   if (error) {
     return <ErrorCard title="Unable to load repositories" />
@@ -73,9 +83,32 @@ export default function RepositoriesList() {
           )}
         </div>
 
-        <Button variant="default" size="lg" onClick={() => window.open(APP_INSTALLATION_URL, '_blank')}>
-          + New Repository
-        </Button>
+        <div className="flex items-center rounded-md border p-0.5 shrink-0">
+          <button
+            onClick={() => setVisibility('all')}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${visibility === 'all' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setVisibility('public')}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${visibility === 'public' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Public
+          </button>
+          <button
+            onClick={() => setVisibility('private')}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-colors ${visibility === 'private' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            Private
+          </button>
+        </div>
+
+        <a href={APP_INSTALLATION_URL} target="_blank" rel="noreferrer">
+          <Button variant="default" size="lg">
+            + New Repository
+          </Button>
+        </a>
 
         <div className="flex items-center rounded-md border p-0.5">
           <button
@@ -125,6 +158,9 @@ export default function RepositoriesList() {
                 <RepositoryRow key={repository.id} repository={repository} />
               ))}
             </div>
+          )}
+          {data.totalPages > 1 && (
+            <Pagination page={page} setPage={setPage} totalPages={data.totalPages} />
           )}
         </>
       )}

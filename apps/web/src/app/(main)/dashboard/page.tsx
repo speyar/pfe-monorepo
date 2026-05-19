@@ -6,11 +6,11 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
+import { timeAgo } from '@/lib/time-ago'
 import {
   GitBranch,
   MessageSquare,
   Bug,
-  RefreshCw,
   ChevronRight,
   GitPullRequest,
   CheckCircle,
@@ -200,17 +200,7 @@ function ActivityFeed({
   )
 }
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString()
-}
+
 
 export default function DashboardPage() {
   const { data, error, isLoading, mutate } = useDashboard()
@@ -222,10 +212,6 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold">Dashboard</h2>
           <p className="text-sm text-muted-foreground">Overview of your workspace</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => mutate()} disabled={isLoading}>
-          <RefreshCw className={`size-3 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
       </div>
 
       {error ? (

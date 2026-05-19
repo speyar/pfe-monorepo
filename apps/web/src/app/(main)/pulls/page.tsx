@@ -1,11 +1,16 @@
 'use client'
 
+import { useState } from 'react'
 import { usePulls } from '@/data/pulls/use-pulls'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useRouter } from 'next/navigation'
+import { timeAgo } from '@/lib/time-ago'
+import Pagination from '@/components/filters/pagination'
 import { GitPullRequest, XCircle, ExternalLink } from 'lucide-react'
+
+const PER_PAGE = 10
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'destructive' | 'secondary' }> = {
   completed: { label: 'Pass', variant: 'default' },
@@ -13,21 +18,13 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'destru
   pending: { label: 'Pending', variant: 'secondary' },
 }
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString()
-}
-
 export default function PullsPage() {
   const { data, error, isLoading } = usePulls()
   const router = useRouter()
+  const [page, setPage] = useState(1)
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / PER_PAGE)) : 1
+  const pagedData = data?.data.slice(0, page * PER_PAGE) ?? []
 
   if (error) {
     return (
@@ -69,42 +66,47 @@ export default function PullsPage() {
             <p className="text-sm text-muted-foreground">No pull requests reviewed yet</p>
           </div>
         ) : (
-          <div className="divide-y">
-            {data.data.map((pr) => (
-              <div
-                key={`${pr.repoName}/${pr.prNumber}`}
-                onClick={() => router.push(`/pulls/${pr.id}`)}
-                className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-foreground/[0.02] transition-colors"
-              >
-                <Badge
-                  variant={statusConfig[pr.status]?.variant ?? 'secondary'}
-                  className="w-14 shrink-0 justify-center text-[10px] capitalize"
+          <>
+            <div className="divide-y">
+              {pagedData.map((pr) => (
+                <div
+                  key={`${pr.repoName}/${pr.prNumber}`}
+                  onClick={() => router.push(`/pulls/${pr.id}`)}
+                  className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-foreground/[0.02] transition-colors"
                 >
-                  {statusConfig[pr.status]?.label ?? pr.status}
-                </Badge>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-medium">{pr.prTitle}</p>
-                    <a
-                      href={pr.prUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="shrink-0 text-muted-foreground hover:text-foreground"
-                    >
-                      <ExternalLink className="size-3" />
-                    </a>
+                  <Badge
+                    variant={statusConfig[pr.status]?.variant ?? 'secondary'}
+                    className="w-14 shrink-0 justify-center text-[10px] capitalize"
+                  >
+                    {statusConfig[pr.status]?.label ?? pr.status}
+                  </Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium">{pr.prTitle}</p>
+                      <a
+                        href={pr.prUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                      >
+                        <ExternalLink className="size-3" />
+                      </a>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {pr.repoName} #{pr.prNumber}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {pr.repoName} #{pr.prNumber}
-                  </p>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {timeAgo(pr.createdAt)}
+                  </span>
                 </div>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {timeAgo(pr.createdAt)}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <Pagination page={page} setPage={setPage} totalPages={totalPages} />
+            )}
+          </>
         )}
       </CardContent>
     </Card>

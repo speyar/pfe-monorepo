@@ -3,6 +3,7 @@
 import { useParams, useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import fetcher from '@/lib/fetcher'
+import { timeAgo } from '@/lib/time-ago'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -49,18 +50,6 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'destru
   completed: { label: 'Pass', variant: 'default' },
   failed: { label: 'Fail', variant: 'destructive' },
   pending: { label: 'Pending', variant: 'secondary' },
-}
-
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d ago`
-  return new Date(iso).toLocaleDateString()
 }
 
 export default function RepoDetailPage() {

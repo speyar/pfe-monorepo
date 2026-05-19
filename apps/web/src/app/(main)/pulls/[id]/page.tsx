@@ -1,8 +1,10 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useRef, useMemo } from 'react'
 import useSWR from 'swr'
 import fetcher from '@/lib/fetcher'
+import { timeAgo } from '@/lib/time-ago'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,6 +12,20 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, ExternalLink, GitPullRequest, CheckCircle2, AlertTriangle, FileCode, Code2 } from 'lucide-react'
 import type { AppError } from '@/lib/error'
 import { cn } from '@/lib/utils'
+
+const statusConfig: Record<string, { label: string; variant: 'default' | 'destructive' | 'secondary' }> = {
+  completed: { label: 'Pass', variant: 'default' },
+  failed: { label: 'Fail', variant: 'destructive' },
+  pending: { label: 'Pending', variant: 'secondary' },
+}
+
+const severityConfig: Record<string, { label: string; color: string; border: string }> = {
+  critical: { label: 'Critical', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400', border: 'border-l-red-500' },
+  high: { label: 'High', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', border: 'border-l-orange-500' },
+  medium: { label: 'Medium', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400', border: 'border-l-yellow-500' },
+  low: { label: 'Low', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400', border: 'border-l-gray-400' },
+  info: { label: 'Info', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', border: 'border-l-blue-500' },
+}
 
 type FindingDetail = {
   id: string
@@ -38,28 +54,92 @@ type ReviewDetail = {
   updatedAt: string
 }
 
-const statusConfig: Record<string, { label: string; variant: 'default' | 'destructive' | 'secondary' }> = {
-  completed: { label: 'Pass', variant: 'default' },
-  failed: { label: 'Fail', variant: 'destructive' },
-  pending: { label: 'Pending', variant: 'secondary' },
-}
+function MarkdownRenderer({ content }: { content: string }) {
+  const ref = useRef<HTMLDivElement>(null)
 
-const severityConfig: Record<string, { label: string; color: string; border: string }> = {
-  critical: { label: 'Critical', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400', border: 'border-l-red-500' },
-  high: { label: 'High', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', border: 'border-l-orange-500' },
-  medium: { label: 'Medium', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400', border: 'border-l-yellow-500' },
-  low: { label: 'Low', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400', border: 'border-l-gray-400' },
-  info: { label: 'Info', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', border: 'border-l-blue-500' },
-}
+  const html = useMemo(() => {
+    let result = content
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return new Date(iso).toLocaleDateString()
+    result = result.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+      const langAttr = lang ? ` class="language-${lang}"` : ''
+      return `<pre><code${langAttr}>${code.trim()}</code></pre>`
+    })
+
+    result = result.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+
+    result = result.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    result = result.replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    result = result.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+
+    result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    result = result.replace(/\*(.+?)\*/g, '<em>$1</em>')
+
+    result = result.replace(/^- (.+)$/gm, '<li>$1</li>')
+    result = result.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+
+    const blocks: string[] = []
+    let current = ''
+    let inPre = false
+    for (const line of result.split('\n')) {
+      if (line.startsWith('<pre')) { inPre = true; blocks.push(current.trim()); current = line + '\n'; continue }
+      if (inPre) { current += line + '\n'; if (line.startsWith('</pre>')) { inPre = false; blocks.push(current.trim()); current = '' }; continue }
+      if (line.trim() === '') { if (current.trim()) blocks.push(current.trim()); current = ''; continue }
+      current += (current ? ' ' : '') + line.trim()
+    }
+    if (current.trim()) blocks.push(current.trim())
+
+    result = blocks.map(b => {
+      if (b.startsWith('<h') || b.startsWith('<ul') || b.startsWith('<pre')) return b
+      return `<p>${b}</p>`
+    }).join('\n')
+
+    return result
+  }, [content])
+
+  useEffect(() => {
+    const linkId = 'hljs-theme'
+    if (!document.getElementById(linkId)) {
+      const link = document.createElement('link')
+      link.id = linkId
+      link.rel = 'stylesheet'
+      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css'
+      document.head.appendChild(link)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (ref.current) {
+      const hljs = (window as any).hljs
+      if (hljs) {
+        ref.current.querySelectorAll('pre code').forEach((block) => {
+          hljs.highlightElement(block)
+        })
+      } else {
+        const script = document.createElement('script')
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js'
+        script.onload = () => {
+          const hljs = (window as any).hljs
+          if (hljs && ref.current) {
+            ref.current.querySelectorAll('pre code').forEach((block) => {
+              hljs.highlightElement(block)
+            })
+          }
+        }
+        document.body.appendChild(script)
+      }
+    }
+  }, [html])
+
+  return (
+    <div
+      ref={ref}
+      className="prose prose-sm max-w-none text-sm leading-relaxed"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
@@ -205,9 +285,7 @@ export default function PullDetailPage() {
                   ))}
                 </div>
               ) : data.review ? (
-                <div className="prose prose-sm max-w-none whitespace-pre-wrap font-mono text-sm leading-relaxed">
-                  {data.review}
-                </div>
+                <MarkdownRenderer content={data.review} />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   No detailed review findings available for this pull request.
