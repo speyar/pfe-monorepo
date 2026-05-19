@@ -4,15 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 import { cn } from '@/lib/utils'
-import {
-  LayoutDashboard,
-  GitBranch,
-  GitPullRequest,
-  Bug,
-  Settings,
-  Search,
-} from 'lucide-react'
+import { LayoutDashboard, GitBranch, GitPullRequest, Bug, Settings, Search } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import Image from 'next/image'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -22,13 +16,7 @@ const navItems = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 
-function NavItem({
-  item,
-  pathname,
-}: {
-  item: (typeof navItems)[number]
-  pathname: string
-}) {
+function NavItem({ item, pathname }: { item: (typeof navItems)[number]; pathname: string }) {
   const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
   return (
     <Link
@@ -53,10 +41,7 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-full w-56 flex-col border-r lg:flex">
       <div className="flex h-12 items-center gap-2 border-b px-4">
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
-          F
-        </div>
-        <span className="text-sm font-semibold">Falcon</span>
+        <Image src="/logo.png" alt="Logo" width={150} height={32} />
       </div>
 
       <div className="px-2 pt-2">
