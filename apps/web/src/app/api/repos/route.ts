@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     const user = await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } })
     if (!user) {
-      return Response.json({ error: 'User not found in DB', code: 'NOT_FOUND' }, { status: 404 })
+      return Response.json({ data: [], page: 1, totalPages: 0, total: 0 })
     }
 
     const whereClause = { installation: { clerkUserId: user.id } }

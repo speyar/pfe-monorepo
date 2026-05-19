@@ -54,82 +54,99 @@ type ReviewDetail = {
   updatedAt: string
 }
 
-function MarkdownRenderer({ content }: { content: string }) {
-  const ref = useRef<HTMLDivElement>(null)
+function highlightBlocks(root: HTMLElement) {
+  const hljs = (window as any).hljs
+  if (!hljs) return
+  root.querySelectorAll('pre code').forEach((block) => {
+    hljs.highlightElement(block)
+  })
+}
 
-  const html = useMemo(() => {
-    let result = content
+function loadHighlightJs(onLoad: () => void) {
+  const id = 'hljs-script'
+  if (document.getElementById(id)) { onLoad(); return }
+  if ((window as any).hljs) { onLoad(); return }
+  const script = document.createElement('script')
+  script.id = id
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js'
+  script.onload = onLoad
+  document.head.appendChild(script)
+}
+
+function loadHighlightTheme() {
+  const id = 'hljs-theme'
+  if (document.getElementById(id)) return
+  const link = document.createElement('link')
+  link.id = id
+  link.rel = 'stylesheet'
+  link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css'
+  document.head.appendChild(link)
+}
+
+function mdToHtml(content: string): string {
+  const blocks: string[] = []
+  let rest = content
+  const codeBlockRe = /```(\w*)\n([\s\S]*?)```/
+
+  while (rest.length > 0) {
+    const match = codeBlockRe.exec(rest)
+    if (!match) break
+    blocks.push(rest.slice(0, match.index))
+    const lang = match[1]
+    const code = match[2]
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+    const langAttr = lang ? ` class="language-${lang}"` : ''
+    blocks.push(`<pre><code${langAttr}>${code}</code></pre>`)
+    rest = rest.slice(match.index + match[0].length)
+  }
+  blocks.push(rest)
+
+  return blocks.map((block, i) => {
+    if (i % 2 === 1) return block
+    let text = block
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
 
-    result = result.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-      const langAttr = lang ? ` class="language-${lang}"` : ''
-      return `<pre><code${langAttr}>${code.trim()}</code></pre>`
-    })
+    text = text.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+    text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    text = text.replace(/\*(.+?)\*/g, '<em>$1</em>')
+    text = text.replace(/^- (.+)$/gm, '<li>$1</li>')
+    text = text.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
 
-    result = result.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-
-    result = result.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    result = result.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    result = result.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-
-    result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    result = result.replace(/\*(.+?)\*/g, '<em>$1</em>')
-
-    result = result.replace(/^- (.+)$/gm, '<li>$1</li>')
-    result = result.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-
-    const blocks: string[] = []
+    const lines = text.split('\n')
+    const paragraphs: string[] = []
     let current = ''
-    let inPre = false
-    for (const line of result.split('\n')) {
-      if (line.startsWith('<pre')) { inPre = true; blocks.push(current.trim()); current = line + '\n'; continue }
-      if (inPre) { current += line + '\n'; if (line.startsWith('</pre>')) { inPre = false; blocks.push(current.trim()); current = '' }; continue }
-      if (line.trim() === '') { if (current.trim()) blocks.push(current.trim()); current = ''; continue }
-      current += (current ? ' ' : '') + line.trim()
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) { if (current) { paragraphs.push(current); current = '' }; continue }
+      if (trimmed.startsWith('<h') || trimmed.startsWith('<ul')) { if (current) paragraphs.push(current); paragraphs.push(trimmed); current = ''; continue }
+      current += (current ? ' ' : '') + trimmed
     }
-    if (current.trim()) blocks.push(current.trim())
+    if (current) paragraphs.push(current)
 
-    result = blocks.map(b => {
-      if (b.startsWith('<h') || b.startsWith('<ul') || b.startsWith('<pre')) return b
-      return `<p>${b}</p>`
+    return paragraphs.map(p => {
+      if (p.startsWith('<h') || p.startsWith('<ul')) return p
+      return `<p>${p}</p>`
     }).join('\n')
+  }).join('\n')
+}
 
-    return result
-  }, [content])
+function MarkdownRenderer({ content }: { content: string }) {
+  const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    const linkId = 'hljs-theme'
-    if (!document.getElementById(linkId)) {
-      const link = document.createElement('link')
-      link.id = linkId
-      link.rel = 'stylesheet'
-      link.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css'
-      document.head.appendChild(link)
-    }
-  }, [])
+  const html = useMemo(() => mdToHtml(content), [content])
+
+  useEffect(() => { loadHighlightTheme() }, [])
 
   useEffect(() => {
     if (ref.current) {
-      const hljs = (window as any).hljs
-      if (hljs) {
-        ref.current.querySelectorAll('pre code').forEach((block) => {
-          hljs.highlightElement(block)
-        })
-      } else {
-        const script = document.createElement('script')
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js'
-        script.onload = () => {
-          const hljs = (window as any).hljs
-          if (hljs && ref.current) {
-            ref.current.querySelectorAll('pre code').forEach((block) => {
-              hljs.highlightElement(block)
-            })
-          }
-        }
-        document.body.appendChild(script)
-      }
+      loadHighlightJs(() => highlightBlocks(ref.current!))
     }
   }, [html])
 
@@ -152,13 +169,21 @@ function SeverityBadge({ severity }: { severity: string }) {
 }
 
 function SuggestionBlock({ code }: { code: string }) {
+  const ref = useRef<HTMLPreElement>(null)
+
+  useEffect(() => {
+    if (ref.current) {
+      loadHighlightJs(() => highlightBlocks(ref.current!.parentElement!))
+    }
+  }, [])
+
   return (
     <div className="mt-2 overflow-hidden rounded-lg border">
       <div className="flex items-center gap-1.5 border-b bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
         <Code2 className="size-3" />
         Suggestion
       </div>
-      <pre className="overflow-x-auto bg-[#0d1117] p-3 text-xs text-[#e6edf3]"><code>{code}</code></pre>
+      <pre ref={ref} className="overflow-x-auto bg-[#0d1117] p-3 text-xs text-[#e6edf3]"><code>{code}</code></pre>
     </div>
   )
 }
@@ -196,7 +221,9 @@ function FindingCard({ finding }: { finding: FindingDetail }) {
       {finding.title && (
         <p className="mt-2 text-sm font-medium">{finding.title}</p>
       )}
-      <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">{finding.message}</p>
+      <div className="mt-1 text-sm text-muted-foreground">
+        <MarkdownRenderer content={finding.message} />
+      </div>
       {finding.suggestion && <SuggestionBlock code={finding.suggestion} />}
       {!finding.postedToGitHub && finding.skipReason && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">

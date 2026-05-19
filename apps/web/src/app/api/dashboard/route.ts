@@ -17,7 +17,12 @@ export async function GET() {
       select: { id: true },
     })
     if (!user) {
-      return Response.json({ error: 'User not found', code: 'NOT_FOUND' }, { status: 404 })
+      return Response.json({
+        reposCount: 0, totalReviews: 0, failedReviews: 0, pendingReviews: 0,
+        reviewSuccessRate: 0, reviewsThisWeek: 0, activeMonitors: 0,
+        reposWithMonitoring: 0, reposWithoutMonitoring: 0,
+        recentReviews: [], recentActivity: [],
+      })
     }
 
     const whereClause = {

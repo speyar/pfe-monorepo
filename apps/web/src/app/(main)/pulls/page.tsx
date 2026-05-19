@@ -1,16 +1,18 @@
 'use client'
 
+'use client'
+
 import { useState } from 'react'
 import { usePulls } from '@/data/pulls/use-pulls'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 import { useRouter } from 'next/navigation'
 import { timeAgo } from '@/lib/time-ago'
-import Pagination from '@/components/filters/pagination'
-import { GitPullRequest, XCircle, ExternalLink } from 'lucide-react'
+import { GitPullRequest, XCircle, ExternalLink, ChevronDown } from 'lucide-react'
 
-const PER_PAGE = 10
+const PAGE_SIZE = 10
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'destructive' | 'secondary' }> = {
   completed: { label: 'Pass', variant: 'default' },
@@ -21,10 +23,10 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'destru
 export default function PullsPage() {
   const { data, error, isLoading } = usePulls()
   const router = useRouter()
-  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(PAGE_SIZE)
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / PER_PAGE)) : 1
-  const pagedData = data?.data.slice(0, page * PER_PAGE) ?? []
+  const visible = data?.data.slice(0, limit) ?? []
+  const hasMore = data ? limit < data.total : false
 
   if (error) {
     return (
@@ -68,7 +70,7 @@ export default function PullsPage() {
         ) : (
           <>
             <div className="divide-y">
-              {pagedData.map((pr) => (
+              {visible.map((pr) => (
                 <div
                   key={`${pr.repoName}/${pr.prNumber}`}
                   onClick={() => router.push(`/pulls/${pr.id}`)}
@@ -103,8 +105,13 @@ export default function PullsPage() {
                 </div>
               ))}
             </div>
-            {totalPages > 1 && (
-              <Pagination page={page} setPage={setPage} totalPages={totalPages} />
+            {hasMore && (
+              <div className="flex justify-center border-t px-4 py-3">
+                <Button variant="ghost" size="sm" onClick={() => setLimit(l => l + PAGE_SIZE)} className="gap-1 text-muted-foreground">
+                  View more
+                  <ChevronDown className="size-3" />
+                </Button>
+              </div>
             )}
           </>
         )}
