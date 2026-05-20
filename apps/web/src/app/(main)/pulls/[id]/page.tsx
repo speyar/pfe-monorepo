@@ -164,7 +164,7 @@ function FindingCard({ finding }: { finding: FindingDetail }) {
   const Icon = cfg.icon
 
   return (
-    <div className={cn('rounded-lg border border-l-4 bg-card py-3 pl-3 pr-4', cfg.border)}>
+    <div className={cn('rounded-lg border border-l-4 bg-card shadow-sm py-3 pl-3 pr-4', cfg.border)}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           <SeverityBadge severity={finding.severity} />
@@ -262,7 +262,7 @@ function FindingsBySeverity({ findings }: { findings: FindingDetail[] }) {
               <span className="text-sm font-semibold">{cfg.label}</span>
               <span className="text-xs text-muted-foreground">({items.length})</span>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-4">
               {items.map((f) => (
                 <FindingCard key={f.id} finding={f} />
               ))}
@@ -392,7 +392,7 @@ export default function PullDetailPage() {
                 <>
                   <FindingsSummaryBar findings={data.findings} />
                   <Separator />
-                  <Tabs defaultValue="all">
+                  <Tabs defaultValue="severity">
                     <TabsList>
                       <TabsTrigger value="all">
                         All <span className="text-xs text-muted-foreground">({data.findings.length})</span>
@@ -406,7 +406,7 @@ export default function PullDetailPage() {
                     </TabsList>
                     <Separator className="my-3" />
                     <TabsContent value="all">
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         {data.findings.map((finding) => (
                           <FindingCard key={finding.id} finding={finding} />
                         ))}
@@ -421,7 +421,9 @@ export default function PullDetailPage() {
                   </Tabs>
                 </>
               ) : data.review ? (
-                <MarkdownRenderer content={data.review} />
+                <div className="rounded-lg border bg-card p-4">
+                  <MarkdownRenderer content={data.review} />
+                </div>
               ) : (
                 <div className="flex flex-col items-center gap-2 py-8 text-center">
                   <CheckCircle2 className="size-8 text-green-500/50" />
