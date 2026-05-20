@@ -104,48 +104,10 @@ function MarkdownRenderer({ content, className }: { content: string; className?:
   )
 }
 
-function ReviewSections({ review }: { review: string }) {
-  const cards = useMemo(() => {
-    const blocks: { title?: string; content: string; severity?: string }[] = []
-
-    const findingsMatch = review.match(/### Findings\n([\s\S]*?)(?=\n### |$)/)
-    const summaryText = findingsMatch ? review.replace(findingsMatch[0], '').trim() : review
-
-    if (summaryText) {
-      blocks.push({ title: 'Review Summary', content: summaryText })
-    }
-
-    if (findingsMatch) {
-      const raw = findingsMatch[1].trim()
-      const items = raw.split(/\n\n+/).map((s) => s.trim()).filter(Boolean)
-      for (const item of items) {
-        const titleMatch = item.match(/^\*\*(.+?)\*\*[:.]?/)
-        blocks.push({
-          title: titleMatch?.[1] || undefined,
-          content: item,
-          severity: 'info',
-        })
-      }
-    }
-
-    const notesMatch = review.match(/### Notes\n([\s\S]*?)$/)
-    if (notesMatch) {
-      blocks.push({ title: 'Notes', content: notesMatch[1].trim() })
-    }
-
-    return blocks
-  }, [review])
-
+function ReviewFallback({ review }: { review: string }) {
   return (
-    <div className="space-y-4">
-      {cards.map((card, i) => (
-        <div key={i} className="rounded-lg border bg-card p-4">
-          {card.title && (
-            <h4 className="mb-2 text-sm font-semibold">{card.title}</h4>
-          )}
-          <MarkdownRenderer content={card.content} />
-        </div>
-      ))}
+    <div className="rounded-lg border bg-card p-4">
+      <MarkdownRenderer content={review} />
     </div>
   )
 }
@@ -468,7 +430,7 @@ export default function PullDetailPage() {
                   </Tabs>
                 </>
               ) : data.review ? (
-                <ReviewSections review={data.review} />
+                <ReviewFallback review={data.review} />
               ) : (
                 <div className="flex flex-col items-center gap-2 py-8 text-center">
                   <CheckCircle2 className="size-8 text-green-500/50" />
