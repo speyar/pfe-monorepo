@@ -105,31 +105,47 @@ function MarkdownRenderer({ content, className }: { content: string; className?:
 }
 
 function ReviewSections({ review }: { review: string }) {
-  const sections = useMemo(() => {
-    const parts = review.split(/(?=^## )/m)
-    return parts.map((part) => part.trim()).filter(Boolean)
+  const cards = useMemo(() => {
+    const blocks: { title?: string; content: string; severity?: string }[] = []
+
+    const findingsMatch = review.match(/### Findings\n([\s\S]*?)(?=\n### |$)/)
+    const summaryText = findingsMatch ? review.replace(findingsMatch[0], '').trim() : review
+
+    if (summaryText) {
+      blocks.push({ title: 'Review Summary', content: summaryText })
+    }
+
+    if (findingsMatch) {
+      const raw = findingsMatch[1].trim()
+      const items = raw.split(/\n\n+/).map((s) => s.trim()).filter(Boolean)
+      for (const item of items) {
+        const titleMatch = item.match(/^\*\*(.+?)\*\*[:.]?/)
+        blocks.push({
+          title: titleMatch?.[1] || undefined,
+          content: item,
+          severity: 'info',
+        })
+      }
+    }
+
+    const notesMatch = review.match(/### Notes\n([\s\S]*?)$/)
+    if (notesMatch) {
+      blocks.push({ title: 'Notes', content: notesMatch[1].trim() })
+    }
+
+    return blocks
   }, [review])
 
   return (
     <div className="space-y-4">
-      {sections.map((section, i) => {
-        const titleMatch = section.match(/^## (.+)$/m)
-        const title = titleMatch?.[1] || (i === 0 ? 'Review Summary' : `Section ${i + 1}`)
-        const body = section.replace(/^## .+(\n|$)/, '').trim()
-
-        return (
-          <div key={i} className="rounded-lg border bg-card p-4">
-            {i === 0 && title === 'Automated PR Review' ? (
-              <MarkdownRenderer content={section} />
-            ) : (
-              <>
-                <h4 className="mb-2 text-sm font-semibold">{title}</h4>
-                <MarkdownRenderer content={body} />
-              </>
-            )}
-          </div>
-        )
-      })}
+      {cards.map((card, i) => (
+        <div key={i} className="rounded-lg border bg-card p-4">
+          {card.title && (
+            <h4 className="mb-2 text-sm font-semibold">{card.title}</h4>
+          )}
+          <MarkdownRenderer content={card.content} />
+        </div>
+      ))}
     </div>
   )
 }
