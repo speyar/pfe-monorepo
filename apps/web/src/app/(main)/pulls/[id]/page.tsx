@@ -84,8 +84,7 @@ type ReviewDetail = {
   updatedAt: string
 }
 
-function MarkdownRenderer({ content }: { content: string }) {
-  const ref = useRef<HTMLDivElement>(null)
+function MarkdownRenderer({ content, className }: { content: string; className?: string }) {
   const html = useMemo(() => {
     try {
       return marked.parse(content) as string
@@ -96,10 +95,42 @@ function MarkdownRenderer({ content }: { content: string }) {
 
   return (
     <div
-      ref={ref}
-      className="prose prose-sm max-w-none text-sm leading-relaxed [&_pre]:rounded-lg [&_pre]:bg-[#0d1117] [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_code]:font-normal [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-xs [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-1.5 [&_td]:text-xs [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground/30 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_input[type=checkbox]]:mr-1.5 [&_hr]:border-border"
+      className={cn(
+        'prose prose-sm max-w-none text-sm leading-relaxed [&_pre]:rounded-lg [&_pre]:bg-[#0d1117] [&_pre]:p-3 [&_pre]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_code]:font-normal [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-xs [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-1.5 [&_td]:text-xs [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground/30 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_input[type=checkbox]]:mr-1.5 [&_hr]:border-border',
+        className,
+      )}
       dangerouslySetInnerHTML={{ __html: html }}
     />
+  )
+}
+
+function ReviewSections({ review }: { review: string }) {
+  const sections = useMemo(() => {
+    const parts = review.split(/(?=^## )/m)
+    return parts.map((part) => part.trim()).filter(Boolean)
+  }, [review])
+
+  return (
+    <div className="space-y-4">
+      {sections.map((section, i) => {
+        const titleMatch = section.match(/^## (.+)$/m)
+        const title = titleMatch?.[1] || (i === 0 ? 'Review Summary' : `Section ${i + 1}`)
+        const body = section.replace(/^## .+(\n|$)/, '').trim()
+
+        return (
+          <div key={i} className="rounded-lg border bg-card p-4">
+            {i === 0 && title === 'Automated PR Review' ? (
+              <MarkdownRenderer content={section} />
+            ) : (
+              <>
+                <h4 className="mb-2 text-sm font-semibold">{title}</h4>
+                <MarkdownRenderer content={body} />
+              </>
+            )}
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -421,9 +452,7 @@ export default function PullDetailPage() {
                   </Tabs>
                 </>
               ) : data.review ? (
-                <div className="rounded-lg border bg-card p-4">
-                  <MarkdownRenderer content={data.review} />
-                </div>
+                <ReviewSections review={data.review} />
               ) : (
                 <div className="flex flex-col items-center gap-2 py-8 text-center">
                   <CheckCircle2 className="size-8 text-green-500/50" />
