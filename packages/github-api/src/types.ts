@@ -30,14 +30,12 @@ export type PullRequestSummary = {
   id: number;
   number: number;
   title: string;
-  body: string | null;
   state: "open" | "closed";
   draft: boolean;
   mergeable: boolean | null;
   headRef: string;
   baseRef: string;
   htmlUrl: string;
-  user?: { login: string } | null;
 };
 
 export type PullRequestFile = {

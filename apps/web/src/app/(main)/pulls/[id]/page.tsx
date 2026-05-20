@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useRef, useMemo, useState } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import useSWR from 'swr'
 import fetcher from '@/lib/fetcher'
 import { timeAgo } from '@/lib/time-ago'
@@ -19,11 +19,6 @@ import {
   AlertTriangle,
   FileCode,
   Code2,
-  GitBranch,
-  User,
-  MessageSquare,
-  ChevronDown,
-  ChevronRight,
 } from 'lucide-react'
 import type { AppError } from '@/lib/error'
 import { cn } from '@/lib/utils'
@@ -44,7 +39,7 @@ const severityConfig: Record<string, { label: string; color: string; border: str
   high: { label: 'High', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400', border: 'border-l-orange-500', icon: AlertTriangle },
   medium: { label: 'Medium', color: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400', border: 'border-l-yellow-500', icon: AlertTriangle },
   low: { label: 'Low', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400', border: 'border-l-gray-400', icon: AlertTriangle },
-  info: { label: 'Info', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', border: 'border-l-blue-500', icon: MessageSquare },
+  info: { label: 'Info', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', border: 'border-l-blue-500', icon: AlertTriangle },
 }
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'] as const
@@ -82,10 +77,6 @@ type ReviewDetail = {
   prNumber: number
   prTitle: string
   prUrl: string
-  prBody: string | null
-  author: string | null
-  baseRef: string | null
-  headRef: string | null
   status: string
   review: string
   findings: FindingDetail[]
@@ -250,43 +241,6 @@ function FindingsSummaryBar({ findings }: { findings: FindingDetail[] }) {
   )
 }
 
-function PRBodySection({ body }: { body: string }) {
-  const [expanded, setExpanded] = useState(false)
-
-  if (!body?.trim()) return null
-
-  const isLong = body.length > 500
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <MessageSquare className="size-4" />
-            Description
-          </CardTitle>
-          {isLong && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setExpanded(!expanded)}
-              className="gap-1 text-xs text-muted-foreground"
-            >
-              {expanded ? 'Show less' : 'Show more'}
-              <ChevronDown className={cn('size-3 transition-transform', expanded && 'rotate-180')} />
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className={cn(!expanded && isLong && 'line-clamp-6')}>
-          <MarkdownRenderer content={body} />
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
 function FindingsBySeverity({ findings }: { findings: FindingDetail[] }) {
   const grouped: Record<string, FindingDetail[]> = {}
   for (const f of findings) {
@@ -411,21 +365,9 @@ export default function PullDetailPage() {
                     </span>
                   </div>
                   <h2 className="text-lg font-semibold leading-snug">{data.prTitle}</h2>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>Reviewed {timeAgo(data.createdAt)}</span>
-                    {data.author && (
-                      <span className="flex items-center gap-1">
-                        <User className="size-3" />
-                        {data.author}
-                      </span>
-                    )}
-                    {data.headRef && data.baseRef && (
-                      <span className="flex items-center gap-1">
-                        <GitBranch className="size-3" />
-                        {data.baseRef} → {data.headRef}
-                      </span>
-                    )}
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Reviewed {timeAgo(data.createdAt)}
+                  </p>
                 </div>
                 <a href={data.prUrl} target="_blank" rel="noreferrer">
                   <Button variant="outline" size="sm">
@@ -436,9 +378,6 @@ export default function PullDetailPage() {
               </div>
             </CardContent>
           </Card>
-
-          {/* PR Description */}
-          {data.prBody && <PRBodySection body={data.prBody} />}
 
           {/* Findings */}
           <Card>
