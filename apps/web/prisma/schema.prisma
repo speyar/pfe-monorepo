@@ -52,6 +52,10 @@ model Review {
   prNumber            Int
   prTitle             String
   prUrl               String
+  prBody              String?
+  author              String?
+  baseRef             String?
+  headRef             String?
   review              String
   status              ReviewStatus @default(completed)
   reviewerClerkUserId String

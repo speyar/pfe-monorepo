@@ -30,12 +30,14 @@ export const getPullRequest = async (
       id: data.id,
       number: data.number,
       title: data.title,
+      body: data.body ?? null,
       state: data.state,
       draft: data.draft ?? false,
       mergeable: data.mergeable,
       headRef: data.head.ref,
       baseRef: data.base.ref,
       htmlUrl: data.html_url,
+      user: data.user ? { login: data.user.login ?? '' } : null,
     };
   } catch (error) {
     throw normalizeGitHubError(error, "Failed to fetch pull request");

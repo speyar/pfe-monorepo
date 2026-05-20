@@ -157,6 +157,10 @@ export const savePullRequestReview = async ({
   pullRequestNumber,
   pullRequestTitle,
   pullRequestUrl,
+  pullRequestBody,
+  pullRequestAuthor,
+  pullRequestBaseRef,
+  pullRequestHeadRef,
   reviewText,
   reviewerClerkUserId,
   findings,
@@ -167,6 +171,10 @@ export const savePullRequestReview = async ({
   pullRequestNumber: number
   pullRequestTitle: string
   pullRequestUrl: string
+  pullRequestBody?: string | null
+  pullRequestAuthor?: string | null
+  pullRequestBaseRef?: string | null
+  pullRequestHeadRef?: string | null
   reviewText: string
   reviewerClerkUserId: string
   findings?: FindingInput[]
@@ -226,12 +234,20 @@ export const savePullRequestReview = async ({
         prNumber: pullRequestNumber,
         prTitle: pullRequestTitle,
         prUrl: pullRequestUrl,
+        prBody: pullRequestBody ?? null,
+        author: pullRequestAuthor ?? null,
+        baseRef: pullRequestBaseRef ?? null,
+        headRef: pullRequestHeadRef ?? null,
         review: reviewText,
         reviewerClerkUserId,
       },
       update: {
         prTitle: pullRequestTitle,
         prUrl: pullRequestUrl,
+        prBody: pullRequestBody ?? null,
+        author: pullRequestAuthor ?? null,
+        baseRef: pullRequestBaseRef ?? null,
+        headRef: pullRequestHeadRef ?? null,
         review: reviewText,
         reviewerClerkUserId,
         status: 'completed',
