@@ -46,7 +46,20 @@ export function buildSentryOauthUrl(state: string): string {
   const clientId = process.env.SENTRY_CLIENT_ID
   const redirectUri = process.env.SENTRY_REDIRECT_URI
 
+  console.info('[sentry] buildSentryOauthUrl', {
+    hasClientId: Boolean(clientId),
+    hasRedirectUri: Boolean(redirectUri),
+    redirectUri,
+    oauthBaseUrl: SENTRY_OAUTH_BASE_URL,
+    apiBaseUrl: SENTRY_API_BASE_URL,
+    statePreview: state.slice(0, 8),
+  })
+
   if (!clientId || !redirectUri) {
+    console.error('[sentry] Missing Sentry OAuth configuration', {
+      clientId: Boolean(clientId),
+      redirectUri: Boolean(redirectUri),
+    })
     throw new AppError({
       message: 'Missing Sentry OAuth configuration',
       code: 'INTERNAL_ERROR',
@@ -62,7 +75,9 @@ export function buildSentryOauthUrl(state: string): string {
     state,
   })
 
-  return `${SENTRY_OAUTH_BASE_URL}/oauth/authorize/?${params.toString()}`
+  const url = `${SENTRY_OAUTH_BASE_URL}/oauth/authorize/?${params.toString()}`
+  console.info('[sentry] redirecting to OAuth URL', { url: url.slice(0, 120) })
+  return url
 }
 
 export async function exchangeCodeForToken(code: string): Promise<{
@@ -74,7 +89,20 @@ export async function exchangeCodeForToken(code: string): Promise<{
   const clientSecret = process.env.SENTRY_CLIENT_SECRET
   const redirectUri = process.env.SENTRY_REDIRECT_URI
 
+  console.info('[sentry] exchangeCodeForToken', {
+    hasClientId: Boolean(clientId),
+    hasClientSecret: Boolean(clientSecret),
+    hasRedirectUri: Boolean(redirectUri),
+    redirectUri,
+    oauthTokenUrl: `${SENTRY_OAUTH_BASE_URL}/oauth/token/`,
+  })
+
   if (!clientId || !clientSecret || !redirectUri) {
+    console.error('[sentry] Missing Sentry OAuth config for token exchange', {
+      clientId: Boolean(clientId),
+      clientSecret: Boolean(clientSecret),
+      redirectUri: Boolean(redirectUri),
+    })
     throw new AppError({
       message: 'Missing Sentry OAuth configuration',
       code: 'INTERNAL_ERROR',
@@ -99,8 +127,17 @@ export async function exchangeCodeForToken(code: string): Promise<{
     body: body.toString(),
   })
 
+  console.info('[sentry] token exchange response', {
+    status: response.status,
+    ok: response.ok,
+  })
+
   const payload = await response.json().catch(() => null)
   if (!response.ok || !payload || typeof payload.access_token !== 'string') {
+    console.error('[sentry] token exchange failed', {
+      status: response.status,
+      payload,
+    })
     throw new AppError({
       message: 'Failed to exchange Sentry OAuth code',
       code: 'EXTERNAL_SERVICE_ERROR',
@@ -108,6 +145,12 @@ export async function exchangeCodeForToken(code: string): Promise<{
       details: payload,
     })
   }
+
+  console.info('[sentry] token exchange success', {
+    tokenType: payload.token_type,
+    hasScope: Boolean(payload.scope),
+    scope: payload.scope,
+  })
 
   return {
     accessToken: payload.access_token,
@@ -120,6 +163,10 @@ export async function getSentryUser(accessToken: string): Promise<{
   id: string | null
   email: string | null
 }> {
+  console.info('[sentry] getSentryUser', {
+    apiUrl: `${SENTRY_API_BASE_URL}/api/0/users/me/`,
+  })
+
   const response = await fetch(`${SENTRY_API_BASE_URL}/api/0/users/me/`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -127,6 +174,8 @@ export async function getSentryUser(accessToken: string): Promise<{
       Accept: 'application/json',
     },
   })
+
+  console.info('[sentry] user fetch response', { status: response.status, ok: response.ok })
 
   const rawText = await response.text()
   let payload: Record<string, unknown> | null = null
@@ -136,6 +185,7 @@ export async function getSentryUser(accessToken: string): Promise<{
   }
 
   if (!response.ok || !payload) {
+    console.error('[sentry] failed to fetch Sentry user', { status: response.status, payload })
     throw new AppError({
       message: 'Failed to fetch Sentry user',
       code: 'EXTERNAL_SERVICE_ERROR',
@@ -143,6 +193,11 @@ export async function getSentryUser(accessToken: string): Promise<{
       details: payload,
     })
   }
+
+  console.info('[sentry] user fetch success', {
+    id: payload?.id,
+    email: payload?.email,
+  })
 
   return {
     id: typeof payload?.id === 'string' ? payload.id : null,
@@ -352,8 +407,11 @@ export async function getLatestSentryEvent(args: {
 }
 
 export async function getAccessTokenForUser(userId: string): Promise<string> {
+  console.info('[sentry] getAccessTokenForUser', { userId })
+
   const connection = await getSentryConnectionByUserId(userId)
   if (!connection) {
+    console.warn('[sentry] no connection found for user', { userId })
     throw new AppError({
       message: 'Sentry is not connected for this user',
       code: 'NOT_FOUND',
@@ -361,5 +419,7 @@ export async function getAccessTokenForUser(userId: string): Promise<string> {
     })
   }
 
-  return decryptText(connection.accessTokenCipher)
+  const token = decryptText(connection.accessTokenCipher)
+  console.info('[sentry] access token retrieved', { userId, tokenPreview: token.slice(0, 8) })
+  return token
 }

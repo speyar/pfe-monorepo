@@ -1,0 +1,7 @@
+node_modules
+.turbo
+.next
+apps/web/.next
+.git
+graph-output
+opencode
