@@ -118,27 +118,6 @@ export default function RepoMonitoringPage() {
     mutate: refreshIssues,
   } = useSWR<IssuesResponse, AppError>(issuesUrl, fetcher)
 
-  async function handleConnectSentry() {
-    setFormError(null)
-
-    try {
-      const response = await fetch('/api/integrations/sentry/connect')
-      const payload = (await response.json()) as {
-        url?: string
-        error?: string
-      }
-
-      if (!response.ok || !payload.url) {
-        setFormError(payload.error ?? 'Failed to start Sentry OAuth flow')
-        return
-      }
-
-      window.location.href = payload.url
-    } catch {
-      setFormError('Failed to start Sentry OAuth flow')
-    }
-  }
-
   async function handleLinkProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -242,7 +221,9 @@ export default function RepoMonitoringPage() {
             <p className="text-sm text-muted-foreground">
               Connect your Sentry account first, then link this repository to a Sentry project.
             </p>
-            <Button onClick={handleConnectSentry}>Connect Sentry account</Button>
+            <a href="/api/integrations/sentry/connect">
+              <Button>Connect Sentry account</Button>
+            </a>
           </CardContent>
         </Card>
       ) : null}

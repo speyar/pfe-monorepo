@@ -7,7 +7,6 @@ import { Badge } from '@/components/ui/badge'
 import { Github, Bug, CheckCircle, XCircle, ExternalLink } from 'lucide-react'
 import useSWR from 'swr'
 import fetcher from '@/lib/fetcher'
-import { useState } from 'react'
 
 type ReposResponse = { data: unknown[] }
 type SentryStatusResponse = { connected: boolean }
@@ -17,9 +16,6 @@ function IntegrationCardSkeleton() {
 }
 
 export default function SettingsPage() {
-  const [isConnectingSentry, setIsConnectingSentry] = useState(false)
-  const [sentryConnectError, setSentryConnectError] = useState<string | null>(null)
-
   const { data: reposData, isLoading: reposLoading } = useSWR<ReposResponse>('/api/repos', fetcher)
   const { data: sentryData, isLoading: sentryLoading } = useSWR<SentryStatusResponse>(
     '/api/integrations/sentry/status',
@@ -27,30 +23,6 @@ export default function SettingsPage() {
   )
   const githubConnected = (reposData?.data?.length ?? 0) > 0
   const sentryConnected = sentryData?.connected ?? false
-
-  async function handleConnectSentry() {
-    setSentryConnectError(null)
-    setIsConnectingSentry(true)
-
-    try {
-      const response = await fetch('/api/integrations/sentry/connect')
-      const payload = (await response.json()) as {
-        url?: string
-        error?: string
-      }
-
-      if (!response.ok || !payload.url) {
-        setSentryConnectError(payload.error ?? 'Failed to start Sentry OAuth flow')
-        return
-      }
-
-      window.location.href = payload.url
-    } catch {
-      setSentryConnectError('Failed to start Sentry OAuth flow')
-    } finally {
-      setIsConnectingSentry(false)
-    }
-  }
 
   return (
     <div className="space-y-8">
@@ -136,18 +108,12 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground mb-2">
                 Connect Sentry to enable error monitoring and auto-fix for your repositories.
               </p>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleConnectSentry}
-                disabled={isConnectingSentry}
-              >
-                {isConnectingSentry ? 'Connecting...' : 'Connect Sentry'}
-                <ExternalLink className="size-3 ml-1" />
-              </Button>
-              {sentryConnectError ? (
-                <p className="text-xs text-destructive mt-2">{sentryConnectError}</p>
-              ) : null}
+              <a href="/api/integrations/sentry/connect">
+                <Button variant="default" size="sm">
+                  Connect Sentry
+                  <ExternalLink className="size-3 ml-1" />
+                </Button>
+              </a>
             </div>
           )}
         </CardContent>

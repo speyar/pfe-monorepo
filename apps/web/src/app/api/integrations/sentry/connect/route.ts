@@ -20,7 +20,7 @@ export async function GET() {
       path: '/',
     })
 
-    return Response.json({ url: oauthUrl }, { status: 200 })
+    return Response.redirect(oauthUrl, 302)
   } catch (error) {
     const appError = toAppError(error, {
       message: 'Failed to initialize Sentry OAuth',
