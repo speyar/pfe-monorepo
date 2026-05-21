@@ -2,7 +2,9 @@ import { decryptText, encryptText } from '@/lib/crypto'
 import prisma from '@/lib/db'
 import { AppError } from '@/lib/error'
 
-const SENTRY_BASE_URL = process.env.SENTRY_BASE_URL ?? 'https://sentry.io'
+const SENTRY_OAUTH_BASE_URL = process.env.SENTRY_OAUTH_BASE_URL ?? 'https://sentry.io'
+const SENTRY_API_BASE_URL =
+  process.env.SENTRY_API_BASE_URL ?? process.env.SENTRY_BASE_URL ?? 'https://sentry.io'
 
 export type SentryProject = {
   id: string
@@ -60,7 +62,7 @@ export function buildSentryOauthUrl(state: string): string {
     state,
   })
 
-  return `${SENTRY_BASE_URL}/oauth/authorize/?${params.toString()}`
+  return `${SENTRY_OAUTH_BASE_URL}/oauth/authorize/?${params.toString()}`
 }
 
 export async function exchangeCodeForToken(code: string): Promise<{
@@ -88,7 +90,7 @@ export async function exchangeCodeForToken(code: string): Promise<{
     redirect_uri: redirectUri,
   })
 
-  const response = await fetch(`${SENTRY_BASE_URL}/oauth/token/`, {
+  const response = await fetch(`${SENTRY_OAUTH_BASE_URL}/oauth/token/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -118,7 +120,7 @@ export async function getSentryUser(accessToken: string): Promise<{
   id: string | null
   email: string | null
 }> {
-  const response = await fetch(`${SENTRY_BASE_URL}/api/0/users/me/`, {
+  const response = await fetch(`${SENTRY_API_BASE_URL}/api/0/users/me/`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
@@ -195,7 +197,7 @@ async function sentryFetch<T>(args: {
   path: string
   searchParams?: URLSearchParams
 }): Promise<{ data: T; headers: Headers }> {
-  const url = new URL(`${SENTRY_BASE_URL}${args.path}`)
+  const url = new URL(`${SENTRY_API_BASE_URL}${args.path}`)
   if (args.searchParams) {
     url.search = args.searchParams.toString()
   }
@@ -332,12 +334,15 @@ export async function getLatestSentryEvent(args: {
   projectSlug: string
   issueId: string
 }): Promise<string | null> {
-  const response = await fetch(`${SENTRY_BASE_URL}/api/0/issues/${args.issueId}/events/latest/`, {
-    headers: {
-      Authorization: `Bearer ${args.accessToken}`,
-      'Content-Type': 'application/json',
+  const response = await fetch(
+    `${SENTRY_API_BASE_URL}/api/0/issues/${args.issueId}/events/latest/`,
+    {
+      headers: {
+        Authorization: `Bearer ${args.accessToken}`,
+        'Content-Type': 'application/json',
+      },
     },
-  })
+  )
 
   if (!response.ok) {
     return null
