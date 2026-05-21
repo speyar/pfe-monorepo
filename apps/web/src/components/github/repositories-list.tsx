@@ -1,22 +1,19 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useReposFilters } from '@/hooks/use-repos-filters'
 import { useRepos } from '@/data/repos/use-repos'
 import RepositoryCard from './repository-card'
 import RepositoryRow from './repository-row'
 import ReposLoading from './repos-loading'
 import EmptyState from '@/components/shared/empty-state'
 import ErrorCard from '@/components/error/error-card'
-import Pagination from '@/components/filters/pagination'
 import { FolderGit2, Search, X, LayoutGrid, List } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const APP_INSTALLATION_URL = process.env.NEXT_PUBLIC_APP_INSTALLATION_URL || ''
 
 export default function RepositoriesList() {
-  const { page, limit, setPage } = useReposFilters()
-  const { data, isLoading, error } = useRepos(page, limit)
+  const { data, isLoading, error } = useRepos()
   const [search, setSearch] = useState('')
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [visibility, setVisibility] = useState<'all' | 'public' | 'private'>('all')
@@ -137,7 +134,7 @@ export default function RepositoriesList() {
       ) : (
         <>
           <p className="text-xs text-muted-foreground">
-            Showing {filtered.length} of {data.total} repositor{filtered.length !== 1 ? 'ies' : 'y'}
+            {filtered.length} repositor{filtered.length !== 1 ? 'ies' : 'y'}
           </p>
           {view === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -158,9 +155,6 @@ export default function RepositoriesList() {
                 <RepositoryRow key={repository.id} repository={repository} />
               ))}
             </div>
-          )}
-          {data.totalPages > 1 && (
-            <Pagination page={page} setPage={setPage} totalPages={data.totalPages} />
           )}
         </>
       )}

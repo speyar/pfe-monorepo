@@ -3,16 +3,6 @@ import { toAppError } from '@/lib/error'
 import { auth } from '@clerk/nextjs/server'
 import type { NextRequest } from 'next/server'
 
-const DEFAULT_PAGE = 1
-const DEFAULT_LIMIT = 50
-
-const parsePositiveInt = (value: string | null, fallback: number): number => {
-  if (!value) return fallback
-  const parsedValue = Number(value)
-  if (!Number.isInteger(parsedValue) || parsedValue <= 0) return fallback
-  return parsedValue
-}
-
 export async function GET(request: NextRequest) {
   try {
     const { userId: clerkUserId } = await auth()
@@ -25,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     const user = await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } })
     if (!user) {
-      return Response.json({ data: [], page: 1, totalPages: 0, total: 0 })
+      return Response.json({ data: [] })
     }
 
     const whereClause = { installation: { clerkUserId: user.id } }
@@ -34,18 +24,8 @@ export async function GET(request: NextRequest) {
       ? { ...whereClause, fullName: { contains: search, mode: 'insensitive' as const } }
       : whereClause
 
-    const requestedPage = parsePositiveInt(request.nextUrl.searchParams.get('page'), DEFAULT_PAGE)
-    const limit = parsePositiveInt(request.nextUrl.searchParams.get('limit'), DEFAULT_LIMIT)
-
-    const totalRepositories = await prisma.repository.count({ where: searchFilter })
-    const totalPages = Math.max(1, Math.ceil(totalRepositories / limit))
-    const page = Math.min(requestedPage, totalPages)
-    const skip = (page - 1) * limit
-
     const repositoriesFromDb = await prisma.repository.findMany({
       where: searchFilter,
-      skip,
-      take: limit,
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       include: {
         installation: { select: { accountLogin: true } },
@@ -72,7 +52,7 @@ export async function GET(request: NextRequest) {
       lastReviewAt: repo.reviews[0]?.createdAt.toISOString() ?? null,
     }))
 
-    return Response.json({ data, page, totalPages, total: totalRepositories })
+    return Response.json({ data })
   } catch (error) {
     const appError = toAppError(error, {
       message: 'Failed to fetch repositories',
