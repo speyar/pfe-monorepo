@@ -1,5 +1,5 @@
 import prisma from '@/lib/db'
-import { toAppError } from '@/lib/error'
+import { toAppError, AppError } from '@/lib/error'
 import { auth } from '@clerk/nextjs/server'
 import { Prisma } from '@/generated/prisma/client'
 import type { NextRequest } from 'next/server'
@@ -16,7 +16,7 @@ function parseSearchParams(url: string) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { userId: clerkUserId } = await auth()
     if (!clerkUserId) {
@@ -26,24 +26,31 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const { id } = await params
+    const repoId = (() => {
+      const n = Number(id)
+      if (!Number.isInteger(n) || n <= 0) {
+        throw new AppError({ message: 'Invalid repo id', code: 'BAD_REQUEST', statusCode: 400 })
+      }
+      return n
+    })()
+
     const user = await prisma.user.findUnique({ where: { clerkUserId }, select: { id: true } })
     if (!user) {
-      return Response.json({ data: [], total: 0, totalPages: 0, page: 1, limit: 10 })
+      return Response.json({ error: 'User not found', code: 'NOT_FOUND' }, { status: 404 })
     }
 
     const { search, status, sort, page, limit } = parseSearchParams(request.url)
     const skip = (page - 1) * limit
 
     const where: Prisma.ReviewWhereInput = {
+      repoId,
       repository: { installation: { clerkUserId: user.id } },
     }
 
     if (search.trim()) {
       const q = search.trim()
-      where.OR = [
-        { prTitle: { contains: q, mode: 'insensitive' } },
-        { repository: { fullName: { contains: q, mode: 'insensitive' } } },
-      ]
+      where.prTitle = { contains: q, mode: 'insensitive' }
     }
 
     if (status && ['completed', 'failed', 'pending'].includes(status)) {
@@ -81,7 +88,7 @@ export async function GET(request: NextRequest) {
     return Response.json({ data, total, totalPages: Math.ceil(total / limit), page, limit })
   } catch (error) {
     const appError = toAppError(error, {
-      message: 'Failed to fetch pull requests',
+      message: 'Failed to fetch pulls',
       code: 'DATABASE_ERROR',
       statusCode: 500,
     })

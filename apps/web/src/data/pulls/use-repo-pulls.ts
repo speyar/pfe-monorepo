@@ -1,25 +1,9 @@
 import fetcher from '@/lib/fetcher'
 import useSWR from 'swr'
 import type { AppError } from '@/lib/error'
+import type { PullItem } from './use-pulls'
 
-export type PullItem = {
-  id: string
-  repoName: string
-  repo: string
-  prNumber: number
-  prTitle: string
-  prUrl: string
-  prAuthor: string | null
-  prState: string | null
-  prMerged: boolean
-  prDraft: boolean
-  headRef: string | null
-  baseRef: string | null
-  status: string
-  createdAt: string
-}
-
-export type PullsData = {
+export type RepoPullsData = {
   data: PullItem[]
   total: number
   totalPages: number
@@ -27,7 +11,7 @@ export type PullsData = {
   limit: number
 }
 
-type PullsParams = {
+type RepoPullsParams = {
   search?: string
   status?: string
   sort?: 'newest' | 'oldest'
@@ -35,7 +19,7 @@ type PullsParams = {
   limit?: number
 }
 
-function buildQuery(params: PullsParams): string {
+function buildQuery(repoId: string, params: RepoPullsParams): string {
   const sp = new URLSearchParams()
   if (params.search) sp.set('search', params.search)
   if (params.status) sp.set('status', params.status)
@@ -43,10 +27,10 @@ function buildQuery(params: PullsParams): string {
   if (params.page && params.page > 1) sp.set('page', String(params.page))
   if (params.limit && params.limit !== 10) sp.set('limit', String(params.limit))
   const qs = sp.toString()
-  return qs ? `/api/pulls?${qs}` : '/api/pulls'
+  return `/api/repos/${repoId}/pulls${qs ? `?${qs}` : ''}`
 }
 
-export function usePulls(params: PullsParams = {}) {
-  const key = buildQuery(params)
-  return useSWR<PullsData, AppError>(key, fetcher)
+export function useRepoPulls(repoId: string, params: RepoPullsParams = {}) {
+  const key = buildQuery(repoId, params)
+  return useSWR<RepoPullsData, AppError>(key, fetcher)
 }

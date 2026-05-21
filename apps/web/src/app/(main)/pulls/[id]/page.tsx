@@ -13,8 +13,10 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   ArrowLeft,
+  ArrowRight,
   ExternalLink,
   GitPullRequest,
+  GitBranch,
   CheckCircle2,
   AlertTriangle,
   FileCode,
@@ -32,6 +34,14 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'destru
   completed: { label: 'Pass', variant: 'default' },
   failed: { label: 'Fail', variant: 'destructive' },
   pending: { label: 'Pending', variant: 'secondary' },
+}
+
+const prStateBadge = (prState: string | null, prMerged: boolean, prDraft: boolean) => {
+  if (prDraft) return <Badge variant="secondary" className="text-[10px]">Draft</Badge>
+  if (prState === 'closed' && prMerged) return <Badge variant="outline" className="text-[10px] text-purple-600 border-purple-300 dark:text-purple-400 dark:border-purple-700">Merged</Badge>
+  if (prState === 'closed') return <Badge variant="destructive" className="text-[10px]">Closed</Badge>
+  if (prState === 'open') return <Badge variant="outline" className="text-[10px] text-green-600 border-green-300 dark:text-green-400 dark:border-green-700">Open</Badge>
+  return null
 }
 
 const severityConfig: Record<string, { label: string; color: string; border: string; icon: typeof AlertTriangle }> = {
@@ -77,6 +87,13 @@ type ReviewDetail = {
   prNumber: number
   prTitle: string
   prUrl: string
+  prAuthor: string | null
+  prBody: string | null
+  headRef: string | null
+  baseRef: string | null
+  prState: string | null
+  prMerged: boolean
+  prDraft: boolean
   status: string
   review: string
   findings: FindingDetail[]
@@ -362,21 +379,53 @@ export default function PullDetailPage() {
             <CardContent className="px-4 py-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 space-y-2">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <Badge
                       variant={statusConfig[data.status]?.variant ?? 'secondary'}
                       className="capitalize"
                     >
                       {statusConfig[data.status]?.label ?? data.status}
                     </Badge>
+                    {prStateBadge(data.prState, data.prMerged, data.prDraft)}
                     <span className="text-xs text-muted-foreground">
                       {data.repoName} #{data.prNumber}
                     </span>
                   </div>
                   <h2 className="text-lg font-semibold leading-snug">{data.prTitle}</h2>
+                  {(data.prAuthor || (data.headRef && data.baseRef)) && (
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {data.prAuthor && (
+                        <span className="flex items-center gap-1">
+                          <GitPullRequest className="size-3" />
+                          @{data.prAuthor}
+                        </span>
+                      )}
+                      {data.headRef && data.baseRef && (
+                        <span className="flex items-center gap-1 font-mono">
+                          <GitBranch className="size-3" />
+                          {data.headRef}
+                          <ArrowRight className="size-3" />
+                          {data.baseRef}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Reviewed {timeAgo(data.createdAt)}
+                    {data.updatedAt !== data.createdAt && (
+                      <> · updated {timeAgo(data.updatedAt)}</>
+                    )}
                   </p>
+                  {data.prBody && (
+                    <details className="group mt-2">
+                      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                        View PR description
+                      </summary>
+                      <div className="mt-2 rounded-lg border bg-card p-3">
+                        <MarkdownRenderer content={data.prBody} />
+                      </div>
+                    </details>
+                  )}
                 </div>
                 <a href={data.prUrl} target="_blank" rel="noreferrer">
                   <Button variant="outline" size="sm">

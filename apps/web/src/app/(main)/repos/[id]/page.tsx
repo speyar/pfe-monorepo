@@ -3,11 +3,11 @@
 import { useParams, useRouter } from 'next/navigation'
 import useSWR from 'swr'
 import fetcher from '@/lib/fetcher'
-import { timeAgo } from '@/lib/time-ago'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import RepoPullsSection from '@/components/pulls/repo-pulls-section'
 import {
   ArrowLeft,
   ExternalLink,
@@ -18,17 +18,8 @@ import {
   Bug,
   CheckCircle,
   Circle,
-  GitPullRequest,
 } from 'lucide-react'
 import type { AppError } from '@/lib/error'
-
-type RecentReview = {
-  id: string
-  prNumber: number
-  prTitle: string
-  status: string
-  createdAt: string
-}
 
 type RepoDetail = {
   id: string
@@ -43,13 +34,6 @@ type RepoDetail = {
     projectSlug: string
     environment: string | null
   } | null
-  recentReviews: RecentReview[]
-}
-
-const statusConfig: Record<string, { label: string; variant: 'default' | 'destructive' | 'secondary' }> = {
-  completed: { label: 'Pass', variant: 'default' },
-  failed: { label: 'Fail', variant: 'destructive' },
-  pending: { label: 'Pending', variant: 'secondary' },
 }
 
 export default function RepoDetailPage() {
@@ -189,46 +173,7 @@ export default function RepoDetailPage() {
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Reviews</CardTitle>
-            </CardHeader>
-            <CardContent className="px-0">
-              {data.recentReviews.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-                  <GitPullRequest className="size-8 text-muted-foreground/50" />
-                  <p className="text-sm text-muted-foreground">No reviews yet</p>
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {data.recentReviews.map((r) => {
-                    const cfg = statusConfig[r.status] ?? statusConfig.pending
-                    return (
-                      <div
-                        key={r.id}
-                        onClick={() => router.push(`/pulls/${r.id}`)}
-                        className="flex items-center gap-3 px-4 py-3.5 cursor-pointer hover:bg-foreground/[0.02] transition-colors"
-                      >
-                        <Badge
-                          variant={cfg.variant}
-                          className="w-14 shrink-0 justify-center text-[10px] capitalize"
-                        >
-                          {cfg.label}
-                        </Badge>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">{r.prTitle}</p>
-                          <p className="text-xs text-muted-foreground">#{r.prNumber}</p>
-                        </div>
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {timeAgo(r.createdAt)}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <RepoPullsSection repoId={params.id} />
         </>
       )}
     </div>

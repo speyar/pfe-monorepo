@@ -52,6 +52,13 @@ model Review {
   prNumber            Int
   prTitle             String
   prUrl               String
+  prAuthor            String?
+  prBody              String?
+  headRef             String?
+  baseRef             String?
+  prState             String?
+  prMerged            Boolean      @default(false)
+  prDraft             Boolean      @default(false)
   review              String
   status              ReviewStatus @default(completed)
   reviewerClerkUserId String

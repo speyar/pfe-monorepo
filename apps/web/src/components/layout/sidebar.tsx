@@ -45,11 +45,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
-        {navItems.slice(0, 4).map((item) => (
-          <NavItem key={item.href} item={item} pathname={pathname} />
-        ))}
-        <div className="my-2 h-px bg-foreground/10" />
-        {navItems.slice(4).map((item) => (
+        {navItems.map((item) => (
           <NavItem key={item.href} item={item} pathname={pathname} />
         ))}
       </nav>

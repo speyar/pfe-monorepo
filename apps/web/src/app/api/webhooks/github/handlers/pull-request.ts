@@ -766,6 +766,13 @@ export const handlePullRequestEvent = async ({
       pullRequestNumber: pullRequest.number,
       pullRequestTitle: pullRequest.title,
       pullRequestUrl,
+      prAuthor: body.pull_request?.user?.login ?? null,
+      prBody: body.pull_request?.body ?? null,
+      headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
+      baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
+      prState: body.pull_request?.state ?? null,
+      prMerged: body.pull_request?.merged ?? false,
+      prDraft: body.pull_request?.draft ?? false,
       reviewText,
       reviewerClerkUserId: githubInstallation.user.clerkUserId,
       findings: findingStatuses.map((fs) => ({
