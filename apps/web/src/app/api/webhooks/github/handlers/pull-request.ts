@@ -513,7 +513,7 @@ export const handlePullRequestEvent = async ({
 }: HandlePullRequestEventArgs): Promise<Response | null> => {
   const body = payload as PullRequestPayload
 
-  if (body.action !== 'opened' && body.action !== 'synchronize') {
+  if (body.action !== 'opened' && body.action !== 'synchronize' && body.action !== 'reopened') {
     return null
   }
 
