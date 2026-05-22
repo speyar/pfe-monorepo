@@ -855,7 +855,12 @@ export const handlePullRequestEvent = async ({
       },
     })
 
-    console.log(`[github-webhook] PR #${pullRequestNumber}: created ReviewJob, returning immediately`)
+    console.log(`[github-webhook] PR #${pullRequestNumber}: created ReviewJob, triggering processing`)
+
+    const baseUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? "pfe-monorepo.vercel.app"}`
+    fetch(`${baseUrl}/api/reviews/process`, { method: 'POST' }).catch(() => {})
   } catch (error) {
     console.error('[github-webhook] review failed', {
       deliveryId,
