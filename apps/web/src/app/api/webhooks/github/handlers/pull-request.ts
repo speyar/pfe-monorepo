@@ -7,7 +7,6 @@ import {
   upsertPullRequestComment,
 } from '@pfe-monorepo/github-api'
 import {
-  runPullRequestReview,
   summarizeDiffWithDefaultModel,
   type PullRequestReviewFinding as ReviewFinding,
   type PullRequestReviewResult as ReviewResult,
@@ -15,6 +14,8 @@ import {
 } from '@pfe-monorepo/new-review-agent'
 import { getGithubInstallationByRepoFullName, getGithubInstallationReviewer, savePullRequestReview } from '../db'
 import prisma from '@/lib/db'
+import { generateText, type LanguageModel } from 'ai'
+import { createOpenaiCompatible } from '@ceira/better-copilot-provider'
 import {
   getInstallationId,
   getOwnerRepo,
@@ -832,35 +833,125 @@ export const handlePullRequestEvent = async ({
       })
     : null
 
-  try {
-    const filesForInput = filesForReview.map((f) => ({ path: f.path, patch: f.patch ?? "" }))
+  const filesForInput = filesForReview.map((f) => ({ path: f.path, patch: f.patch ?? "" }))
 
-    await prisma.reviewJob.create({
-      data: {
-        installationId: effectiveInstallationId,
-        owner: ownerRepo.owner,
-        repo: ownerRepo.repo,
-        headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
-        baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
-        prNumber: pullRequestNumber,
-        prTitle: pullRequest.title,
-        prUrl: pullRequestUrl,
-        prAuthor: body.pull_request?.user?.login ?? null,
-        prBody: body.pull_request?.body ?? null,
-        clerkUserId: githubInstallation.user.clerkUserId,
-        initialDiff,
-        filesJson: filesForInput.length > 0 ? filesForInput : undefined,
-        deliveryId,
-        status: 'pending',
-      },
+  try {
+    const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim()
+    const model: LanguageModel = deepseekKey
+      ? createOpenaiCompatible({
+          apiKey: deepseekKey,
+          baseURL: (process.env.DEEPSEEK_BASE_URL ?? 'https://opencode.ai/zen/go/v1').trim(),
+          name: 'deepseek',
+        })((process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash').trim())
+      : (() => {
+          const token = process.env.COPILOT_GITHUB_TOKEN
+          if (!token) throw new Error('No API key configured')
+          return createOpenaiCompatible({
+            apiKey: token,
+            baseURL: process.env.COPILOT_BASE_URL ?? 'https://api.githubcopilot.com',
+            name: 'copilot',
+          })(process.env.REVIEW_MODEL ?? 'gpt-5.4-mini')
+        })()
+
+    const diffText = initialDiff || filesForInput.map(f =>
+      [`diff --git a/${f.path} b/${f.path}`, `--- a/${f.path}`, `+++ b/${f.path}`, f.patch].join('\n')
+    ).join('\n\n')
+
+    const REVIEW_SYSTEM_PROMPT = [
+      'You are a PR review agent. Analyze the provided diffs and find real problems.',
+      'Focus on: bugs, breaking changes, security issues, data integrity, production risks.',
+      'Be specific. Include file paths and line numbers.',
+      '',
+      'Output a SINGLE JSON object with a "findings" array. Each finding has:',
+      '- severity: "critical" | "high" | "medium" | "low" | "info"',
+      '- file: string (path)',
+      '- line: number (optional)',
+      '- quote: string (optional, exact code)',
+      '- title: string (short, specific)',
+      '- message: string (what and why)',
+      '- suggestion: string (optional, concrete fix)',
+      '',
+      'Example:',
+      '{"findings":[{"severity":"high","file":"src/a.ts","line":42,"title":"Null dereference","message":"..."}]}',
+      'Output ONLY the JSON. No markdown fences, no preamble.',
+    ].join('\n')
+
+    const result = await generateText({
+      model,
+      system: REVIEW_SYSTEM_PROMPT,
+      prompt: [
+        `Changed files: ${filesForReview.length}`,
+        '',
+        'Full diff:',
+        diffText.slice(0, 100000),
+        diffText.length > 100000 ? `\n... [truncated ${diffText.length - 100000} chars]` : '',
+        '',
+        'Analyze and output findings.',
+      ].join('\n'),
     })
 
-    console.log(`[github-webhook] PR #${pullRequestNumber}: created ReviewJob, triggering processing`)
+    const jsonText = result.text ?? ''
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/)
+    const findings = jsonMatch ? (() => { try { return JSON.parse(jsonMatch[0]).findings ?? [] } catch { return [] } })() : []
 
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? "pfe-monorepo.vercel.app"}`
-    fetch(`${baseUrl}/api/reviews/process`, { method: 'POST' }).catch(() => {})
+    console.log(`[github-webhook] PR #${pullRequestNumber}: ${findings.length} findings`)
+
+    const reviewText = [
+      '## Automated Review',
+      '',
+      `**${findings.length} finding${findings.length !== 1 ? 's' : ''}**`,
+      '',
+      ...findings.slice(0, 20).map((f: any, i: number) => {
+        const loc = f.file ? `${f.file}${f.line ? `:${f.line}` : ''}` : '?'
+        return [
+          `### ${i + 1}. [${(f.severity ?? 'info').toUpperCase()}] ${f.title ?? ''}`,
+          `**Location:** ${loc}`,
+          f.quote ? `\`\`\`\n${f.quote}\n\`\`\`` : '',
+          f.message ?? '',
+          f.suggestion ? `\n**Suggestion:** ${f.suggestion}` : '',
+          '---',
+        ].filter(Boolean).join('\n\n')
+      }),
+    ].join('\n\n')
+
+    await upsertPullRequestComment(effectiveInstallationId, {
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      pullRequestNumber,
+      marker: REVIEW_COMMENT_MARKER,
+      body: [REVIEW_STATUS_MARKER, '✅ Review completed.', '', reviewText].join('\n'),
+    }).catch((e: Error) => console.log('[webhook] Failed to post comment:', e.message))
+
+    const findingsForDb = findings.slice(0, 20).map((f: any) => ({
+      severity: f.severity ?? 'info',
+      file: f.file ?? 'unknown',
+      line: f.line ?? null,
+      quote: f.quote ?? null,
+      title: f.title ?? '',
+      message: f.message ?? '',
+      suggestion: f.suggestion ?? null,
+      postedToGitHub: false,
+      skipReason: null,
+    }))
+
+    await savePullRequestReview({
+      installationId: effectiveInstallationId,
+      repository: body.repository,
+      ownerRepo,
+      pullRequestNumber: pullRequest.number,
+      pullRequestTitle: pullRequest.title,
+      pullRequestUrl,
+      prAuthor: body.pull_request?.user?.login ?? null,
+      prBody: body.pull_request?.body ?? null,
+      headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
+      baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
+      prState: body.pull_request?.state ?? null,
+      prMerged: body.pull_request?.merged ?? false,
+      prDraft: body.pull_request?.draft ?? false,
+      reviewText,
+      reviewerClerkUserId: githubInstallation.user.clerkUserId,
+      findings: findingsForDb,
+    }).catch((e: Error) => console.log('[webhook] Failed to save review:', e.message))
   } catch (error) {
     console.error('[github-webhook] review failed', {
       deliveryId,
@@ -871,19 +962,6 @@ export const handlePullRequestEvent = async ({
       errorName: error instanceof Error ? error.name : typeof error,
       errorMessage: error instanceof Error ? error.message : String(error),
     })
-
-    if (checkRun) {
-      await updateCheckRun(effectiveInstallationId, {
-        owner: ownerRepo.owner,
-        repo: ownerRepo.repo,
-        checkRunId: checkRun.id,
-        status: 'completed',
-        conclusion: 'failure',
-        detailsUrl: pullRequestUrl,
-        title: 'Automated PR Review',
-        summary: 'Review failed before completion.',
-      }).catch(() => {})
-    }
 
     await upsertPullRequestComment(effectiveInstallationId, {
       owner: ownerRepo.owner,
