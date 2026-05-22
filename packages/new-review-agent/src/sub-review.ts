@@ -1,7 +1,7 @@
-import { generateText, Output, type LanguageModel } from "ai";
-import { z } from "zod";
+import { generateText, type LanguageModel } from "ai";
 import { reviewFindingSchema } from "./schema/review-result";
 import type { ReviewFinding } from "./schema/review-result";
+import { z } from "zod";
 
 export interface SubReviewInput {
   model: LanguageModel;
@@ -35,6 +35,27 @@ function buildFileDiffText(files: Array<{ path: string; patch: string }>): strin
     .join("\n\n");
 }
 
+function parseSubReviewJson(text: string): ReviewFinding[] {
+  const cleaned = text.trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return [];
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    const result = subReviewResultSchema.parse(parsed);
+    return result.findings;
+  } catch {
+    try {
+      const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+      if (!arrayMatch) return [];
+      const parsed = JSON.parse(arrayMatch[0]);
+      const validated = z.array(reviewFindingSchema).safeParse(parsed);
+      return validated.success ? validated.data : [];
+    } catch {
+      return [];
+    }
+  }
+}
+
 export async function runSubReview(input: SubReviewInput): Promise<SubReviewResult> {
   const fileList = input.files.map((f) => f.path);
   const diffText = buildFileDiffText(input.files);
@@ -53,7 +74,10 @@ export async function runSubReview(input: SubReviewInput): Promise<SubReviewResu
       "Focus on: bugs, breaking changes, security issues, data integrity, and production risks.",
       "Be specific. Include file paths and line numbers when possible.",
       "Do NOT report findings for files outside your batch.",
-      "Output findings as a JSON array.",
+      "",
+      "Output a SINGLE JSON object with a 'findings' array. Example:",
+      '{"findings": [{"severity":"high","file":"src/a.ts","line":42,"title":"...","message":"..."}]}',
+      "Output ONLY the JSON. No markdown fences, no preamble.",
     ].join("\n");
 
     const prompt = [
@@ -75,22 +99,16 @@ export async function runSubReview(input: SubReviewInput): Promise<SubReviewResu
       model: input.model,
       system,
       prompt,
-      output: Output.object({
-        schema: subReviewResultSchema,
-        name: "sub_review_result",
-        description: `Findings for batch ${input.batchName}.`,
-      }),
     });
 
     const elapsedMs = Date.now() - startedAt;
-    const findings = result.output?.findings ?? [];
+    const findings = parseSubReviewJson(result.text ?? "");
+
     console.log(`[sub-agent/${input.batchName}] finished — ${findings.length} findings in ${elapsedMs}ms`);
-    if (findings.length > 0) {
-      findings.forEach((f, i) => {
-        const loc = f.file ? `${f.file}${f.line ? `:${f.line}` : ""}` : "?";
-        console.log(`[sub-agent/${input.batchName}] finding #${i + 1}: [${f.severity}] ${loc} — ${f.title}`);
-      });
-    }
+    findings.forEach((f, i) => {
+      const loc = f.file ? `${f.file}${f.line ? `:${f.line}` : ""}` : "?";
+      console.log(`[sub-agent/${input.batchName}] finding #${i + 1}: [${f.severity}] ${loc} — ${f.title}`);
+    });
 
     return { batchName: input.batchName, findings };
   } catch (error) {
