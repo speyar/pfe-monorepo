@@ -206,15 +206,18 @@ export async function runPullRequestReview(
     let subFindingsPrompt = "";
 
     if (files.length > threshold) {
-      console.log(`[review-agent] Fan-out mode: ${files.length} files > ${threshold} threshold`);
+      console.log(`[review] FAN-OUT MODE: ${files.length} files exceeds threshold of ${threshold}, splitting into batches`);
       const subResults = await runSubReviews({
         model,
         files,
         batchSize: 15,
       });
       const subFindings = mergeSubFindings(subResults);
-      console.log(`[review-agent] Sub-agents returned ${subFindings.length} findings across ${subResults.length} batches`);
       subFindingsPrompt = buildSubFindingsPrompt(subFindings);
+      console.log(`[review] FAN-OUT DONE: ${subFindings.length} findings from sub-agents → main agent will validate them`);
+    } else {
+      const modeSource = files.length > 0 ? `${files.length} files` : "initialDiff provided";
+      console.log(`[review] SINGLE-AGENT MODE: ${modeSource} (threshold=${threshold})`);
     }
 
     const initialDiff = input.initialDiff ?? (files.length > 0
