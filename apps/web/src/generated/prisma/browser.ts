@@ -58,6 +58,11 @@ export type RepositorySentryProject = Prisma.RepositorySentryProjectModel
  */
 export type FixRun = Prisma.FixRunModel
 /**
+ * Model ReviewJob
+ * 
+ */
+export type ReviewJob = Prisma.ReviewJobModel
+/**
  * Model Skill
  * 
  */

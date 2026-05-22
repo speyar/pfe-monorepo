@@ -136,6 +136,35 @@ model FixRun {
   repositoryId String
 }
 
+enum ReviewJobStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+model ReviewJob {
+  id               String           @id @default(cuid())
+  installationId   Int
+  owner            String
+  repo             String
+  headRef          String
+  baseRef          String
+  prNumber         Int
+  prTitle          String
+  prUrl            String
+  prAuthor         String?
+  prBody           String?
+  clerkUserId      String
+  initialDiff      String           @default("")
+  filesJson        Json?
+  deliveryId       String?
+  status           ReviewJobStatus  @default(pending)
+  error            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
 model Skill {
   id           String   @id @default(cuid())
   name         String

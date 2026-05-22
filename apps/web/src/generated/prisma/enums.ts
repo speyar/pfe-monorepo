@@ -18,6 +18,16 @@ export const ReviewStatus = {
 export type ReviewStatus = (typeof ReviewStatus)[keyof typeof ReviewStatus]
 
 
+export const ReviewJobStatus = {
+  pending: 'pending',
+  processing: 'processing',
+  completed: 'completed',
+  failed: 'failed'
+} as const
+
+export type ReviewJobStatus = (typeof ReviewJobStatus)[keyof typeof ReviewJobStatus]
+
+
 export const FixRunStatus = {
   running: 'running',
   success: 'success',

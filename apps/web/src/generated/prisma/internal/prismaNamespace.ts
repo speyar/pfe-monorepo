@@ -392,6 +392,7 @@ export const ModelName = {
   SentryConnection: 'SentryConnection',
   RepositorySentryProject: 'RepositorySentryProject',
   FixRun: 'FixRun',
+  ReviewJob: 'ReviewJob',
   Skill: 'Skill'
 } as const
 
@@ -408,7 +409,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
     omit: GlobalOmitOptions
   }
   meta: {
-    modelProps: "user" | "githubInstallation" | "repository" | "review" | "finding" | "sentryConnection" | "repositorySentryProject" | "fixRun" | "skill"
+    modelProps: "user" | "githubInstallation" | "repository" | "review" | "finding" | "sentryConnection" | "repositorySentryProject" | "fixRun" | "reviewJob" | "skill"
     txIsolationLevel: TransactionIsolationLevel
   }
   model: {
@@ -1004,6 +1005,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         }
       }
     }
+    ReviewJob: {
+      payload: Prisma.$ReviewJobPayload<ExtArgs>
+      fields: Prisma.ReviewJobFieldRefs
+      operations: {
+        findUnique: {
+          args: Prisma.ReviewJobFindUniqueArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload> | null
+        }
+        findUniqueOrThrow: {
+          args: Prisma.ReviewJobFindUniqueOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload>
+        }
+        findFirst: {
+          args: Prisma.ReviewJobFindFirstArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload> | null
+        }
+        findFirstOrThrow: {
+          args: Prisma.ReviewJobFindFirstOrThrowArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload>
+        }
+        findMany: {
+          args: Prisma.ReviewJobFindManyArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload>[]
+        }
+        create: {
+          args: Prisma.ReviewJobCreateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload>
+        }
+        createMany: {
+          args: Prisma.ReviewJobCreateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        createManyAndReturn: {
+          args: Prisma.ReviewJobCreateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload>[]
+        }
+        delete: {
+          args: Prisma.ReviewJobDeleteArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload>
+        }
+        update: {
+          args: Prisma.ReviewJobUpdateArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload>
+        }
+        deleteMany: {
+          args: Prisma.ReviewJobDeleteManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateMany: {
+          args: Prisma.ReviewJobUpdateManyArgs<ExtArgs>
+          result: BatchPayload
+        }
+        updateManyAndReturn: {
+          args: Prisma.ReviewJobUpdateManyAndReturnArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload>[]
+        }
+        upsert: {
+          args: Prisma.ReviewJobUpsertArgs<ExtArgs>
+          result: runtime.Types.Utils.PayloadToResult<Prisma.$ReviewJobPayload>
+        }
+        aggregate: {
+          args: Prisma.ReviewJobAggregateArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.AggregateReviewJob>
+        }
+        groupBy: {
+          args: Prisma.ReviewJobGroupByArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ReviewJobGroupByOutputType>[]
+        }
+        count: {
+          args: Prisma.ReviewJobCountArgs<ExtArgs>
+          result: runtime.Types.Utils.Optional<Prisma.ReviewJobCountAggregateOutputType> | number
+        }
+      }
+    }
     Skill: {
       payload: Prisma.$SkillPayload<ExtArgs>
       fields: Prisma.SkillFieldRefs
@@ -1248,6 +1323,31 @@ export const FixRunScalarFieldEnum = {
 export type FixRunScalarFieldEnum = (typeof FixRunScalarFieldEnum)[keyof typeof FixRunScalarFieldEnum]
 
 
+export const ReviewJobScalarFieldEnum = {
+  id: 'id',
+  installationId: 'installationId',
+  owner: 'owner',
+  repo: 'repo',
+  headRef: 'headRef',
+  baseRef: 'baseRef',
+  prNumber: 'prNumber',
+  prTitle: 'prTitle',
+  prUrl: 'prUrl',
+  prAuthor: 'prAuthor',
+  prBody: 'prBody',
+  clerkUserId: 'clerkUserId',
+  initialDiff: 'initialDiff',
+  filesJson: 'filesJson',
+  deliveryId: 'deliveryId',
+  status: 'status',
+  error: 'error',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ReviewJobScalarFieldEnum = (typeof ReviewJobScalarFieldEnum)[keyof typeof ReviewJobScalarFieldEnum]
+
+
 export const SkillScalarFieldEnum = {
   id: 'id',
   name: 'name',
@@ -1402,6 +1502,20 @@ export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$Prisma
 
 
 /**
+ * Reference to a field of type 'ReviewJobStatus'
+ */
+export type EnumReviewJobStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ReviewJobStatus'>
+    
+
+
+/**
+ * Reference to a field of type 'ReviewJobStatus[]'
+ */
+export type ListEnumReviewJobStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ReviewJobStatus[]'>
+    
+
+
+/**
  * Reference to a field of type 'Float'
  */
 export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>
@@ -1517,6 +1631,7 @@ export type GlobalOmitConfig = {
   sentryConnection?: Prisma.SentryConnectionOmit
   repositorySentryProject?: Prisma.RepositorySentryProjectOmit
   fixRun?: Prisma.FixRunOmit
+  reviewJob?: Prisma.ReviewJobOmit
   skill?: Prisma.SkillOmit
 }
 

@@ -833,80 +833,29 @@ export const handlePullRequestEvent = async ({
     : null
 
   try {
-    console.info('[github-webhook] starting AI review', {
-      deliveryId,
-      effectiveInstallationId,
-      owner: ownerRepo.owner,
-      repo: ownerRepo.repo,
-      pullRequestNumber,
-      filesCount: filesForReview.length,
-      diffBytes: initialDiff.length,
-      hasDiffSummary: Boolean(diffSummary),
-    })
+    const filesForInput = filesForReview.map((f) => ({ path: f.path, patch: f.patch ?? "" }))
 
-    const filesForInput = filesForReview.map((f) => ({
-      path: f.path,
-      patch: f.patch ?? "",
-    }))
-
-    try {
-      const review: ReviewResult = await runPullRequestReview({
+    await prisma.reviewJob.create({
+      data: {
         installationId: effectiveInstallationId,
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
         baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
+        prNumber: pullRequestNumber,
+        prTitle: pullRequest.title,
+        prUrl: pullRequestUrl,
+        prAuthor: body.pull_request?.user?.login ?? null,
+        prBody: body.pull_request?.body ?? null,
+        clerkUserId: githubInstallation.user.clerkUserId,
         initialDiff,
-        diffSummary: diffSummary ?? undefined,
-        files: filesForInput,
-      }, { skills })
-
-      await postReviewResults({
-        review,
-        checkRun,
-        effectiveInstallationId,
-        ownerRepo,
-        pullRequestNumber,
-        pullRequest,
-        pullRequestUrl,
-        body,
-        files,
-        githubInstallation,
-      })
-    } catch (error) {
-      console.error('[github-webhook] review failed', {
+        filesJson: filesForInput.length > 0 ? filesForInput : undefined,
         deliveryId,
-        installationId: effectiveInstallationId,
-        owner: ownerRepo.owner,
-        repo: ownerRepo.repo,
-        pullRequestNumber,
-        errorName: error instanceof Error ? error.name : typeof error,
-        errorMessage: error instanceof Error ? error.message : String(error),
-      })
+        status: 'pending',
+      },
+    })
 
-      if (checkRun) {
-        await updateCheckRun(effectiveInstallationId, {
-          owner: ownerRepo.owner,
-          repo: ownerRepo.repo,
-          checkRunId: checkRun.id,
-          status: 'completed',
-          conclusion: 'failure',
-          detailsUrl: pullRequestUrl,
-          title: 'Automated PR Review',
-          summary: 'Review failed before completion.',
-        }).catch(() => {})
-      }
-
-      await upsertPullRequestComment(effectiveInstallationId, {
-        owner: ownerRepo.owner,
-        repo: ownerRepo.repo,
-        pullRequestNumber,
-        marker: REVIEW_STATUS_MARKER,
-        body: buildReviewStatusComment('failed'),
-      }).catch(() => {})
-
-      throw error
-    }
+    console.log(`[github-webhook] PR #${pullRequestNumber}: created ReviewJob, returning immediately`)
   } catch (error) {
     console.error('[github-webhook] review failed', {
       deliveryId,

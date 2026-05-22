@@ -59,6 +59,7 @@ export const ModelName = {
   SentryConnection: 'SentryConnection',
   RepositorySentryProject: 'RepositorySentryProject',
   FixRun: 'FixRun',
+  ReviewJob: 'ReviewJob',
   Skill: 'Skill'
 } as const
 
@@ -207,6 +208,31 @@ export const FixRunScalarFieldEnum = {
 } as const
 
 export type FixRunScalarFieldEnum = (typeof FixRunScalarFieldEnum)[keyof typeof FixRunScalarFieldEnum]
+
+
+export const ReviewJobScalarFieldEnum = {
+  id: 'id',
+  installationId: 'installationId',
+  owner: 'owner',
+  repo: 'repo',
+  headRef: 'headRef',
+  baseRef: 'baseRef',
+  prNumber: 'prNumber',
+  prTitle: 'prTitle',
+  prUrl: 'prUrl',
+  prAuthor: 'prAuthor',
+  prBody: 'prBody',
+  clerkUserId: 'clerkUserId',
+  initialDiff: 'initialDiff',
+  filesJson: 'filesJson',
+  deliveryId: 'deliveryId',
+  status: 'status',
+  error: 'error',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type ReviewJobScalarFieldEnum = (typeof ReviewJobScalarFieldEnum)[keyof typeof ReviewJobScalarFieldEnum]
 
 
 export const SkillScalarFieldEnum = {
