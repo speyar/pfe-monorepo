@@ -179,14 +179,22 @@ export async function runPullRequestReview(
     const graphPath = `${workingDir}/codebase-graph.json`;
 
     console.log("Generating codebase graph...");
-    const graphResult = await generateCodebaseGraph(manager, sandbox.id, {
-      rootPath: workingDir,
-      outPath: graphPath,
-      pretty: true,
-    });
-    console.log(
-      `Codebase graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
-    );
+    let effectiveGraphPath: string | undefined = graphPath;
+    try {
+      const graphResult = await generateCodebaseGraph(manager, sandbox.id, {
+        rootPath: workingDir,
+        outPath: graphPath,
+        pretty: true,
+      });
+      console.log(
+        `Codebase graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
+      );
+    } catch (graphError) {
+      console.warn("[review-agent] Codebase graph generation failed, continuing without it", {
+        error: graphError instanceof Error ? graphError.message : String(graphError),
+      });
+      effectiveGraphPath = undefined;
+    }
 
     const review = await runReviewAgent(input.headRef, {
       model: provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini"),
@@ -199,7 +207,7 @@ export async function runPullRequestReview(
       maxToolSteps: options.maxToolSteps ?? 24,
       minToolSteps: options.minToolSteps ?? 5,
       signal: options.signal,
-      graphPath,
+      graphPath: effectiveGraphPath,
       skills: options.skills,
     });
 

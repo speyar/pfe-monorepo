@@ -24,6 +24,8 @@ export interface SummarizeDiffWithDefaultModelInput {
   modelName?: string;
 }
 
+const MAX_DIFF_CHARS = 50_000;
+
 export async function summarizeDiff(
   input: SummarizeDiffInput,
 ): Promise<DiffSummary | null> {
@@ -31,6 +33,10 @@ export async function summarizeDiff(
   if (!diff) {
     return null;
   }
+
+  const truncatedDiff = diff.length > MAX_DIFF_CHARS
+    ? diff.slice(0, MAX_DIFF_CHARS) + `\n... [truncated ${diff.length - MAX_DIFF_CHARS} chars]`
+    : diff;
 
   const result = await generateText({
     model: input.model,
@@ -49,7 +55,7 @@ export async function summarizeDiff(
       "- evidence: up to 6 file/line or hunk references backing claims",
       "",
       "Diff:",
-      diff,
+      truncatedDiff,
     ].join("\n"),
     output: Output.object({
       schema: diffSummarySchema,
