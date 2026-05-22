@@ -521,6 +521,8 @@ export const handlePullRequestEvent = async ({
   const ownerRepo = getOwnerRepo(body.repository)
   const pullRequestNumber = body.pull_request?.number
 
+  console.log(`[webhook] PR ${pullRequestNumber} action=${body.action} installationId=${installationId} deliveryId=${deliveryId}`)
+
   if (
     !installationId ||
     !ownerRepo ||
@@ -576,6 +578,8 @@ export const handlePullRequestEvent = async ({
     }),
   ])
 
+  console.log(`[webhook] PR #${pullRequestNumber}: ${files.length} files returned from API`);
+
   const filesForReview = files
     .filter((file) => typeof file.patch === 'string' && file.patch.length > 0)
     .map((file) => ({
@@ -583,6 +587,8 @@ export const handlePullRequestEvent = async ({
       status: file.status,
       patch: file.patch ?? undefined,
     }))
+
+  console.log(`[webhook] PR #${pullRequestNumber}: ${filesForReview.length} files with patches out of ${files.length}`);
 
   const initialDiff = filesForReview
     .map((file) => {
