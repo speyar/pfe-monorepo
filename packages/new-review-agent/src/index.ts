@@ -3,6 +3,7 @@ export {
   type ReviewAgentOptions,
   type ReviewFinding,
   type ReviewResult,
+  type Skill,
 } from "./review-agent";
 
 export {

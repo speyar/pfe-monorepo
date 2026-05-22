@@ -7,8 +7,17 @@ import { createLsTool } from "./tools/LsTool";
 import { createGlobTool } from "./tools/GlobTool";
 import { createReadFileTool } from "./tools/ReadFileTool";
 import { createCodebaseGraphTool } from "./tools/CodebaseGraphTool";
+import { createRequestSkillTool } from "./tools/RequestSkillTool";
 import type { SandboxManager } from "@packages/sandbox";
 import type { DiffSummary } from "./diff-summarize";
+
+export interface Skill {
+  name: string;
+  useCase: string;
+  description: string;
+  content: string;
+  targetAgents: string[];
+}
 
 function isStepDebugEnabled(): boolean {
   return process.env.NEW_REVIEW_AGENT_DEBUG_STEPS === "1";
@@ -35,6 +44,7 @@ export interface ReviewAgentOptions {
   defaultBranch?: string;
   maxFindings?: number;
   graphPath?: string;
+  skills?: Skill[];
 }
 
 export interface ReviewFinding {
@@ -284,10 +294,18 @@ export async function runReviewAgent(
     splitLines(changedFilesResult.stdout),
   );
 
+  const skills = options.skills ?? [];
+  const targetSkills = skills.filter((s) =>
+    s.targetAgents?.includes("review"),
+  );
+
   const tools = {
     ls: createLsTool(sandboxManager, sandboxId),
     glob: createGlobTool(sandboxManager, sandboxId),
     readFile: createReadFileTool(sandboxManager, sandboxId),
+    ...(targetSkills.length > 0 && {
+      requestSkill: createRequestSkillTool(targetSkills),
+    }),
     ...(options.graphPath
       ? {
           codebaseGraph: createCodebaseGraphTool(
@@ -299,7 +317,7 @@ export async function runReviewAgent(
       : {}),
   };
 
-  const maxSteps = options.maxToolSteps ?? 16;
+  const maxSteps = options.maxToolSteps ?? 20;
   const minToolSteps = Math.max(
     1,
     Math.min(options.minToolSteps ?? 5, maxSteps),
@@ -374,6 +392,16 @@ Diff summary usage rules:
 - Never copy summary wording as evidence. Validate with diff hunks and file reads.
 - If summary conflicts with code or diff, trust the code/diff.
 - Prefer concrete code-level suggestions over abstract advice.
+
+${targetSkills.length > 0 ? `
+---
+## AVAILABLE SKILLS
+
+The following skills are configured for your agent. Review their names and use cases. If a skill's use case matches your current review task, call requestSkill("<name>") to load its full instructions and follow them.
+
+${targetSkills.map((s) => `- Name: ${s.name}\n  Use Case: ${s.useCase}`).join("\n")}
+
+Use the requestSkill tool to load any matching skill's full instructions.` : ""}
 
 IMMEDIATE ACTION REQUIRED:
 1. Start from the precomputed diff provided in the user prompt.

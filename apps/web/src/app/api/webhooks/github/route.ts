@@ -45,7 +45,9 @@ export async function POST(req: NextRequest) {
     console.error('[github-webhook] handler error', {
       deliveryId,
       eventName,
-      error,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack?.split('\n').slice(0, 8).join('\n') : undefined,
     })
 
     return Response.json({ ok: false, error: 'Webhook handler error' }, { status: 500 })

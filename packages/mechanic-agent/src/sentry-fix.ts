@@ -3,7 +3,7 @@ import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runMechanicAgent } from "./mechanic-agent";
 import type { FixResult } from "./schema/fix-result";
-import type { MechanicRepoInput, MechanicAgentOptions, SentryIssueContext } from "./types";
+import type { MechanicRepoInput, MechanicAgentOptions, SentryIssueContext, Skill } from "./types";
 
 export interface SentryFixInput {
   issue: SentryIssueContext;
@@ -180,11 +180,12 @@ export async function runSentryFix(
       sandboxManager: manager,
       sandboxId: sandbox.id,
       sentryContextPrompt,
-      maxToolSteps: options.maxToolSteps ?? 20,
+      maxToolSteps: options.maxToolSteps ?? 25,
       minToolSteps: options.minToolSteps ?? 5,
       signal: options.signal,
       graphPath,
       workingDir,
+      skills: options.skills,
     });
 
     const elapsedMs = Date.now() - startedAt;

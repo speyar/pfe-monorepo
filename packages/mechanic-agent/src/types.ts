@@ -54,10 +54,19 @@ export interface MechanicRepoInput {
   defaultBranch?: string;
 }
 
+export interface Skill {
+  name: string;
+  useCase: string;
+  description: string;
+  content: string;
+  targetAgents: string[];
+}
+
 export interface MechanicAgentOptions {
   modelName?: string;
   maxToolSteps?: number;
   minToolSteps?: number;
   signal?: AbortSignal;
   repositoryUrl?: string;
+  skills?: Skill[];
 }

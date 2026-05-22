@@ -2,6 +2,7 @@ import { generateText, Output, stepCountIs, type LanguageModel } from "ai";
 import type { SandboxManager } from "@packages/sandbox";
 import { fixResultSchema } from "./schema/fix-result";
 import type { FixResult, ChangedFile } from "./schema/fix-result";
+import type { Skill } from "./types";
 import { MECHANIC_AGENT_SYSTEM_PROMPT } from "./prompts/mechanic-agent";
 import { createLsTool } from "./tools/LsTool";
 import { createGlobTool } from "./tools/GlobTool";
@@ -12,6 +13,7 @@ import { createCodebaseGraphTool } from "./tools/CodebaseGraphTool";
 import { createWriteFileTool } from "./tools/WriteFileTool";
 import { createEditFileTool } from "./tools/EditFileTool";
 import { createRunCommandTool } from "./tools/RunCommandTool";
+import { createRequestSkillTool } from "./tools/RequestSkillTool";
 
 export interface MechanicAgentOptions {
   model: LanguageModel;
@@ -23,9 +25,11 @@ export interface MechanicAgentOptions {
   signal?: AbortSignal;
   graphPath?: string;
   workingDir?: string;
+  skills?: Skill[];
 }
 
 export { type FixResult, type ChangedFile } from "./schema/fix-result";
+export type { Skill } from "./types";
 
 async function runCommand(
   sandboxManager: SandboxManager,
@@ -75,6 +79,11 @@ export async function runMechanicAgent(
   });
   const workingDir = options.workingDir ?? (cwdResult.stdout.trim() || "/home/user");
 
+  const skills = options.skills ?? [];
+  const targetSkills = skills.filter(
+    (s) => s.targetAgents?.includes("mechanic"),
+  );
+
   const tools = {
     ls: createLsTool(sandboxManager, sandboxId),
     glob: createGlobTool(sandboxManager, sandboxId),
@@ -84,6 +93,9 @@ export async function runMechanicAgent(
     writeFile: createWriteFileTool(sandboxManager, sandboxId),
     editFile: createEditFileTool(sandboxManager, sandboxId),
     runCommand: createRunCommandTool(sandboxManager, sandboxId),
+    ...(targetSkills.length > 0 && {
+      requestSkill: createRequestSkillTool(targetSkills),
+    }),
     ...(options.graphPath
       ? {
           codebaseGraph: createCodebaseGraphTool(
@@ -95,7 +107,7 @@ export async function runMechanicAgent(
       : {}),
   };
 
-  const maxSteps = options.maxToolSteps ?? 20;
+  const maxSteps = options.maxToolSteps ?? 25;
   const minToolSteps = Math.max(
     3,
     Math.min(options.minToolSteps ?? 5, maxSteps),
@@ -125,6 +137,19 @@ Use codebaseGraph for structural queries (findCallersOf, findImpactOf, etc.).`;
     }
   }
 
+  let skillsSection = "";
+  if (targetSkills.length > 0) {
+    skillsSection = `
+---
+## AVAILABLE SKILLS
+
+The following skills are configured for your agent. Review their names and use cases. If a skill's use case matches your current task, call requestSkill("<name>") to load its full instructions and follow them.
+
+${targetSkills.map((s) => `- Name: ${s.name}\n  Use Case: ${s.useCase}`).join("\n")}
+
+Use the requestSkill tool to load any matching skill's full instructions.`;
+  }
+
   const systemPrompt = `${MECHANIC_AGENT_SYSTEM_PROMPT}
 
 Current working directory: ${workingDir}
@@ -135,7 +160,7 @@ IMPORTANT SAFETY RULES:
 - Always run lint/typecheck after making changes
 - If a verification command fails, try to fix the issue and re-verify (up to 3 attempts)
 - Do NOT make changes outside the scope of the bug fix
-${graphContextInfo}`;
+${graphContextInfo}${skillsSection}`;
 
   const generation = await generateText({
     model: options.model,

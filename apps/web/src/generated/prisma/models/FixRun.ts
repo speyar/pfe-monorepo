@@ -31,7 +31,9 @@ export type FixRunMinAggregateOutputType = {
   repoId: string | null
   status: $Enums.FixRunStatus | null
   prUrl: string | null
+  branchName: string | null
   summary: string | null
+  rootCause: string | null
   error: string | null
   createdAt: Date | null
   updatedAt: Date | null
@@ -45,7 +47,9 @@ export type FixRunMaxAggregateOutputType = {
   repoId: string | null
   status: $Enums.FixRunStatus | null
   prUrl: string | null
+  branchName: string | null
   summary: string | null
+  rootCause: string | null
   error: string | null
   createdAt: Date | null
   updatedAt: Date | null
@@ -59,7 +63,10 @@ export type FixRunCountAggregateOutputType = {
   repoId: number
   status: number
   prUrl: number
+  branchName: number
   summary: number
+  rootCause: number
+  filesChanged: number
   error: number
   createdAt: number
   updatedAt: number
@@ -75,7 +82,9 @@ export type FixRunMinAggregateInputType = {
   repoId?: true
   status?: true
   prUrl?: true
+  branchName?: true
   summary?: true
+  rootCause?: true
   error?: true
   createdAt?: true
   updatedAt?: true
@@ -89,7 +98,9 @@ export type FixRunMaxAggregateInputType = {
   repoId?: true
   status?: true
   prUrl?: true
+  branchName?: true
   summary?: true
+  rootCause?: true
   error?: true
   createdAt?: true
   updatedAt?: true
@@ -103,7 +114,10 @@ export type FixRunCountAggregateInputType = {
   repoId?: true
   status?: true
   prUrl?: true
+  branchName?: true
   summary?: true
+  rootCause?: true
+  filesChanged?: true
   error?: true
   createdAt?: true
   updatedAt?: true
@@ -190,7 +204,10 @@ export type FixRunGroupByOutputType = {
   repoId: string
   status: $Enums.FixRunStatus
   prUrl: string | null
+  branchName: string | null
   summary: string | null
+  rootCause: string | null
+  filesChanged: runtime.JsonValue | null
   error: string | null
   createdAt: Date
   updatedAt: Date
@@ -225,7 +242,10 @@ export type FixRunWhereInput = {
   repoId?: Prisma.StringFilter<"FixRun"> | string
   status?: Prisma.EnumFixRunStatusFilter<"FixRun"> | $Enums.FixRunStatus
   prUrl?: Prisma.StringNullableFilter<"FixRun"> | string | null
+  branchName?: Prisma.StringNullableFilter<"FixRun"> | string | null
   summary?: Prisma.StringNullableFilter<"FixRun"> | string | null
+  rootCause?: Prisma.StringNullableFilter<"FixRun"> | string | null
+  filesChanged?: Prisma.JsonNullableFilter<"FixRun">
   error?: Prisma.StringNullableFilter<"FixRun"> | string | null
   createdAt?: Prisma.DateTimeFilter<"FixRun"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"FixRun"> | Date | string
@@ -240,7 +260,10 @@ export type FixRunOrderByWithRelationInput = {
   repoId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   prUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  branchName?: Prisma.SortOrderInput | Prisma.SortOrder
   summary?: Prisma.SortOrderInput | Prisma.SortOrder
+  rootCause?: Prisma.SortOrderInput | Prisma.SortOrder
+  filesChanged?: Prisma.SortOrderInput | Prisma.SortOrder
   error?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -258,7 +281,10 @@ export type FixRunWhereUniqueInput = Prisma.AtLeast<{
   repoId?: Prisma.StringFilter<"FixRun"> | string
   status?: Prisma.EnumFixRunStatusFilter<"FixRun"> | $Enums.FixRunStatus
   prUrl?: Prisma.StringNullableFilter<"FixRun"> | string | null
+  branchName?: Prisma.StringNullableFilter<"FixRun"> | string | null
   summary?: Prisma.StringNullableFilter<"FixRun"> | string | null
+  rootCause?: Prisma.StringNullableFilter<"FixRun"> | string | null
+  filesChanged?: Prisma.JsonNullableFilter<"FixRun">
   error?: Prisma.StringNullableFilter<"FixRun"> | string | null
   createdAt?: Prisma.DateTimeFilter<"FixRun"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"FixRun"> | Date | string
@@ -273,7 +299,10 @@ export type FixRunOrderByWithAggregationInput = {
   repoId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   prUrl?: Prisma.SortOrderInput | Prisma.SortOrder
+  branchName?: Prisma.SortOrderInput | Prisma.SortOrder
   summary?: Prisma.SortOrderInput | Prisma.SortOrder
+  rootCause?: Prisma.SortOrderInput | Prisma.SortOrder
+  filesChanged?: Prisma.SortOrderInput | Prisma.SortOrder
   error?: Prisma.SortOrderInput | Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -293,7 +322,10 @@ export type FixRunScalarWhereWithAggregatesInput = {
   repoId?: Prisma.StringWithAggregatesFilter<"FixRun"> | string
   status?: Prisma.EnumFixRunStatusWithAggregatesFilter<"FixRun"> | $Enums.FixRunStatus
   prUrl?: Prisma.StringNullableWithAggregatesFilter<"FixRun"> | string | null
+  branchName?: Prisma.StringNullableWithAggregatesFilter<"FixRun"> | string | null
   summary?: Prisma.StringNullableWithAggregatesFilter<"FixRun"> | string | null
+  rootCause?: Prisma.StringNullableWithAggregatesFilter<"FixRun"> | string | null
+  filesChanged?: Prisma.JsonNullableWithAggregatesFilter<"FixRun">
   error?: Prisma.StringNullableWithAggregatesFilter<"FixRun"> | string | null
   createdAt?: Prisma.DateTimeWithAggregatesFilter<"FixRun"> | Date | string
   updatedAt?: Prisma.DateTimeWithAggregatesFilter<"FixRun"> | Date | string
@@ -307,7 +339,10 @@ export type FixRunCreateInput = {
   repoId: string
   status?: $Enums.FixRunStatus
   prUrl?: string | null
+  branchName?: string | null
   summary?: string | null
+  rootCause?: string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -321,7 +356,10 @@ export type FixRunUncheckedCreateInput = {
   repoId: string
   status?: $Enums.FixRunStatus
   prUrl?: string | null
+  branchName?: string | null
   summary?: string | null
+  rootCause?: string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -335,7 +373,10 @@ export type FixRunUpdateInput = {
   repoId?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumFixRunStatusFieldUpdateOperationsInput | $Enums.FixRunStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   summary?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rootCause?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -349,7 +390,10 @@ export type FixRunUncheckedUpdateInput = {
   repoId?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumFixRunStatusFieldUpdateOperationsInput | $Enums.FixRunStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   summary?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rootCause?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -363,7 +407,10 @@ export type FixRunCreateManyInput = {
   repoId: string
   status?: $Enums.FixRunStatus
   prUrl?: string | null
+  branchName?: string | null
   summary?: string | null
+  rootCause?: string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -377,7 +424,10 @@ export type FixRunUpdateManyMutationInput = {
   repoId?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumFixRunStatusFieldUpdateOperationsInput | $Enums.FixRunStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   summary?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rootCause?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -390,7 +440,10 @@ export type FixRunUncheckedUpdateManyInput = {
   repoId?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumFixRunStatusFieldUpdateOperationsInput | $Enums.FixRunStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   summary?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rootCause?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -414,7 +467,10 @@ export type FixRunCountOrderByAggregateInput = {
   repoId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   prUrl?: Prisma.SortOrder
+  branchName?: Prisma.SortOrder
   summary?: Prisma.SortOrder
+  rootCause?: Prisma.SortOrder
+  filesChanged?: Prisma.SortOrder
   error?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -428,7 +484,9 @@ export type FixRunMaxOrderByAggregateInput = {
   repoId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   prUrl?: Prisma.SortOrder
+  branchName?: Prisma.SortOrder
   summary?: Prisma.SortOrder
+  rootCause?: Prisma.SortOrder
   error?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -442,7 +500,9 @@ export type FixRunMinOrderByAggregateInput = {
   repoId?: Prisma.SortOrder
   status?: Prisma.SortOrder
   prUrl?: Prisma.SortOrder
+  branchName?: Prisma.SortOrder
   summary?: Prisma.SortOrder
+  rootCause?: Prisma.SortOrder
   error?: Prisma.SortOrder
   createdAt?: Prisma.SortOrder
   updatedAt?: Prisma.SortOrder
@@ -502,7 +562,10 @@ export type FixRunCreateWithoutRepositoryInput = {
   repoId: string
   status?: $Enums.FixRunStatus
   prUrl?: string | null
+  branchName?: string | null
   summary?: string | null
+  rootCause?: string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -515,7 +578,10 @@ export type FixRunUncheckedCreateWithoutRepositoryInput = {
   repoId: string
   status?: $Enums.FixRunStatus
   prUrl?: string | null
+  branchName?: string | null
   summary?: string | null
+  rootCause?: string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -557,7 +623,10 @@ export type FixRunScalarWhereInput = {
   repoId?: Prisma.StringFilter<"FixRun"> | string
   status?: Prisma.EnumFixRunStatusFilter<"FixRun"> | $Enums.FixRunStatus
   prUrl?: Prisma.StringNullableFilter<"FixRun"> | string | null
+  branchName?: Prisma.StringNullableFilter<"FixRun"> | string | null
   summary?: Prisma.StringNullableFilter<"FixRun"> | string | null
+  rootCause?: Prisma.StringNullableFilter<"FixRun"> | string | null
+  filesChanged?: Prisma.JsonNullableFilter<"FixRun">
   error?: Prisma.StringNullableFilter<"FixRun"> | string | null
   createdAt?: Prisma.DateTimeFilter<"FixRun"> | Date | string
   updatedAt?: Prisma.DateTimeFilter<"FixRun"> | Date | string
@@ -571,7 +640,10 @@ export type FixRunCreateManyRepositoryInput = {
   repoId: string
   status?: $Enums.FixRunStatus
   prUrl?: string | null
+  branchName?: string | null
   summary?: string | null
+  rootCause?: string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
@@ -584,7 +656,10 @@ export type FixRunUpdateWithoutRepositoryInput = {
   repoId?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumFixRunStatusFieldUpdateOperationsInput | $Enums.FixRunStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   summary?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rootCause?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -597,7 +672,10 @@ export type FixRunUncheckedUpdateWithoutRepositoryInput = {
   repoId?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumFixRunStatusFieldUpdateOperationsInput | $Enums.FixRunStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   summary?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rootCause?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -610,7 +688,10 @@ export type FixRunUncheckedUpdateManyWithoutRepositoryInput = {
   repoId?: Prisma.StringFieldUpdateOperationsInput | string
   status?: Prisma.EnumFixRunStatusFieldUpdateOperationsInput | $Enums.FixRunStatus
   prUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  branchName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   summary?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  rootCause?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  filesChanged?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue
   error?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
   createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
   updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
@@ -625,7 +706,10 @@ export type FixRunSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs =
   repoId?: boolean
   status?: boolean
   prUrl?: boolean
+  branchName?: boolean
   summary?: boolean
+  rootCause?: boolean
+  filesChanged?: boolean
   error?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -640,7 +724,10 @@ export type FixRunSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extens
   repoId?: boolean
   status?: boolean
   prUrl?: boolean
+  branchName?: boolean
   summary?: boolean
+  rootCause?: boolean
+  filesChanged?: boolean
   error?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -655,7 +742,10 @@ export type FixRunSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extens
   repoId?: boolean
   status?: boolean
   prUrl?: boolean
+  branchName?: boolean
   summary?: boolean
+  rootCause?: boolean
+  filesChanged?: boolean
   error?: boolean
   createdAt?: boolean
   updatedAt?: boolean
@@ -670,14 +760,17 @@ export type FixRunSelectScalar = {
   repoId?: boolean
   status?: boolean
   prUrl?: boolean
+  branchName?: boolean
   summary?: boolean
+  rootCause?: boolean
+  filesChanged?: boolean
   error?: boolean
   createdAt?: boolean
   updatedAt?: boolean
   repositoryId?: boolean
 }
 
-export type FixRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "issueId" | "issueTitle" | "repoId" | "status" | "prUrl" | "summary" | "error" | "createdAt" | "updatedAt" | "repositoryId", ExtArgs["result"]["fixRun"]>
+export type FixRunOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "issueId" | "issueTitle" | "repoId" | "status" | "prUrl" | "branchName" | "summary" | "rootCause" | "filesChanged" | "error" | "createdAt" | "updatedAt" | "repositoryId", ExtArgs["result"]["fixRun"]>
 export type FixRunInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
   repository?: boolean | Prisma.RepositoryDefaultArgs<ExtArgs>
 }
@@ -700,7 +793,10 @@ export type $FixRunPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs
     repoId: string
     status: $Enums.FixRunStatus
     prUrl: string | null
+    branchName: string | null
     summary: string | null
+    rootCause: string | null
+    filesChanged: runtime.JsonValue | null
     error: string | null
     createdAt: Date
     updatedAt: Date
@@ -1135,7 +1231,10 @@ export interface FixRunFieldRefs {
   readonly repoId: Prisma.FieldRef<"FixRun", 'String'>
   readonly status: Prisma.FieldRef<"FixRun", 'FixRunStatus'>
   readonly prUrl: Prisma.FieldRef<"FixRun", 'String'>
+  readonly branchName: Prisma.FieldRef<"FixRun", 'String'>
   readonly summary: Prisma.FieldRef<"FixRun", 'String'>
+  readonly rootCause: Prisma.FieldRef<"FixRun", 'String'>
+  readonly filesChanged: Prisma.FieldRef<"FixRun", 'Json'>
   readonly error: Prisma.FieldRef<"FixRun", 'String'>
   readonly createdAt: Prisma.FieldRef<"FixRun", 'DateTime'>
   readonly updatedAt: Prisma.FieldRef<"FixRun", 'DateTime'>

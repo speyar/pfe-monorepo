@@ -1,7 +1,7 @@
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
-import { runReviewAgent } from "./review-agent";
+import { runReviewAgent, type Skill } from "./review-agent";
 import type { DiffSummary } from "./diff-summarize";
 import { generateCodebaseGraph } from "./graph-generator";
 
@@ -53,6 +53,7 @@ export interface PullRequestReviewOptions {
   maxToolSteps?: number;
   minToolSteps?: number;
   signal?: AbortSignal;
+  skills?: Skill[];
 }
 
 function toFindings(
@@ -199,6 +200,7 @@ export async function runPullRequestReview(
       minToolSteps: options.minToolSteps ?? 5,
       signal: options.signal,
       graphPath,
+      skills: options.skills,
     });
 
     const findings = toFindings(review.findings);

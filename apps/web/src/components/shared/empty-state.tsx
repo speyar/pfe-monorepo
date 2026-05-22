@@ -8,6 +8,7 @@ type EmptyStateProps = {
   description: string
   icon?: LucideIcon
   className?: string
+  action?: React.ReactNode
 }
 
 export default function EmptyState({
@@ -15,6 +16,7 @@ export default function EmptyState({
   description,
   icon: Icon = Inbox,
   className,
+  action,
 }: EmptyStateProps) {
   return (
     <Card className={cn('border-dashed', className)}>
@@ -27,6 +29,8 @@ export default function EmptyState({
           <h3 className="text-base font-semibold">{title}</h3>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
+
+        {action}
       </CardContent>
     </Card>
   )

@@ -58,7 +58,8 @@ export const ModelName = {
   Finding: 'Finding',
   SentryConnection: 'SentryConnection',
   RepositorySentryProject: 'RepositorySentryProject',
-  FixRun: 'FixRun'
+  FixRun: 'FixRun',
+  Skill: 'Skill'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -195,7 +196,10 @@ export const FixRunScalarFieldEnum = {
   repoId: 'repoId',
   status: 'status',
   prUrl: 'prUrl',
+  branchName: 'branchName',
   summary: 'summary',
+  rootCause: 'rootCause',
+  filesChanged: 'filesChanged',
   error: 'error',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
@@ -205,12 +209,35 @@ export const FixRunScalarFieldEnum = {
 export type FixRunScalarFieldEnum = (typeof FixRunScalarFieldEnum)[keyof typeof FixRunScalarFieldEnum]
 
 
+export const SkillScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  useCase: 'useCase',
+  description: 'description',
+  content: 'content',
+  targetAgents: 'targetAgents',
+  userId: 'userId',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+} as const
+
+export type SkillScalarFieldEnum = (typeof SkillScalarFieldEnum)[keyof typeof SkillScalarFieldEnum]
+
+
 export const SortOrder = {
   asc: 'asc',
   desc: 'desc'
 } as const
 
 export type SortOrder = (typeof SortOrder)[keyof typeof SortOrder]
+
+
+export const NullableJsonNullValueInput = {
+  DbNull: DbNull,
+  JsonNull: JsonNull
+} as const
+
+export type NullableJsonNullValueInput = (typeof NullableJsonNullValueInput)[keyof typeof NullableJsonNullValueInput]
 
 
 export const QueryMode = {
@@ -227,4 +254,13 @@ export const NullsOrder = {
 } as const
 
 export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder]
+
+
+export const JsonNullValueFilter = {
+  DbNull: DbNull,
+  JsonNull: JsonNull,
+  AnyNull: AnyNull
+} as const
+
+export type JsonNullValueFilter = (typeof JsonNullValueFilter)[keyof typeof JsonNullValueFilter]
 

@@ -7,3 +7,7 @@ export {
   createCodebaseGraphTool,
   type CodebaseGraphTool,
 } from "./CodebaseGraphTool";
+export {
+  createRequestSkillTool,
+  type RequestSkillTool,
+} from "./RequestSkillTool";

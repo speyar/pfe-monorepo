@@ -73,6 +73,11 @@ export async function POST(
 
     const { runSentryFix } = await import('@pfe-monorepo/mechanic-agent')
 
+    const userSkills = await prisma.skill.findMany({
+      where: { userId: user.clerkUserId },
+      select: { name: true, useCase: true, description: true, content: true, targetAgents: true },
+    })
+
     const result = await runSentryFix(
       {
         issue: {
@@ -96,6 +101,7 @@ export async function POST(
       },
       {
         repositoryUrl: `https://github.com/${repoWithInstallation.fullName}.git`,
+        skills: userSkills,
       },
     )
 

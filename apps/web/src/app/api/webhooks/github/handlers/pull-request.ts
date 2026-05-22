@@ -11,8 +11,10 @@ import {
   summarizeDiffWithDefaultModel,
   type PullRequestReviewFinding as ReviewFinding,
   type PullRequestReviewResult as ReviewResult,
+  type Skill,
 } from '@pfe-monorepo/new-review-agent'
 import { getGithubInstallationReviewer, savePullRequestReview } from '../db'
+import prisma from '@/lib/db'
 import {
   getInstallationId,
   getOwnerRepo,
@@ -539,6 +541,15 @@ export const handlePullRequestEvent = async ({
 
   const githubInstallation = await getGithubInstallationReviewer(installationId)
 
+  let skills: Skill[] = []
+  if (githubInstallation) {
+    const dbSkills = await prisma.skill.findMany({
+      where: { userId: githubInstallation.user.clerkUserId },
+      select: { name: true, useCase: true, description: true, content: true, targetAgents: true },
+    })
+    skills = dbSkills
+  }
+
   if (!githubInstallation) {
     console.warn('[github-webhook] pull_request ignored', {
       deliveryId,
@@ -652,6 +663,17 @@ export const handlePullRequestEvent = async ({
     : null
 
   try {
+    console.info('[github-webhook] starting AI review', {
+      deliveryId,
+      installationId,
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      pullRequestNumber,
+      filesCount: filesForReview.length,
+      diffBytes: initialDiff.length,
+      hasDiffSummary: Boolean(diffSummary),
+    })
+
     const review: ReviewResult = await runPullRequestReview({
       installationId,
       owner: ownerRepo.owner,
@@ -660,6 +682,15 @@ export const handlePullRequestEvent = async ({
       baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
       initialDiff,
       diffSummary: diffSummary ?? undefined,
+    }, { skills })
+
+    console.info('[github-webhook] AI review completed', {
+      deliveryId,
+      findingsCount: review.findings.length,
+      verdict: review.summary.verdict,
+      score: review.summary.score,
+      risk: review.summary.risk,
+      overviewPreview: review.summary.overview?.slice(0, 200),
     })
 
     if (checkRun) {
@@ -677,6 +708,10 @@ export const handlePullRequestEvent = async ({
     }
 
     const reviewText = toMarkdownReview(review)
+    console.info('[github-webhook] review text generated', {
+      reviewTextBytes: reviewText.length,
+      reviewTextPreview: reviewText.slice(0, 300),
+    })
 
     const patchByPath = new Map<string, string>()
     for (const file of files) {
@@ -699,6 +734,11 @@ export const handlePullRequestEvent = async ({
     }> = []
 
     const commitSha = body.pull_request?.head?.sha
+    console.info('[github-webhook] posting inline comments', {
+      totalFindings: review.findings.length,
+      hasCommitSha: Boolean(commitSha),
+    })
+
     if (commitSha) {
       for (const finding of review.findings) {
         const targetResolution = resolveInlineTarget(finding, patchByPath, lineMapsByPath)
@@ -722,19 +762,31 @@ export const handlePullRequestEvent = async ({
 
         const commentBody = buildInlineCommentBody(finding, targetResolution.target)
 
-        await createPullRequestReviewComment(installationId, {
-          owner: ownerRepo.owner,
-          repo: ownerRepo.repo,
-          pullRequestNumber,
-          commitSha,
-          path: targetResolution.target.path,
-          line: targetResolution.target.line,
-          side: targetResolution.target.side,
-          body: commentBody,
-        })
-
-        postedInline += 1
-        findingStatuses.push({ finding, postedToGitHub: true, skipReason: null })
+        try {
+          await createPullRequestReviewComment(installationId, {
+            owner: ownerRepo.owner,
+            repo: ownerRepo.repo,
+            pullRequestNumber,
+            commitSha,
+            path: targetResolution.target.path,
+            line: targetResolution.target.line,
+            side: targetResolution.target.side,
+            body: commentBody,
+          })
+          postedInline += 1
+          findingStatuses.push({ finding, postedToGitHub: true, skipReason: null })
+        } catch (commentError) {
+          console.warn('[github-webhook] inline comment failed', {
+            findingTitle: finding.title,
+            file: finding.file,
+            line: finding.line,
+            targetPath: targetResolution.target.path,
+            targetLine: targetResolution.target.line,
+            error: commentError instanceof Error ? commentError.message : String(commentError),
+          })
+          skippedByReason.inline_comment_post_failed = (skippedByReason.inline_comment_post_failed ?? 0) + 1
+          findingStatuses.push({ finding, postedToGitHub: false, skipReason: 'inline_comment_post_failed' })
+        }
       }
     } else {
       skippedByReason.missing_commit_sha = review.findings.length
@@ -758,6 +810,13 @@ export const handlePullRequestEvent = async ({
         body: fallbackComment,
       })
     }
+
+    console.info('[github-webhook] saving review to DB', {
+      deliveryId,
+      findingsWithStatus: findingStatuses.length,
+      postedToGithub: findingStatuses.filter((f) => f.postedToGitHub).length,
+      skippedCount: findingStatuses.filter((f) => !f.postedToGitHub).length,
+    })
 
     const reviewDbStatus = await savePullRequestReview({
       installationId,
@@ -833,6 +892,18 @@ export const handlePullRequestEvent = async ({
 
     return null
   } catch (error) {
+    console.error('[github-webhook] review failed', {
+      deliveryId,
+      installationId,
+      owner: ownerRepo.owner,
+      repo: ownerRepo.repo,
+      pullRequestNumber,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack?.split('\n').slice(0, 6).join('\n') : undefined,
+      errorCause: error instanceof Error && error.cause ? JSON.stringify(error.cause) : undefined,
+    })
+
     if (checkRun) {
       await updateCheckRun(installationId, {
         owner: ownerRepo.owner,
