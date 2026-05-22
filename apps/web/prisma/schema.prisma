@@ -119,17 +119,20 @@ model RepositorySentryProject {
 }
 
 model FixRun {
-  id          String   @id @default(cuid())
-  issueId     String
-  issueTitle  String
-  repoId      String
-  status      FixRunStatus @default(running)
-  prUrl       String?
-  summary     String?
-  error       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  repository  Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  id           String        @id @default(cuid())
+  issueId      String
+  issueTitle   String
+  repoId       String
+  status       FixRunStatus  @default(running)
+  prUrl        String?
+  branchName   String?
+  summary      String?
+  rootCause    String?
+  filesChanged Json?
+  error        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  repository   Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   repositoryId String
 }
 

@@ -104,7 +104,10 @@ export async function POST(
       data: {
         status: result.success ? 'success' : 'failed',
         prUrl: result.prUrl ?? undefined,
+        branchName: result.branchName ?? undefined,
         summary: result.fix?.summary ?? undefined,
+        rootCause: result.fix?.rootCause ?? undefined,
+        filesChanged: result.fix?.filesChanged ?? undefined,
         error: result.error ?? undefined,
       },
     })

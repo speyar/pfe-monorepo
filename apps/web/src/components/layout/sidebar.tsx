@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useUser, SignOutButton } from '@clerk/nextjs'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, GitBranch, GitPullRequest, Bug, Settings, LogOut } from 'lucide-react'
+import { LayoutDashboard, GitBranch, GitPullRequest, Bug, Wrench, Settings, LogOut } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import Image from 'next/image'
 
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/repos', label: 'Repositories', icon: GitBranch },
   { href: '/pulls', label: 'Pull Requests', icon: GitPullRequest },
   { href: '/issues', label: 'Issues & Alerts', icon: Bug },
+  { href: '/fixes', label: 'Fix History', icon: Wrench },
   { href: '/settings', label: 'Settings', icon: Settings },
 ]
 

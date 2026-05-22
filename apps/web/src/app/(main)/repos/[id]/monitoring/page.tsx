@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import fetcher from '@/lib/fetcher'
 import type { AppError } from '@/lib/error'
-import { ExternalLink, RefreshCw } from 'lucide-react'
+import { ExternalLink, RefreshCw, Wrench } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { useState, type FormEvent } from 'react'
+import { useState, useMemo, type FormEvent } from 'react'
 import useSWR from 'swr'
 import { FixButton } from './_components/FixButton'
 
@@ -117,6 +117,21 @@ export default function RepoMonitoringPage() {
     isLoading: loadingIssues,
     mutate: refreshIssues,
   } = useSWR<IssuesResponse, AppError>(issuesUrl, fetcher)
+
+  const fixRunsUrl = repoId ? `/api/repos/${repoId}/monitoring/fix-runs` : null
+
+  const { data: fixRunsData } = useSWR<{ data: { id: string; issueId: string; issueTitle: string; status: string; prUrl: string | null; createdAt: string }[] }, AppError>(fixRunsUrl, fetcher)
+
+  const fixRunsByIssue = useMemo(() => {
+    const map = new Map<string, { id: string; issueTitle: string; status: string; prUrl: string | null; createdAt: string }[]>()
+    if (!fixRunsData?.data) return map
+    for (const run of fixRunsData.data) {
+      const existing = map.get(run.issueId) ?? []
+      existing.push(run)
+      map.set(run.issueId, existing)
+    }
+    return map
+  }, [fixRunsData])
 
   async function handleLinkProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -347,34 +362,49 @@ export default function RepoMonitoringPage() {
             ) : null}
 
             {!loadingIssues && !issuesError
-              ? issues?.data.map((issue) => (
-                  <div key={issue.id} className="rounded-lg border border-border p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-medium">{issue.title}</p>
-                        <p className="text-xs text-muted-foreground">{issue.culprit || '-'}</p>
+              ? issues?.data.map((issue) => {
+                  const previousFixes = fixRunsByIssue.get(issue.id) ?? []
+                  const latestFix = previousFixes[0]
+
+                  return (
+                    <div key={issue.id} className="rounded-lg border border-border p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{issue.title}</p>
+                          <p className="text-xs text-muted-foreground">{issue.culprit || '-'}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {latestFix && (
+                            <Link href={`/fixes/${latestFix.id}`}>
+                              <Button variant="outline" size="sm" className="gap-1">
+                                <Wrench className="size-3" />
+                                {previousFixes.length > 1
+                                  ? `${previousFixes.length} fixes`
+                                  : 'View fix'}
+                              </Button>
+                            </Link>
+                          )}
+                          <FixButton issue={issue} repoId={repoId} />
+                          <a href={issue.permalink} target="_blank" rel="noreferrer noopener">
+                            <Button variant="ghost" size="sm">
+                              Open
+                              <ExternalLink className="size-3.5" />
+                            </Button>
+                          </a>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <FixButton issue={issue} repoId={repoId} />
-                        <a href={issue.permalink} target="_blank" rel="noreferrer noopener">
-                          <Button variant="ghost" size="sm">
-                            Open
-                            <ExternalLink className="size-3.5" />
-                          </Button>
-                        </a>
+                      <div className="flex items-center gap-2 flex-wrap text-xs">
+                        <Badge variant="outline">Status: {issue.status}</Badge>
+                        <Badge variant="outline">Level: {issue.level}</Badge>
+                        <Badge variant="outline">Events: {issue.count}</Badge>
+                        <Badge variant="outline">Users: {issue.userCount}</Badge>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        First seen: {fmtDate(issue.firstSeen)} | Last seen: {fmtDate(issue.lastSeen)}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap text-xs">
-                      <Badge variant="outline">Status: {issue.status}</Badge>
-                      <Badge variant="outline">Level: {issue.level}</Badge>
-                      <Badge variant="outline">Events: {issue.count}</Badge>
-                      <Badge variant="outline">Users: {issue.userCount}</Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      First seen: {fmtDate(issue.firstSeen)} | Last seen: {fmtDate(issue.lastSeen)}
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               : null}
           </CardContent>
         </Card>
