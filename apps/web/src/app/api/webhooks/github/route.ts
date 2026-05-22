@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
     return Response.json({ ok: false, error: 'Invalid JSON payload' }, { status: 400 })
   }
 
+  // Process synchronously (maxDuration handles the timeout on Pro plan)
   try {
     const handlerResponse = await handleGitHubWebhookEvent({
       eventName,
