@@ -195,19 +195,25 @@ export async function runPullRequestReview(
 
     console.log("Generating codebase graph...");
     let effectiveGraphPath: string | undefined = graphPath;
-    try {
-      const graphResult = await generateCodebaseGraph(manager, sandbox.id, {
-        rootPath: workingDir,
-        outPath: graphPath,
-        pretty: true,
-      });
-      console.log(
-        `Codebase graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
-      );
-    } catch (graphError) {
-      console.warn("[review-agent] Codebase graph generation failed, continuing without it", {
-        error: graphError instanceof Error ? graphError.message : String(graphError),
-      });
+    const elapsedBeforeGraph = Date.now() - startedAt;
+    if (elapsedBeforeGraph < 3000) {
+      try {
+        const graphResult = await generateCodebaseGraph(manager, sandbox.id, {
+          rootPath: workingDir,
+          outPath: graphPath,
+          pretty: true,
+        });
+        console.log(
+          `Codebase graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
+        );
+      } catch (graphError) {
+        console.warn("[review-agent] Codebase graph generation failed, continuing without it", {
+          error: graphError instanceof Error ? graphError.message : String(graphError),
+        });
+        effectiveGraphPath = undefined;
+      }
+    } else {
+      console.log(`[review-agent] Skipping graph generation (already spent ${elapsedBeforeGraph}ms on setup)`);
       effectiveGraphPath = undefined;
     }
 

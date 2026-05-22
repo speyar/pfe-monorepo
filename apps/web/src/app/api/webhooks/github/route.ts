@@ -3,6 +3,7 @@ import { isValidSignature } from './helpers'
 import { handleGitHubWebhookEvent } from './handlers'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   const secret = process.env.GITHUB_WEBHOOK_SECRET
