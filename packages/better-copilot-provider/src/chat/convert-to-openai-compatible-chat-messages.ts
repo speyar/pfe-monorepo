@@ -127,6 +127,7 @@ export function convertToOpenAICompatibleChatMessages(
           content: text || null,
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
           reasoning_text: reasoningOpaque ? reasoningText : undefined,
+          reasoning_content: reasoningText || undefined,
           reasoning_opaque: reasoningOpaque,
           ...metadata,
         });
