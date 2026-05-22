@@ -9,7 +9,24 @@ import { savePullRequestReview } from '../../webhooks/github/db'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-export async function POST() {
+export async function POST(request: Request) {
+  const url = new URL(request.url)
+  const action = url.searchParams.get('action')
+
+  if (action === 'skip-big') {
+    const bigJob = await prisma.reviewJob.findFirst({
+      where: { status: 'processing' },
+      orderBy: { createdAt: 'asc' },
+    })
+    if (bigJob) {
+      await prisma.reviewJob.update({
+        where: { id: bigJob.id },
+        data: { status: 'failed', error: 'Skipped - too large' },
+      })
+      return Response.json({ ok: true, skipped: bigJob.id })
+    }
+    return Response.json({ ok: true, message: 'no processing jobs to skip' })
+  }
   try {
     const job = await prisma.reviewJob.findFirst({
       where: { status: 'pending' },
