@@ -674,6 +674,11 @@ export const handlePullRequestEvent = async ({
       hasDiffSummary: Boolean(diffSummary),
     })
 
+    const filesForInput = filesForReview.map((f) => ({
+      path: f.path,
+      patch: f.patch ?? "",
+    }))
+
     const review: ReviewResult = await runPullRequestReview({
       installationId,
       owner: ownerRepo.owner,
@@ -682,6 +687,7 @@ export const handlePullRequestEvent = async ({
       baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
       initialDiff,
       diffSummary: diffSummary ?? undefined,
+      files: filesForInput,
     }, { skills })
 
     console.info('[github-webhook] AI review completed', {

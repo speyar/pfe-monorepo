@@ -45,6 +45,7 @@ export interface ReviewAgentOptions {
   maxFindings?: number;
   graphPath?: string;
   skills?: Skill[];
+  subFindingsContext?: string;
 }
 
 export interface ReviewFinding {
@@ -402,6 +403,17 @@ The following skills are configured for your agent. Review their names and use c
 ${targetSkills.map((s) => `- Name: ${s.name}\n  Use Case: ${s.useCase}`).join("\n")}
 
 Use the requestSkill tool to load any matching skill's full instructions.` : ""}
+${options.subFindingsContext ? `
+---
+## SUB-AGENT FINDINGS
+
+${options.subFindingsContext}
+
+Cross-reference each finding against the actual codebase using readFile/grep/codebaseGraph.
+Validate: is it real? Is the severity correct?
+Deduplicate: merge findings pointing to the same issue.
+Add any new findings the sub-agents missed.
+Output the final deduplicated set.` : ""}
 
 IMMEDIATE ACTION REQUIRED:
 1. Start from the precomputed diff provided in the user prompt.

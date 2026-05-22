@@ -62,8 +62,11 @@ export interface Skill {
   targetAgents: string[];
 }
 
+import type { LanguageModel } from "ai";
+
 export interface MechanicAgentOptions {
   modelName?: string;
+  model?: LanguageModel;
   maxToolSteps?: number;
   minToolSteps?: number;
   signal?: AbortSignal;

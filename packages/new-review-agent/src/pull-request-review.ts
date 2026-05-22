@@ -4,6 +4,8 @@ import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runReviewAgent, type Skill } from "./review-agent";
 import type { DiffSummary } from "./diff-summarize";
 import { generateCodebaseGraph } from "./graph-generator";
+import type { LanguageModel } from "ai";
+import { runSubReviews, mergeSubFindings, buildSubFindingsPrompt } from "./fan-out-review";
 
 export type PullRequestReviewVerdict =
   | "approve"
@@ -43,10 +45,12 @@ export interface PullRequestReviewInput {
   baseRef?: string;
   initialDiff?: string;
   diffSummary?: DiffSummary;
+  files?: Array<{ path: string; patch: string }>;
 }
 
 export interface PullRequestReviewOptions {
   modelName?: string;
+  model?: LanguageModel;
   ownerId?: string;
   repositoryUrl?: string;
   maxFindings?: number;
@@ -54,6 +58,7 @@ export interface PullRequestReviewOptions {
   minToolSteps?: number;
   signal?: AbortSignal;
   skills?: Skill[];
+  maxFilesBeforeFanOut?: number;
 }
 
 function toFindings(
@@ -129,19 +134,18 @@ export async function runPullRequestReview(
   input: PullRequestReviewInput,
   options: PullRequestReviewOptions = {},
 ): Promise<PullRequestReviewResult> {
-  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-
-  console.log("copilotToken", copilotToken);
-
-  if (!copilotToken) {
-    throw new Error("Missing COPILOT_GITHUB_TOKEN");
-  }
-
-  const provider = createOpenaiCompatible({
-    apiKey: copilotToken,
-    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-    name: "copilot",
-  });
+  const model = options.model ?? (() => {
+    const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
+    if (!copilotToken) {
+      throw new Error("Missing COPILOT_GITHUB_TOKEN");
+    }
+    const provider = createOpenaiCompatible({
+      apiKey: copilotToken,
+      baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
+      name: "copilot",
+    });
+    return provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini");
+  })();
 
   const githubClient = await getGitHubClient(input.installationId);
   const {
@@ -196,11 +200,39 @@ export async function runPullRequestReview(
       effectiveGraphPath = undefined;
     }
 
+    const files = input.files ?? [];
+    const threshold = options.maxFilesBeforeFanOut ?? 30;
+
+    let subFindingsPrompt = "";
+
+    if (files.length > threshold) {
+      console.log(`[review-agent] Fan-out mode: ${files.length} files > ${threshold} threshold`);
+      const subResults = await runSubReviews({
+        model,
+        files,
+        batchSize: 15,
+      });
+      const subFindings = mergeSubFindings(subResults);
+      console.log(`[review-agent] Sub-agents returned ${subFindings.length} findings across ${subResults.length} batches`);
+      subFindingsPrompt = buildSubFindingsPrompt(subFindings);
+    }
+
+    const initialDiff = input.initialDiff ?? (files.length > 0
+      ? files.map((f) => {
+          return [
+            `diff --git a/${f.path} b/${f.path}`,
+            `--- a/${f.path}`,
+            `+++ b/${f.path}`,
+            f.patch,
+          ].join("\n");
+        }).join("\n\n")
+      : "");
+
     const review = await runReviewAgent(input.headRef, {
-      model: provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini"),
+      model,
       sandboxManager: manager,
       sandboxId: sandbox.id,
-      initialDiff: input.initialDiff,
+      initialDiff,
       diffSummary: input.diffSummary,
       defaultBranch: input.baseRef,
       maxFindings: options.maxFindings ?? 20,
@@ -209,13 +241,15 @@ export async function runPullRequestReview(
       signal: options.signal,
       graphPath: effectiveGraphPath,
       skills: options.skills,
+      subFindingsContext: subFindingsPrompt || undefined,
     });
 
     const findings = toFindings(review.findings);
     const elapsedMs = Date.now() - startedAt;
+    const modelName = process.env.REVIEW_MODEL ?? "gpt-5.4-mini";
 
     return {
-      summary: buildSummary(findings, "gpt-5.4-mini", elapsedMs),
+      summary: buildSummary(findings, modelName, elapsedMs),
       findings,
     };
   } catch (error) {

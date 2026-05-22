@@ -175,8 +175,10 @@ export async function runSentryFix(
 
     const sentryContextPrompt = buildSentryContextPrompt(input);
 
+    const model = options.model ?? provider(options.modelName ?? "gpt-5.4-mini");
+
     const fix = await runMechanicAgent({
-      model: provider(options.modelName ?? "gpt-5.4-mini"),
+      model,
       sandboxManager: manager,
       sandboxId: sandbox.id,
       sentryContextPrompt,
