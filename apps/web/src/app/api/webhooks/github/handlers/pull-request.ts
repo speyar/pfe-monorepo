@@ -13,7 +13,7 @@ import {
   type PullRequestReviewResult as ReviewResult,
   type Skill,
 } from '@pfe-monorepo/new-review-agent'
-import { getGithubInstallationReviewer, savePullRequestReview } from '../db'
+import { getGithubInstallationByRepoFullName, getGithubInstallationReviewer, savePullRequestReview } from '../db'
 import prisma from '@/lib/db'
 import {
   getInstallationId,
@@ -520,11 +520,11 @@ export const handlePullRequestEvent = async ({
   const installationId = getInstallationId(body.installation)
   const ownerRepo = getOwnerRepo(body.repository)
   const pullRequestNumber = body.pull_request?.number
+  const repoFullName = body.repository?.full_name
 
-  console.log(`[webhook] PR ${pullRequestNumber} action=${body.action} installationId=${installationId} deliveryId=${deliveryId}`)
+  console.log(`[webhook] PR ${pullRequestNumber} action=${body.action} installationId=${installationId} repo=${repoFullName}`)
 
   if (
-    !installationId ||
     !ownerRepo ||
     typeof pullRequestNumber !== 'number' ||
     !Number.isInteger(pullRequestNumber)
@@ -541,7 +541,22 @@ export const handlePullRequestEvent = async ({
     return null
   }
 
-  const githubInstallation = await getGithubInstallationReviewer(installationId)
+  const effectiveInstallationId = installationId ?? (repoFullName
+    ? (await getGithubInstallationByRepoFullName(repoFullName))?.installationId ?? null
+    : null)
+
+  if (!effectiveInstallationId) {
+    console.warn('[github-webhook] pull_request ignored: no installation found', {
+      deliveryId,
+      action: body.action,
+      installationId,
+      repo: repoFullName,
+      pullRequestNumber,
+    })
+    return null
+  }
+
+  const githubInstallation = await getGithubInstallationReviewer(effectiveInstallationId)
 
   let skills: Skill[] = []
   if (githubInstallation) {
@@ -556,7 +571,7 @@ export const handlePullRequestEvent = async ({
     console.warn('[github-webhook] pull_request ignored', {
       deliveryId,
       action: body.action,
-      installationId,
+      installationId: effectiveInstallationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
@@ -566,12 +581,12 @@ export const handlePullRequestEvent = async ({
   }
 
   const [pullRequest, files] = await Promise.all([
-    getPullRequest(installationId, {
+    getPullRequest(effectiveInstallationId, {
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
     }),
-    listPullRequestFiles(installationId, {
+    listPullRequestFiles(effectiveInstallationId, {
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
@@ -607,7 +622,7 @@ export const handlePullRequestEvent = async ({
   }).catch((error) => {
     console.warn('[github-webhook] diff summarizer failed', {
       deliveryId,
-      installationId,
+      installationId: effectiveInstallationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
@@ -621,7 +636,7 @@ export const handlePullRequestEvent = async ({
     console.warn('[github-webhook] pull_request review skipped', {
       deliveryId,
       action: body.action,
-      installationId,
+      installationId: effectiveInstallationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
@@ -631,7 +646,7 @@ export const handlePullRequestEvent = async ({
   }
 
   const pullRequestUrl = body.pull_request?.html_url ?? pullRequest.htmlUrl
-  await upsertPullRequestComment(installationId, {
+  await upsertPullRequestComment(effectiveInstallationId, {
     owner: ownerRepo.owner,
     repo: ownerRepo.repo,
     pullRequestNumber,
@@ -641,7 +656,7 @@ export const handlePullRequestEvent = async ({
 
   const checkRunHeadSha = body.pull_request?.head?.sha
   const checkRun = checkRunHeadSha
-    ? await createCheckRun(installationId, {
+    ? await createCheckRun(effectiveInstallationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         name: 'review-agent',
@@ -658,7 +673,7 @@ export const handlePullRequestEvent = async ({
       }).catch((error) => {
         console.warn('[github-webhook] failed to create review check run', {
           deliveryId,
-          installationId,
+          installationId: effectiveInstallationId,
           owner: ownerRepo.owner,
           repo: ownerRepo.repo,
           pullRequestNumber,
@@ -671,7 +686,7 @@ export const handlePullRequestEvent = async ({
   try {
     console.info('[github-webhook] starting AI review', {
       deliveryId,
-      installationId,
+      effectiveInstallationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
@@ -686,7 +701,7 @@ export const handlePullRequestEvent = async ({
     }))
 
     const review: ReviewResult = await runPullRequestReview({
-      installationId,
+      installationId: effectiveInstallationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
@@ -706,7 +721,7 @@ export const handlePullRequestEvent = async ({
     })
 
     if (checkRun) {
-      await updateCheckRun(installationId, {
+      await updateCheckRun(effectiveInstallationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         checkRunId: checkRun.id,
@@ -775,7 +790,7 @@ export const handlePullRequestEvent = async ({
         const commentBody = buildInlineCommentBody(finding, targetResolution.target)
 
         try {
-          await createPullRequestReviewComment(installationId, {
+          await createPullRequestReviewComment(effectiveInstallationId, {
             owner: ownerRepo.owner,
             repo: ownerRepo.repo,
             pullRequestNumber,
@@ -814,7 +829,7 @@ export const handlePullRequestEvent = async ({
         skippedByReason,
       })
 
-      await upsertPullRequestComment(installationId, {
+  await upsertPullRequestComment(effectiveInstallationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         pullRequestNumber,
@@ -831,7 +846,7 @@ export const handlePullRequestEvent = async ({
     })
 
     const reviewDbStatus = await savePullRequestReview({
-      installationId,
+      installationId: effectiveInstallationId,
       repository: body.repository,
       ownerRepo,
       pullRequestNumber: pullRequest.number,
@@ -862,7 +877,7 @@ export const handlePullRequestEvent = async ({
     console.info('[github-webhook] pull_request review completed', {
       deliveryId,
       action: body.action,
-      installationId,
+      installationId: effectiveInstallationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
@@ -876,7 +891,7 @@ export const handlePullRequestEvent = async ({
     })
 
     if (checkRun) {
-      await updateCheckRun(installationId, {
+      await updateCheckRun(effectiveInstallationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         checkRunId: checkRun.id,
@@ -894,7 +909,7 @@ export const handlePullRequestEvent = async ({
       })
     }
 
-    await upsertPullRequestComment(installationId, {
+    await upsertPullRequestComment(effectiveInstallationId, {
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
@@ -906,7 +921,7 @@ export const handlePullRequestEvent = async ({
   } catch (error) {
     console.error('[github-webhook] review failed', {
       deliveryId,
-      installationId,
+      installationId: effectiveInstallationId,
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,
@@ -917,7 +932,7 @@ export const handlePullRequestEvent = async ({
     })
 
     if (checkRun) {
-      await updateCheckRun(installationId, {
+      await updateCheckRun(effectiveInstallationId, {
         owner: ownerRepo.owner,
         repo: ownerRepo.repo,
         checkRunId: checkRun.id,
@@ -931,7 +946,7 @@ export const handlePullRequestEvent = async ({
       })
     }
 
-    await upsertPullRequestComment(installationId, {
+    await upsertPullRequestComment(effectiveInstallationId, {
       owner: ownerRepo.owner,
       repo: ownerRepo.repo,
       pullRequestNumber,

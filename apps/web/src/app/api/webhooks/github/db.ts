@@ -142,6 +142,24 @@ export const getGithubInstallationReviewer = async (installationId: number) =>
     where: { installationId },
     select: {
       id: true,
+      installationId: true,
+      user: {
+        select: {
+          clerkUserId: true,
+        },
+      },
+    },
+  })
+
+export const getGithubInstallationByRepoFullName = async (fullName: string) =>
+  prisma.githubInstallation.findFirst({
+    where: {
+      repos: {
+        some: { fullName },
+      },
+    },
+    select: {
+      installationId: true,
       user: {
         select: {
           clerkUserId: true,
