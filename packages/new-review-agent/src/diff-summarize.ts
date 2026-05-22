@@ -1,4 +1,4 @@
-import { generateText, Output, type LanguageModel } from "ai";
+import { generateText, type LanguageModel } from "ai";
 import { z } from "zod";
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
 
@@ -26,6 +26,18 @@ export interface SummarizeDiffWithDefaultModelInput {
 
 const MAX_DIFF_CHARS = 50_000;
 
+function parseDiffSummaryJson(text: string): DiffSummary | null {
+  const cleaned = text.trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    return diffSummarySchema.parse(parsed);
+  } catch {
+    return null;
+  }
+}
+
 export async function summarizeDiff(
   input: SummarizeDiffInput,
 ): Promise<DiffSummary | null> {
@@ -45,6 +57,10 @@ export async function summarizeDiff(
       "Return only what is directly supported by the diff.",
       "Keep output concise, concrete, and evidence-based.",
       "Do not infer business context not present in diff.",
+      "",
+      "Output a SINGLE JSON object. Example:",
+      '{"intent":"...","keyChanges":["..."],"riskPoints":["..."],"openQuestions":["..."],"evidence":["..."]}',
+      "Output ONLY the JSON. No markdown fences, no preamble.",
     ].join(" "),
     prompt: [
       "Summarize the diff into the required JSON fields:",
@@ -57,15 +73,10 @@ export async function summarizeDiff(
       "Diff:",
       truncatedDiff,
     ].join("\n"),
-    output: Output.object({
-      schema: diffSummarySchema,
-      name: "diff_summary",
-      description: "Concise, grounded summary of a PR diff.",
-    }),
     abortSignal: input.signal,
   });
 
-  return result.output;
+  return parseDiffSummaryJson(result.text ?? "");
 }
 
 export async function summarizeDiffWithDefaultModel(

@@ -1,4 +1,4 @@
-import { generateText, Output, stepCountIs, type LanguageModel } from "ai";
+import { generateText, stepCountIs, type LanguageModel } from "ai";
 import type { SandboxManager } from "@packages/sandbox";
 import { fixResultSchema } from "./schema/fix-result";
 import type { FixResult, ChangedFile } from "./schema/fix-result";
@@ -168,11 +168,6 @@ ${graphContextInfo}${skillsSection}`;
     prompt: options.sentryContextPrompt,
     tools,
     stopWhen: stepCountIs(maxSteps),
-    output: Output.object({
-      schema: fixResultSchema,
-      name: "fix_result",
-      description: "Structured bug fix result.",
-    }),
     abortSignal: options.signal,
     onStepFinish: (step) => {
       console.log(
@@ -183,7 +178,7 @@ ${graphContextInfo}${skillsSection}`;
 
   console.log("[mechanic-agent] fix generation completed");
 
-  const parsed = generation.output ?? parseJsonResponse(generation.text ?? "");
+  const parsed = parseJsonResponse(generation.text ?? "");
   return parsed ?? {
     summary: "Agent failed to produce a valid fix result.",
     rootCause: "Unable to parse LLM output.",

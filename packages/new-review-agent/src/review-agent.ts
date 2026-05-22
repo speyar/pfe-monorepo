@@ -1,4 +1,4 @@
-import { generateText, Output, stepCountIs, type LanguageModel } from "ai";
+import { generateText, stepCountIs, type LanguageModel } from "ai";
 
 import { reviewResultSchema } from "./schema/review-result";
 import { REVIEW_AGENT_SYSTEM_PROMPT } from "./prompts/review-agent";
@@ -434,11 +434,6 @@ IMMEDIATE ACTION REQUIRED:
     }),
     tools,
     stopWhen: stepCountIs(maxSteps),
-    output: Output.object({
-      schema: reviewResultSchema,
-      name: "review_result",
-      description: "Structured pull request review findings.",
-    }),
     abortSignal: options.signal,
     experimental_onToolCallFinish: async ({ toolCall: tc, output }) => {
       if (!tc) return;
@@ -488,9 +483,8 @@ IMMEDIATE ACTION REQUIRED:
     console.log("[llm] final text", preview(generation.text, 1000));
   }
 
-  const parsed = generation.output ??
-    parseJsonResponse(generation.text ?? "") ?? {
-      findings: [],
-    };
+  const parsed = parseJsonResponse(generation.text ?? "") ?? {
+    findings: [],
+  };
   return capFindings(parsed, options.maxFindings ?? 25);
 }
