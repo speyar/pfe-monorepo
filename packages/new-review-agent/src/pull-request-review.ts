@@ -135,9 +135,20 @@ export async function runPullRequestReview(
   options: PullRequestReviewOptions = {},
 ): Promise<PullRequestReviewResult> {
   const model = options.model ?? (() => {
+    const deepseekKey = process.env.DEEPSEEK_API_KEY;
+    if (deepseekKey) {
+      const provider = createOpenaiCompatible({
+        apiKey: deepseekKey,
+        baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://opencode.ai/zen/go/v1",
+        name: "deepseek",
+      });
+      const modelName = process.env.DEEPSEEK_MODEL ?? process.env.REVIEW_MODEL ?? "deepseek-v4-flash";
+      console.log(`[provider] using DeepSeek/OpenCodeGO: ${modelName}`);
+      return provider(modelName);
+    }
     const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
     if (!copilotToken) {
-      throw new Error("Missing COPILOT_GITHUB_TOKEN");
+      throw new Error("Missing COPILOT_GITHUB_TOKEN (and no DEEPSEEK_API_KEY)");
     }
     const provider = createOpenaiCompatible({
       apiKey: copilotToken,

@@ -108,19 +108,31 @@ export async function runSentryFix(
   input: SentryFixInput,
   options: MechanicAgentOptions = {},
 ): Promise<SentryFixResult> {
-  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-  if (!copilotToken) {
+  const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  const provider = deepseekKey
+    ? createOpenaiCompatible({
+        apiKey: deepseekKey,
+        baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://opencode.ai/zen/go/v1",
+        name: "deepseek",
+      })
+    : (() => {
+        const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
+        if (!copilotToken) {
+          return null;
+        }
+        return createOpenaiCompatible({
+          apiKey: copilotToken,
+          baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
+          name: "copilot",
+        });
+      })();
+
+  if (!provider) {
     return {
       success: false,
-      error: "Missing COPILOT_GITHUB_TOKEN",
+      error: "Missing COPILOT_GITHUB_TOKEN or DEEPSEEK_API_KEY",
     };
   }
-
-  const provider = createOpenaiCompatible({
-    apiKey: copilotToken,
-    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-    name: "copilot",
-  });
 
   let githubClient;
   let token: string;
@@ -175,7 +187,10 @@ export async function runSentryFix(
 
     const sentryContextPrompt = buildSentryContextPrompt(input);
 
-    const model = options.model ?? provider(options.modelName ?? "gpt-5.4-mini");
+    const defaultModel = process.env.DEEPSEEK_API_KEY
+      ? (process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash")
+      : "gpt-5.4-mini";
+    const model = options.model ?? provider(options.modelName ?? defaultModel);
 
     const fix = await runMechanicAgent({
       model,
