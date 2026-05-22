@@ -108,11 +108,11 @@ export async function runSentryFix(
   input: SentryFixInput,
   options: MechanicAgentOptions = {},
 ): Promise<SentryFixResult> {
-  const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
   const provider = deepseekKey
     ? createOpenaiCompatible({
         apiKey: deepseekKey,
-        baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://opencode.ai/zen/go/v1",
+        baseURL: (process.env.DEEPSEEK_BASE_URL ?? "https://opencode.ai/zen/go/v1").trim(),
         name: "deepseek",
       })
     : (() => {
@@ -188,9 +188,11 @@ export async function runSentryFix(
     const sentryContextPrompt = buildSentryContextPrompt(input);
 
     const defaultModel = process.env.DEEPSEEK_API_KEY
-      ? (process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash")
+      ? (process.env.DEEPSEEK_MODEL ?? "deepseek-v4-flash").trim()
       : "gpt-5.4-mini";
-    const model = options.model ?? provider(options.modelName ?? defaultModel);
+    const modelName = options.modelName ?? defaultModel;
+    const model = options.model ?? provider(modelName);
+    console.log(`[sentry-fix] using provider=${deepseekKey ? "deepseek" : "copilot"} model=${modelName}`);
 
     const fix = await runMechanicAgent({
       model,

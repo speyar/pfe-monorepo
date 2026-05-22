@@ -138,11 +138,11 @@ export async function runPullRequestReview(
     const deepseekKey = process.env.DEEPSEEK_API_KEY;
     if (deepseekKey) {
       const provider = createOpenaiCompatible({
-        apiKey: deepseekKey,
-        baseURL: process.env.DEEPSEEK_BASE_URL ?? "https://opencode.ai/zen/go/v1",
+        apiKey: deepseekKey.trim(),
+        baseURL: (process.env.DEEPSEEK_BASE_URL ?? "https://opencode.ai/zen/go/v1").trim(),
         name: "deepseek",
       });
-      const modelName = process.env.DEEPSEEK_MODEL ?? process.env.REVIEW_MODEL ?? "deepseek-v4-flash";
+      const modelName = (process.env.DEEPSEEK_MODEL ?? process.env.REVIEW_MODEL ?? "deepseek-v4-flash").trim();
       console.log(`[provider] using DeepSeek/OpenCodeGO: ${modelName}`);
       return provider(modelName);
     }
