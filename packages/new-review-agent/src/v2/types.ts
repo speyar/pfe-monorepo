@@ -111,3 +111,32 @@ export interface EvidenceItem {
   skillName?: string;
   text: string;
 }
+
+export interface RouteClassification {
+  security: number;
+  logic: number;
+  ui: number;
+  infra: number;
+  shouldRunSecurity: boolean;
+  shouldRunLogic: boolean;
+}
+
+export interface QueryPattern {
+  type: string;
+  model: string;
+  whereFields: string[];
+  hasUserScoping: boolean;
+  line: number;
+}
+
+export interface PreComputedSecurityContext {
+  filePath: string;
+  hasAuth: boolean;
+  authFunction?: string;
+  queries: QueryPattern[];
+  hasDangerouslySetInnerHTML: boolean;
+  isWebhook: boolean;
+  hasHmacVerification: boolean;
+  isApiRoute: boolean;
+  riskNotes: string[];
+}

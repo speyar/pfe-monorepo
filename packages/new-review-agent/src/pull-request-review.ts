@@ -14,7 +14,21 @@ import { prepareBranchContext } from "./v2/branch-context";
 import { buildDependencyMap } from "./v2/dependency-map";
 import { collectPatchesByFile } from "./v2/diff-context";
 import { runCrossReference } from "./cross-ref-agent";
-import type { DependencyMap, DependencyNode, DependencyEdge } from "./v2/types";
+import type {
+  DependencyMap,
+  DependencyNode,
+  DependencyEdge,
+  RouteClassification,
+  PreComputedSecurityContext,
+  SkillDefinition,
+  V2ReviewFinding,
+} from "./v2/types";
+import { classifyRoutes } from "./route-classifier";
+import { buildSecurityMap } from "./security-map-builder";
+import { routeSkills } from "./v2/skill-router";
+import { harvestEvidence } from "./v2/evidence-harvest";
+import { EvidenceStore } from "./v2/evidence-store";
+import { runSkillWorker } from "./v2/skill-worker";
 
 export type PullRequestReviewVerdict =
   | "approve"
@@ -68,6 +82,92 @@ export interface PullRequestReviewOptions {
   signal?: AbortSignal;
   skills?: Skill[];
   maxFilesBeforeFanOut?: number;
+}
+
+async function generateNonBlockingGraph(
+  manager: SandboxManager,
+  sandboxId: string,
+  rootPath: string,
+  outPath: string,
+): Promise<{
+  graphPath: string;
+  nodeCount: number;
+  edgeCount: number;
+  fileCount: number;
+  packageCount: number;
+  elapsedMs: number;
+} | null> {
+  console.log("[review] Starting graph generation (non-blocking)...");
+  try {
+    const result = await generateCodebaseGraph(manager, sandboxId, {
+      rootPath,
+      outPath,
+      pretty: true,
+    });
+    console.log(
+      `[review] Graph generated in background — packages=${result.packageCount}, files=${result.fileCount}, nodes=${result.nodeCount}, edges=${result.elapsedMs}`,
+    );
+    return result;
+  } catch (error) {
+    console.warn(
+      "[review] Graph generation failed in background:",
+      error instanceof Error ? error.message : String(error),
+    );
+    return null;
+  }
+}
+
+function getSecuritySkillContent(): string {
+  return `# Security Review Agent
+
+You are a specialized security review agent. Your SOLE responsibility is to find security vulnerabilities.
+
+You have been given evidence including pre-computed security context for API routes, full file reads, and grep results.
+
+## Categories (check EVERY one):
+
+1. **Authentication & IDOR** — Does every API route verify auth? Does every \`prisma\` query scope by the authenticated user? Pattern \`findUnique({ where: { id } })\` without \`userId\` = P0.
+2. **OAuth & Callback** — State/nonce validation? Public route exposure? Callbacks behind auth middleware?
+3. **XSS** — \`dangerouslySetInnerHTML\` without DOMPurify? \`innerHTML\` assignments?
+4. **Injection** — \`$queryRaw\`/\`$executeRaw\` string interpolation? \`exec\`/\`eval\`/\`spawn\`?
+5. **CSRF** — Cookie-authenticated mutations without CSRF token or custom header?
+6. **Mass Assignment** — \`prisma.create({ data: { ...body } })\` unfiltered?
+7. **Webhook HMAC** — Missing signature verification on webhooks?
+8. **SSRF** — User-controlled URL passed to \`fetch()\`?
+9. **Rate Limiting** — Auth/mutation endpoints without throttling?
+10. **Cache Poisoning** — Auth-dependent responses with public cache?
+11. **TOCTOU** — Non-atomic balance/state operations?
+12. **CORS** — Wildcard with credentials?
+13. **Token Leakage** — Tokens in URLs, error messages, logs?
+14. **Prototype Pollution** — Unsafe object spreads from user input?
+
+## Rules
+- Verify EVERY pre-computed security context finding by reading actual code
+- Cast a wide net — false negatives are worse than false positives for security
+- Output ONLY findings confirmed by reading actual code
+- Pre-computed context is a HINT, not truth — validate it`;
+}
+
+function getLogicSkillContent(): string {
+  return `# Logic & Correctness Review Agent
+
+You are a specialized logic review agent. Your responsibility is to find behavioral bugs, race conditions, and correctness issues.
+
+## Categories:
+
+1. **Null/undefined safety** — Can a variable be null/undefined at the point it's used? New code paths that skip initialization?
+2. **Error handling** — Are thrown exceptions or rejected promises caught? Does the error handler leave state inconsistent?
+3. **Race conditions** — Concurrent access to shared state without locks/transactions? Check for \`prisma.$transaction\` patterns.
+4. **Off-by-one / boundary errors** — Loop conditions, array indices, pagination limits, string lengths.
+5. **API contract changes** — Changed function signatures that callers don't handle? Changed return types? Removed exports?
+6. **State management** — React state not initialized before use? SWR/React Query cache not invalidated after mutation?
+7. **Side effects** — DB writes, external API calls, cache invalidations, event emissions — are they still correct after the change?
+8. **Dead code** — Exported constants never imported? Functions defined but never called? Verified via cross-file search.
+
+## Rules
+- Focus on behavioral changes, not style
+- Cross-reference callers to verify contract compliance
+- Output specific, actionable findings with code suggestions`;
 }
 
 function toFindings(
@@ -143,7 +243,10 @@ export async function runPullRequestReview(
   input: PullRequestReviewInput,
   options: PullRequestReviewOptions = {},
 ): Promise<PullRequestReviewResult> {
-  const model = options.model ?? (() => {
+  const mainModel = options.model ?? createMainModel();
+  const cheapModel = options.model ?? createCheapModel();
+
+  function createCheapModel(): LanguageModel {
     const deepseekKey = process.env.DEEPSEEK_API_KEY;
     if (deepseekKey) {
       const provider = createOpenaiCompatible({
@@ -154,18 +257,16 @@ export async function runPullRequestReview(
         name: "deepseek",
       });
       const modelName = (
+        process.env.CHEAP_MODEL ??
         process.env.DEEPSEEK_MODEL ??
-        process.env.REVIEW_MODEL ??
         "deepseek-v4-flash"
       ).trim();
-      console.log(`[provider] using DeepSeek/OpenCodeGO: ${modelName}`);
+      console.log(`[provider] cheap model: ${modelName}`);
       return provider(modelName);
     }
     const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
     if (!copilotToken) {
-      throw new Error(
-        "Missing COPILOT_GITHUB_TOKEN (and no DEEPSEEK_API_KEY)",
-      );
+      throw new Error("Missing COPILOT_GITHUB_TOKEN (and no DEEPSEEK_API_KEY)");
     }
     const provider = createOpenaiCompatible({
       apiKey: copilotToken,
@@ -173,8 +274,42 @@ export async function runPullRequestReview(
         process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
       name: "copilot",
     });
-    return provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini");
-  })();
+    const modelName = process.env.CHEAP_MODEL ?? process.env.REVIEW_MODEL ?? "gpt-4o-mini";
+    console.log(`[provider] cheap model (copilot): ${modelName}`);
+    return provider(modelName);
+  }
+
+  function createMainModel(): LanguageModel {
+    const deepseekKey = process.env.DEEPSEEK_API_KEY;
+    if (deepseekKey) {
+      const provider = createOpenaiCompatible({
+        apiKey: deepseekKey.trim(),
+        baseURL: (
+          process.env.DEEPSEEK_BASE_URL ?? "https://opencode.ai/zen/go/v1"
+        ).trim(),
+        name: "deepseek",
+      });
+      const modelName = (
+        process.env.MAIN_MODEL ??
+        process.env.DEEPSEEK_MODEL ??
+        process.env.REVIEW_MODEL ??
+        "deepseek-v4-pro"
+      ).trim();
+      console.log(`[provider] main model: ${modelName}`);
+      return provider(modelName);
+    }
+    const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
+    if (!copilotToken) {
+      throw new Error("Missing COPILOT_GITHUB_TOKEN (and no DEEPSEEK_API_KEY)");
+    }
+    const provider = createOpenaiCompatible({
+      apiKey: copilotToken,
+      baseURL:
+        process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
+      name: "copilot",
+    });
+    return provider(process.env.MAIN_MODEL ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini");
+  }
 
   const githubClient = await getGitHubClient(input.installationId);
   const {
@@ -212,186 +347,244 @@ export async function runPullRequestReview(
     const workingDir = cwdResult.stdout.trim() || "/home/user";
     const graphPath = `${workingDir}/codebase-graph.json`;
 
-    let effectiveGraphPath: string | undefined = graphPath;
-    let graphFailed = false;
-
-    const elapsedBeforeGraph = Date.now() - startedAt;
-    if (elapsedBeforeGraph < 5000) {
-      try {
-        console.log("[review] Generating codebase graph...");
-        const graphPromise = generateCodebaseGraph(manager, sandbox.id, {
-          rootPath: workingDir,
-          outPath: graphPath,
-          pretty: true,
-        });
-
-        const timeoutMs = 60_000;
-        const timeout = new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Graph generation timed out")),
-            timeoutMs,
-          ),
-        );
-
-        const graphResult = await Promise.race([graphPromise, timeout]);
-        console.log(
-          `[review] Codebase graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
-        );
-      } catch (graphError) {
-        const msg =
-          graphError instanceof Error ? graphError.message : String(graphError);
-        console.warn(
-          `[review] Codebase graph generation failed (${msg}), will fall back to dependency-map`,
-        );
-        effectiveGraphPath = undefined;
-        graphFailed = true;
-        notes.push(
-          `Codebase graph unavailable: ${msg.slice(0, 200)}. Using patch-level dependency analysis instead.`,
-        );
-      }
-    } else {
-      console.log(
-        `[review] Skipping graph generation (already spent ${elapsedBeforeGraph}ms on setup)`,
-      );
-      effectiveGraphPath = undefined;
-    }
-
     const files = input.files ?? [];
     const threshold = options.maxFilesBeforeFanOut ?? 30;
-
     const hasSubFindings = files.length > threshold;
-    const baseStepCap = options.maxToolSteps ?? 24;
-    const extendedStepCap = hasSubFindings
-      ? Math.max(baseStepCap + 12, 36)
-      : baseStepCap;
-    const minSteps = Math.max(
-      5,
-      Math.min(options.minToolSteps ?? 5, extendedStepCap - 5),
+
+    // ─── Phase 0: Start graph generation (non-blocking) ───
+    const graphPromise = generateNonBlockingGraph(
+      manager, sandbox.id, workingDir, graphPath,
     );
 
+    // ─── Phase 1: Branch context + dep map (needed for routing) ───
+    console.log("[review] Building branch context and dependency map...");
+    const branchCtx = await prepareBranchContext({
+      sandboxManager: manager,
+      sandboxId: sandbox.id,
+      branchName: input.headRef,
+      defaultBranch: input.baseRef,
+    });
+    const { patchesByFile } = await collectPatchesByFile({
+      sandboxManager: manager,
+      sandboxId: sandbox.id,
+      defaultBranch: branchCtx.defaultBranch,
+      changedFiles: branchCtx.changedFiles,
+    });
+    const depMap = await buildDependencyMap({
+      sandboxManager: manager,
+      sandboxId: sandbox.id,
+      branch: branchCtx,
+      patchesByFile,
+    }).catch((err: Error) => {
+      console.warn("[review] Dep map build failed:", err.message);
+      return undefined;
+    });
+
+    const depNodes = depMap?.nodes;
+    const depEdges = depMap?.edges;
+
+    // ─── Phase 1: Route classification ───
+    const classification = classifyRoutes(
+      branchCtx.changedFiles,
+      depMap?.tags,
+    );
     console.log(
-      `[review] Step config — maxSteps=${extendedStepCap}, minSteps=${minSteps}, hasSubFindings=${hasSubFindings}, graphOk=${!graphFailed}`,
+      `[review] Route classification — security=${classification.security}, logic=${classification.logic}, ui=${classification.ui}, infra=${classification.infra}`,
     );
 
-    let depMap: DependencyMap | undefined;
-    let depNodes: DependencyNode[] | undefined;
-    let depEdges: DependencyEdge[] | undefined;
-    let dependencyContext = "";
+    // ─── Phase 1: Security map (pre-read API routes) ───
+    let securityMap: PreComputedSecurityContext[] = [];
+    if (classification.shouldRunSecurity) {
+      console.log("[review] Building security map...");
+      securityMap = await buildSecurityMap(manager, sandbox.id, files).catch(
+        (err: Error) => {
+          console.warn("[review] Security map build failed:", err.message);
+          return [];
+        },
+      );
+      if (securityMap.length > 0) {
+        const atRisk = securityMap.filter((s) => s.riskNotes.length > 0);
+        console.log(
+          `[review] Security map: ${securityMap.length} routes analyzed, ${atRisk.length} with risk notes`,
+        );
+        for (const s of atRisk.slice(0, 5)) {
+          console.log(`[review]   ${s.filePath}: ${s.riskNotes.slice(0, 2).join("; ")}`);
+        }
+      }
+    }
 
-    if (graphFailed || hasSubFindings) {
-      try {
-        console.log("[review] Building dependency map (graph failed or fan-out mode)...");
-        const branchCtx = await prepareBranchContext({
-          sandboxManager: manager,
-          sandboxId: sandbox.id,
-          branchName: input.headRef,
-          defaultBranch: input.baseRef,
-        });
-        const { patchesByFile } = await collectPatchesByFile({
-          sandboxManager: manager,
-          sandboxId: sandbox.id,
-          defaultBranch: branchCtx.defaultBranch,
-          changedFiles: branchCtx.changedFiles,
-        });
-        depMap = await buildDependencyMap({
-          sandboxManager: manager,
-          sandboxId: sandbox.id,
-          branch: branchCtx,
-          patchesByFile,
-        });
-        depNodes = depMap.nodes;
-        depEdges = depMap.edges;
-        dependencyContext = [
+    // ─── Phase 1: Build diff + dependency context string ───
+    const dependencyContext = depMap
+      ? [
           "DEPENDENCY MAP (patch-level analysis):",
           ...depMap.summary,
           "",
           "Top symbols: " + depMap.topSymbols.slice(0, 10).join(", "),
           "Hot files: " + depMap.hotFiles.slice(0, 8).join(", "),
-        ].join("\n");
+        ].join("\n")
+      : "";
+
+    const hasSecurityFiles =
+      files.some(
+        (f) =>
+          f.path.includes("/api/") ||
+          f.path.endsWith("route.ts") ||
+          f.path.endsWith("route.tsx") ||
+          f.path.includes("/auth/") ||
+          f.path.includes("/webhooks/"),
+      );
+
+    // ─── Phase 2: Try to get graph (may have finished in background) ───
+    let effectiveGraphPath: string | undefined;
+    let graphAvailable = false;
+    try {
+      const timeoutMs = 120_000;
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Graph generation timed out")), timeoutMs),
+      );
+      const graphResult = await Promise.race([graphPromise, timeout]);
+      if (graphResult && "packageCount" in graphResult) {
+        effectiveGraphPath = graphPath;
+        graphAvailable = true;
         console.log(
-          `[review] Dependency map built — ${depMap.nodes.length} nodes, ${depMap.edges.length} edges, tags=${depMap.tags.join(",")}`,
+          `[review] Graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
         );
-      } catch (depErr) {
-        console.warn(
-          "[review] Dependency map build failed:",
-          depErr instanceof Error ? depErr.message : String(depErr),
-        );
+      } else {
+        console.warn("[review] Graph result was null, using dep-map");
+      }
+    } catch (graphError) {
+      const msg = graphError instanceof Error ? graphError.message : String(graphError);
+      console.warn(`[review] Graph generation failed (${msg}), using dep-map`);
+      notes.push(`Codebase graph unavailable: ${msg.slice(0, 200)}`);
+    }
+
+    // ─── Phase 2: Route skills + harvest evidence (v2 pipeline) ───
+    let evidenceStore: EvidenceStore | undefined;
+    let skillFindings: Array<{ skillName: string; findings: import("./v2/types").V2ReviewFinding[] }> = [];
+
+    if (depMap && depMap.nodes.length > 0) {
+      try {
+        const skillsFromDb = options.skills ?? [];
+        const hasSecurityContent = classification.shouldRunSecurity || hasSecurityFiles || securityMap.some((s) => s.riskNotes.length > 0);
+        const hardcodedSkills: SkillDefinition[] = [];
+
+        if (hasSecurityContent) {
+          hardcodedSkills.push({
+            name: "security-review",
+            description: "Security vulnerability analysis (IDOR, XSS, auth bypass, injection, CSRF, SSRF, mass assignment, webhook HMAC)",
+            location: "hardcoded",
+            content: getSecuritySkillContent(),
+            triggers: { tags: ["auth", "security", "api"], filePatterns: ["**/api/**", "**/route.ts"], symbolPatterns: [] },
+          });
+        }
+
+        if (classification.shouldRunLogic) {
+          hardcodedSkills.push({
+            name: "logic-review",
+            description: "Behavioral correctness, race conditions, error handling, null safety, contract analysis",
+            location: "hardcoded",
+            content: getLogicSkillContent(),
+            triggers: { tags: ["core"], filePatterns: [], symbolPatterns: [] },
+          });
+        }
+
+        if (hardcodedSkills.length > 0 || skillsFromDb.length > 0) {
+          const allSkills: SkillDefinition[] = [
+            ...hardcodedSkills,
+            ...(skillsFromDb.length > 0
+              ? skillsFromDb.map((s) => ({
+                  name: s.name,
+                  description: s.description || s.useCase,
+                  location: "db",
+                  content: s.content,
+                  triggers: { tags: [], filePatterns: [], symbolPatterns: [] },
+                }))
+              : []),
+          ];
+
+          const routed = routeSkills({ dependencyMap: depMap, skills: allSkills, maxSkills: 3 });
+          if (routed.length > 0) {
+            console.log(`[review] Routes ${routed.length} skills: ${routed.map((r) => `${r.skill.name}(${r.score})`).join(", ")}`);
+
+            evidenceStore = await harvestEvidence({
+              sandboxManager: manager,
+              sandboxId: sandbox.id,
+              dependencyMap: depMap,
+              routedSkills: routed,
+              changedFiles: branchCtx.changedFiles,
+              patchesByFile,
+              diffFailures: [],
+            }).catch(() => new EvidenceStore());
+
+            const workerResults = await Promise.all(
+              routed.map((routedSkill) =>
+                runSkillWorker({
+                  model: cheapModel,
+                  skill: routedSkill,
+                  dependencyMap: depMap ?? { nodes: [], edges: [], tags: [], hotFiles: [], topSymbols: [], summary: [] },
+                  evidenceStore: evidenceStore ?? new EvidenceStore(),
+                  maxFindingsPerSkill: 8,
+                }).then((findings) => ({
+                  skillName: routedSkill.skill.name,
+                  findings,
+                })),
+              ),
+            );
+            skillFindings = workerResults.flat();
+            const totalSkillFindings = skillFindings.reduce((s, f) => s + f.findings.length, 0);
+            console.log(`[review] Skill workers: ${totalSkillFindings} findings from ${routed.length} skills`);
+          }
+        }
+      } catch (skillErr) {
+        console.warn("[review] Skill pipeline failed:", skillErr instanceof Error ? skillErr.message : String(skillErr));
       }
     }
 
+    // ─── Phase 3: Fan-out sub-agents (if >30 files) ───
     let subFindingsPrompt = "";
+    let allSubAgentFindings: V2ReviewFinding[] = [];
 
     if (hasSubFindings) {
-      console.log(
-        `[review] FAN-OUT MODE: ${files.length} files exceeds threshold of ${threshold}, splitting into batches`,
-      );
+      console.log(`[review] FAN-OUT MODE: ${files.length} files exceeds threshold of ${threshold}`);
 
       const subResults = await runSubReviews({
-        model,
+        model: cheapModel,
         files,
         batchSize: 15,
         dependencyNodes: depNodes,
         dependencyEdges: depEdges,
+        securityContext: securityMap,
+        sandboxManager: manager,
+        sandboxId: sandbox.id,
       });
 
-      const subFindings = mergeSubFindings(subResults);
+      allSubAgentFindings = mergeSubFindings(subResults);
 
-      let crossRefDedupCount = 0;
-      if (subFindings.length >= 3) {
+      if (allSubAgentFindings.length >= 3) {
         try {
-          console.log(`[review] Running cross-reference pass on ${subFindings.length} sub-agent findings...`);
           const crossRefResult = await runCrossReference({
-            model,
-            subFindings,
+            model: cheapModel,
+            subFindings: allSubAgentFindings,
             dependencyMap: depMap,
             totalChangedFiles: files.length,
             totalBatches: subResults.length,
           });
-
-          subFindings.splice(0, subFindings.length, ...crossRefResult.findings);
-          crossRefDedupCount = crossRefResult.dedupCount;
-
-          console.log(
-            `[review] Cross-ref done: ${crossRefResult.findings.length} findings (${crossRefDedupCount} duplicates removed, ${crossRefResult.missedCount} missed, ${crossRefResult.contradictoryPairs.length} contradictions)`,
-          );
-
-          if (crossRefResult.missedCount > 0) {
-            notes.push(
-              `Cross-reference detected ${crossRefResult.missedCount} potentially missed issues.`,
-            );
-          }
-          if (crossRefResult.contradictoryPairs.length > 0) {
-            notes.push(
-              `Cross-reference detected ${crossRefResult.contradictoryPairs.length} contradictory finding pairs.`,
-            );
-          }
+          allSubAgentFindings.splice(0, allSubAgentFindings.length, ...crossRefResult.findings);
+          if (crossRefResult.missedCount > 0) notes.push(`Cross-ref detected ${crossRefResult.missedCount} potentially missed issues.`);
+          if (crossRefResult.contradictoryPairs.length > 0) notes.push(`Cross-ref detected ${crossRefResult.contradictoryPairs.length} contradictory finding pairs.`);
         } catch (crossErr) {
-          console.warn(
-            "[review] Cross-ref pass failed, proceeding with raw sub-findings:",
-            crossErr instanceof Error ? crossErr.message : String(crossErr),
-          );
+          console.warn("[review] Cross-ref failed:", crossErr instanceof Error ? crossErr.message : String(crossErr));
         }
       }
 
-      const rawPrompt = buildSubFindingsPrompt(subFindings);
-
-      subFindingsPrompt = dependencyContext
-        ? `${dependencyContext}\n\n---\n\n${rawPrompt}`
-        : rawPrompt;
-
-      console.log(
-        `[review] FAN-OUT DONE: ${subFindings.length} findings from sub-agents → main agent will validate them`,
-      );
+      subFindingsPrompt = buildSubFindingsPrompt(allSubAgentFindings);
+      if (dependencyContext) subFindingsPrompt = `${dependencyContext}\n\n---\n\n${subFindingsPrompt}`;
+      console.log(`[review] FAN-OUT DONE: ${allSubAgentFindings.length} findings`);
     } else {
-      const modeSource =
-        files.length > 0
-          ? `${files.length} files`
-          : "initialDiff provided";
-      console.log(
-        `[review] SINGLE-AGENT MODE: ${modeSource} (threshold=${threshold})`,
-      );
+      console.log(`[review] SINGLE-AGENT MODE: ${files.length} files (threshold=${threshold})`);
     }
 
+    // ─── Build context for main agent ───
     const initialDiff =
       input.initialDiff ??
       (files.length > 0
@@ -407,8 +600,63 @@ export async function runPullRequestReview(
             .join("\n\n")
         : "");
 
+    const securityContextStr = securityMap.length > 0
+      ? [
+          "",
+          "## PRECOMPUTED SECURITY CONTEXT (per route analysis)",
+          "",
+          ...securityMap.map(
+            (s) =>
+              `### ${s.filePath}` +
+              `\n- Auth: ${s.hasAuth ? `YES (${s.authFunction ?? "present"})` : "NONE — P0 RISK"}` +
+              `\n- Webhook: ${s.isWebhook ? `YES (HMAC: ${s.hasHmacVerification ? "verified" : "NONE — P0 RISK"})` : "No"}` +
+              `\n- XSS: ${s.hasDangerouslySetInnerHTML ? "YES — CHECK SANITIZATION" : "No"}` +
+              `\n- Queries: ${s.queries.length > 0 ? s.queries.map((q) => `\`prisma.${q.model}.${q.type}\` (where: ${q.whereFields.join(", ")}) — ${q.hasUserScoping ? "user-scoped" : "NO USER SCOPING"}`).join("; ") : "None"}` +
+              (s.riskNotes.length > 0
+                ? `\n- Risk notes: ${s.riskNotes.join("; ")}`
+                : ""),
+          ),
+          "",
+          "Validate each security context finding against the actual codebase. Report any missed issues as P0.",
+        ].join("\n")
+      : "";
+
+    const skillFindingsStr = skillFindings.length > 0
+      ? [
+          "",
+          "## SKILL WORKER FINDINGS",
+          ...skillFindings.flatMap((sf) =>
+            sf.findings.map(
+              (f) =>
+                `  [${sf.skillName}] [${f.severity}] ${f.file ?? "?"}:${f.line ?? "?"} — ${f.title}`,
+            ),
+          ),
+          "",
+        ].join("\n")
+      : "";
+
+    const multiSourceContext = [
+      subFindingsPrompt,
+      skillFindingsStr,
+      securityContextStr,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    // ─── Phase 3: Main agent validation ───
+    const baseStepCap = options.maxToolSteps ?? 24;
+    const extendedStepCap = hasSubFindings
+      ? Math.max(baseStepCap + 12, 36)
+      : baseStepCap;
+    const minSteps =
+      5;
+
+    console.log(
+      `[review] Main agent — maxSteps=${extendedStepCap}, minSteps=${minSteps}, graphAvailable=${graphAvailable}, multiSourceContext=${multiSourceContext.length > 0}`,
+    );
+
     let review = await runReviewAgent(input.headRef, {
-      model,
+      model: mainModel,
       sandboxManager: manager,
       sandboxId: sandbox.id,
       initialDiff,
@@ -420,14 +668,14 @@ export async function runPullRequestReview(
       signal: options.signal,
       graphPath: effectiveGraphPath,
       skills: options.skills,
-      subFindingsContext: subFindingsPrompt || undefined,
+      subFindingsContext: multiSourceContext || undefined,
     });
 
     const hasOnlyLowSeverityFindings =
       review.findings.length > 0 &&
       review.findings.every((f) => f.severity === "low" || f.severity === "info");
 
-    const hasSecurityFiles =
+    const hasSecurityFilesFlag =
       files.some(
         (f) =>
           f.path.includes("/api/") ||
@@ -438,8 +686,8 @@ export async function runPullRequestReview(
       );
 
     const needsRetry =
-      (review.findings.length === 0 && hasSubFindings && subFindingsPrompt) ||
-      (hasOnlyLowSeverityFindings && hasSecurityFiles && hasSubFindings);
+      (review.findings.length === 0 && (hasSubFindings || securityMap.length > 0 || skillFindings.length > 0)) ||
+      (hasOnlyLowSeverityFindings && (hasSecurityFilesFlag || hasSubFindings));
 
     if (needsRetry) {
       const retryReason =
@@ -450,24 +698,24 @@ export async function runPullRequestReview(
         `[review] ${retryReason} — running validation re-query...`,
       );
       const retryPrompt = [
-        subFindingsPrompt,
+        multiSourceContext,
         "",
         "CRITICAL: Your initial review had significant gaps.",
         review.findings.length === 0
-          ? "You returned 0 findings. The sub-agents above reported issues."
+          ? "You returned 0 findings. The specialized agents above reported issues."
           : "You returned only low-severity findings on files tagged as security-critical (API routes, auth).",
         "Please explicitly:",
-        "1. Validate each sub-agent finding against the codebase using readFile (confirm, reject, or adjust severity).",
+        "1. Validate each finding from specialized agents against the codebase using readFile (confirm, reject, or adjust severity).",
         "2. For every API route file, read the full file and verify authentication + query user-scoping.",
         "3. Explain why each finding was rejected if you disagree with it.",
         "4. Add any missed findings, especially security issues.",
-        "5. Output a JSON with at minimum the validated findings from sub-agents.",
+        "5. Output a JSON with at minimum the validated findings from specialized agents.",
         "",
-        "If ALL sub-agent findings were false positives, output them but set severity to 'info' and explain in each message why they were rejected.",
+        "If ALL findings were false positives, output them but set severity to 'info' and explain in each message why they were rejected.",
       ].join("\n");
 
       review = await runReviewAgent(input.headRef, {
-        model,
+        model: mainModel,
         sandboxManager: manager,
         sandboxId: sandbox.id,
         initialDiff,

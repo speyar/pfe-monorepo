@@ -1,7 +1,20 @@
 import type { LanguageModel } from "ai";
 import type { ReviewFinding } from "./schema/review-result";
 import { runSubReview, type SubReviewResult } from "./sub-review";
-import type { DependencyNode, DependencyEdge } from "./v2/types";
+import type { DependencyNode, DependencyEdge, PreComputedSecurityContext } from "./v2/types";
+import type { SandboxManager } from "@packages/sandbox";
+
+export interface FanOutReviewInput {
+  model: LanguageModel;
+  files: Array<{ path: string; patch: string }>;
+  batchSize?: number;
+  maxBatches?: number;
+  dependencyNodes?: DependencyNode[];
+  dependencyEdges?: DependencyEdge[];
+  securityContext?: PreComputedSecurityContext[];
+  sandboxManager?: SandboxManager;
+  sandboxId?: string;
+}
 
 export interface FanOutReviewInput {
   model: LanguageModel;
@@ -172,6 +185,9 @@ export async function runSubReviews(
     totalBatches,
     allChangedFiles: allPaths,
     dependencyNodes: input.dependencyNodes,
+    securityContext: input.securityContext,
+    sandboxManager: input.sandboxManager,
+    sandboxId: input.sandboxId,
   }));
 
   const startedAt = Date.now();

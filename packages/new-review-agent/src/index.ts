@@ -69,3 +69,22 @@ export {
 export {
   routeSkills,
 } from "./v2/skill-router";
+
+export {
+  classifyRoutes,
+} from "./route-classifier";
+
+export {
+  buildSecurityMap,
+} from "./security-map-builder";
+
+export type {
+  RouteClassification,
+  PreComputedSecurityContext,
+  QueryPattern,
+  SkillDefinition,
+  RoutedSkill,
+  DependencyMap,
+  DependencyNode,
+  DependencyEdge,
+} from "./v2/types";
