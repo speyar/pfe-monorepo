@@ -35,7 +35,7 @@ export interface ReviewAgentOptions {
 }
 
 export interface ReviewFinding {
-  severity: "critical" | "high" | "medium" | "low" | "info";
+  severity: "P0" | "P1" | "P2" | "P3" | "P4";
   file?: string;
   line?: number;
   quote?: string;

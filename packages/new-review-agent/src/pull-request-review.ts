@@ -12,7 +12,7 @@ export type PullRequestReviewVerdict =
   | "request_changes";
 
 export interface PullRequestReviewFinding {
-  severity: "critical" | "high" | "medium" | "low" | "info";
+  severity: "P0" | "P1" | "P2" | "P3" | "P4";
   file: string;
   line?: number;
   quote?: string;
@@ -74,13 +74,13 @@ function toFindings(
 function scoreFromFindings(findings: PullRequestReviewFinding[]): number {
   const severityPenalty = findings.reduce((sum, finding) => {
     switch (finding.severity) {
-      case "critical":
-        return sum + 35;
-      case "high":
-        return sum + 20;
-      case "medium":
+      case "P0":
+        return sum + 50;
+      case "P1":
+        return sum + 25;
+      case "P2":
         return sum + 10;
-      case "low":
+      case "P3":
         return sum + 4;
       default:
         return sum + 1;
@@ -95,19 +95,19 @@ function buildSummary(
   modelName: string,
   elapsedMs: number,
 ): PullRequestReviewSummary {
-  const hasCriticalOrHigh = findings.some(
-    (finding) => finding.severity === "critical" || finding.severity === "high",
+  const hasP0OrP1 = findings.some(
+    (finding) => finding.severity === "P0" || finding.severity === "P1",
   );
-  const hasMedium = findings.some((finding) => finding.severity === "medium");
+  const hasP2 = findings.some((finding) => finding.severity === "P2");
 
   const verdict: PullRequestReviewVerdict =
     findings.length === 0
       ? "approve"
-      : hasCriticalOrHigh
+      : hasP0OrP1
         ? "request_changes"
         : "comment";
 
-  const risk = hasCriticalOrHigh ? "high" : hasMedium ? "medium" : "low";
+  const risk = hasP0OrP1 ? "high" : hasP2 ? "medium" : "low";
   const score = scoreFromFindings(findings);
   const overview =
     findings.length === 0

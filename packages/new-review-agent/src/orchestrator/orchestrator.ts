@@ -242,11 +242,11 @@ export async function runOrchestrator(input: {
   const allFindings = dedupedResults.flatMap((r) => r.findings);
   allFindings.sort((a, b) => {
     const severityOrder: Record<string, number> = {
-      critical: 0,
-      high: 1,
-      medium: 2,
-      low: 3,
-      info: 4,
+      P0: 0,
+      P1: 1,
+      P2: 2,
+      P3: 3,
+      P4: 4,
     };
     return (severityOrder[a.severity] ?? 5) - (severityOrder[b.severity] ?? 5);
   });

@@ -146,6 +146,12 @@ export const toMarkdownReview = (review: ReviewResult): string => {
       ]
     : []
 
+  const severityLegend = [
+    '---',
+    '> Severity: **P0** Data leak | **P1** Access control | **P2** Logic bug | **P3** Performance | **P4** Style',
+    '',
+  ].join('\n')
+
   return [
     REVIEW_COMMENT_MARKER,
     '## Automated PR Review',
@@ -157,6 +163,7 @@ export const toMarkdownReview = (review: ReviewResult): string => {
     '',
     ...agentSummaryLines,
     '',
+    severityLegend,
     review.findings.length > 0
       ? '### Findings\n' + findingLines.join('\n\n')
       : '### Findings\nNo blocking findings detected.',
