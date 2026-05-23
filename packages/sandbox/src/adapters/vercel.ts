@@ -15,6 +15,7 @@ import {
   NotFoundError,
   RateLimitError,
   SandboxError,
+  SandboxStoppedError,
   TimeoutError,
 } from "../errors";
 import type { SandboxProvider } from "../provider";
@@ -189,7 +190,7 @@ export class VercelSandboxProvider implements SandboxProvider {
         exitCode: command.exitCode,
       };
     } catch (error) {
-      throw mapVercelError(error, "run sandbox command");
+      throw mapVercelError(error, "run sandbox command", input.sandboxId);
     }
   }
 }
@@ -302,7 +303,7 @@ function mapSandboxState(state: VercelSandboxStatus): SandboxLifecycleState {
   }
 }
 
-function mapVercelError(error: unknown, operation: string): Error {
+function mapVercelError(error: unknown, operation: string, sandboxId?: string): Error {
   if (error instanceof SandboxError) {
     return error;
   }
@@ -319,6 +320,14 @@ function mapVercelError(error: unknown, operation: string): Error {
     if (status === 404) {
       return new NotFoundError(
         `Sandbox resource not found while trying to ${operation}.`,
+        error,
+      );
+    }
+
+    if (status === 410) {
+      return new SandboxStoppedError(
+        `Sandbox has stopped and is no longer available while trying to ${operation}.`,
+        sandboxId,
         error,
       );
     }

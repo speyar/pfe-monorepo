@@ -226,6 +226,13 @@ export interface OpenaiCompatibleProviderSettings {
    * Print Copilot request classification (x-initiator) logs.
    */
   debugRequests?: boolean;
+
+  /**
+   * Whether the model supports structured outputs (json_schema response format).
+   * When enabled, object schemas are passed to the API instead of being stripped.
+   * @default true
+   */
+  supportsStructuredOutputs?: boolean;
 }
 
 export interface OpenaiCompatibleProvider {
@@ -273,6 +280,7 @@ export function createOpenaiCompatible(
       headers: getHeaders,
       url: ({ path }) => `${baseURL}${path}`,
       fetch: createCopilotFetch({ ...options, debugRequests }),
+      supportsStructuredOutputs: options.supportsStructuredOutputs ?? true,
     });
   };
 

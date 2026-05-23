@@ -326,6 +326,7 @@ export async function runPullRequestReview(
 
   const sandbox = await manager.createSandbox({
     ownerId: "test-owner",
+    timeoutSeconds: 900,
     source: {
       type: "git",
       url:
@@ -338,6 +339,7 @@ export async function runPullRequestReview(
 
   const startedAt = Date.now();
   const notes: string[] = [];
+  const partialFindings: PullRequestReviewFinding[] = [];
 
   try {
     const cwdResult = await manager.runCommand({
@@ -533,6 +535,19 @@ export async function runPullRequestReview(
             skillFindings = workerResults.flat();
             const totalSkillFindings = skillFindings.reduce((s, f) => s + f.findings.length, 0);
             console.log(`[review] Skill workers: ${totalSkillFindings} findings from ${routed.length} skills`);
+            for (const sf of skillFindings) {
+              partialFindings.push(
+                ...sf.findings.map((f) => ({
+                  severity: f.severity,
+                  file: f.file ?? "unknown",
+                  line: f.line,
+                  quote: f.quote,
+                  title: f.title,
+                  message: f.message,
+                  suggestion: f.suggestion,
+                })),
+              );
+            }
           }
         }
       } catch (skillErr) {
@@ -559,6 +574,18 @@ export async function runPullRequestReview(
       });
 
       allSubAgentFindings = mergeSubFindings(subResults);
+
+      for (const f of allSubAgentFindings) {
+        partialFindings.push({
+          severity: f.severity,
+          file: f.file ?? "unknown",
+          line: f.line,
+          quote: f.quote,
+          title: f.title,
+          message: f.message,
+          suggestion: f.suggestion,
+        });
+      }
 
       if (allSubAgentFindings.length >= 3) {
         try {
@@ -765,19 +792,30 @@ export async function runPullRequestReview(
       error,
     });
 
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const hasPartialFindings = partialFindings.length > 0;
+    const hasCriticalOrHigh = partialFindings.some(
+      (f) => f.severity === "critical" || f.severity === "high",
+    );
+
     return {
       summary: {
-        verdict: "comment",
-        score: 0,
-        overview: "An error occurred during the review process.",
-        risk: "unknown",
-        model: "gpt-5.4-mini",
+        verdict: hasCriticalOrHigh ? "request_changes" : "comment",
+        score: hasPartialFindings ? scoreFromFindings(partialFindings) : 0,
+        overview: hasPartialFindings
+          ? `Review failed with error but ${partialFindings.length} partial findings were recovered. Error: ${errorMessage}`
+          : `An error occurred during the review process: ${errorMessage}`,
+        risk: hasCriticalOrHigh ? "high" : "unknown",
+        model: process.env.REVIEW_MODEL ?? "gpt-5.4-mini",
         elapsedMs: Date.now() - startedAt,
       },
-      findings: [],
+      findings: hasPartialFindings ? partialFindings : [],
       notes: [
-        "The review agent encountered an error and could not complete the review.",
-        `Error details: ${error instanceof Error ? error.message : String(error)}`,
+        `The review agent encountered an error and could not complete the review.`,
+        `Error details: ${errorMessage}`,
+        ...(hasPartialFindings
+          ? [`${partialFindings.length} partial findings from skill workers / sub-agents are included.`]
+          : []),
       ],
     };
   } finally {

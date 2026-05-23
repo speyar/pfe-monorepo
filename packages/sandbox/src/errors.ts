@@ -59,13 +59,32 @@ export class ReconciliationError extends SandboxError {
   }
 }
 
+export class SandboxStoppedError extends SandboxError {
+  public readonly sandboxId?: string;
+
+  constructor(message: string, sandboxId?: string, cause?: unknown) {
+    super(message, "SANDBOX_STOPPED", cause);
+    this.name = "SandboxStoppedError";
+    this.sandboxId = sandboxId;
+  }
+}
+
 export function isRetryableSandboxError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
 
+  if (error instanceof SandboxStoppedError) {
+    return true;
+  }
+
   const name = error.name.toLowerCase();
   if (name.includes("ratelimit") || name.includes("timeout")) {
+    return true;
+  }
+
+  const sandboxCode = (error as { code?: string }).code;
+  if (sandboxCode === "SANDBOX_STOPPED") {
     return true;
   }
 

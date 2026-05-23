@@ -1,4 +1,4 @@
-import { generateObject, type LanguageModel } from "ai";
+import { generateObject, generateText, type LanguageModel } from "ai";
 import { z } from "zod";
 import type { EvidenceStore } from "./evidence-store";
 import type { DependencyMap, RoutedSkill, V2ReviewFinding } from "./types";
@@ -215,8 +215,37 @@ export async function runSkillWorker(input: {
           fallbackError instanceof Error
             ? fallbackError.message
             : String(fallbackError),
+        strategy: "retry-with-generateText",
       });
-      return [];
+
+      try {
+        const textResult = await generateText({
+          ...baseParams,
+        });
+
+        const parsed = parseFindingsFromText(textResult.text);
+        if (parsed.length > 0) {
+          resultObj = {
+            findings: parsed.slice(0, input.maxFindingsPerSkill),
+            shouldComment: true,
+            whyNot: "Schema-based generation failed; findings recovered from raw text.",
+          };
+        } else {
+          debug("worker-text-fallback-empty", {
+            skill: input.skill.skill.name,
+          });
+          return [];
+        }
+      } catch (textError) {
+        debug("worker-text-fallback-failed", {
+          skill: input.skill.skill.name,
+          error:
+            textError instanceof Error
+              ? textError.message
+              : String(textError),
+        });
+        return [];
+      }
     }
   }
 
@@ -251,4 +280,76 @@ export async function runSkillWorker(input: {
   }
 
   return findings;
+}
+
+function parseFindingsFromText(
+  text: string,
+): Array<{
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  file?: string;
+  line?: number;
+  quote?: string;
+  title: string;
+  message: string;
+  suggestion?: string;
+}> {
+  try {
+    const cleaned = text
+      .replace(/```json\s*/g, "")
+      .replace(/```\s*/g, "")
+      .trim();
+
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return [];
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    if (Array.isArray(parsed)) {
+      return parsed
+        .filter(
+          (f) => typeof f === "object" && f !== null && typeof f.title === "string" && typeof f.message === "string",
+        )
+        .map((f) => ({
+          severity: validateSeverity(f.severity),
+          file: typeof f.file === "string" ? f.file : undefined,
+          line: typeof f.line === "number" ? f.line : undefined,
+          quote: typeof f.quote === "string" ? f.quote : undefined,
+          title: f.title,
+          message: f.message,
+          suggestion: typeof f.suggestion === "string" ? f.suggestion : undefined,
+        }));
+    }
+
+    if (typeof parsed === "object" && parsed !== null && Array.isArray((parsed as Record<string, unknown>).findings)) {
+      return ((parsed as Record<string, unknown>).findings as Array<Record<string, unknown>>)
+        .filter(
+          (f) => typeof f === "object" && f !== null && typeof f.title === "string" && typeof f.message === "string",
+        )
+        .map((f) => ({
+          severity: validateSeverity(f.severity),
+          file: typeof f.file === "string" ? f.file : undefined,
+          line: typeof f.line === "number" ? f.line : undefined,
+          quote: typeof f.quote === "string" ? f.quote : undefined,
+          title: f.title as string,
+          message: f.message as string,
+          suggestion: typeof f.suggestion === "string" ? f.suggestion : undefined,
+        }));
+    }
+
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function validateSeverity(
+  value: unknown,
+): "critical" | "high" | "medium" | "low" | "info" {
+  const valid = ["critical", "high", "medium", "low", "info"];
+  if (typeof value === "string" && valid.includes(value)) {
+    return value as "critical" | "high" | "medium" | "low" | "info";
+  }
+  return "medium";
 }
