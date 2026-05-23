@@ -2,11 +2,6 @@ import { generateText, type LanguageModel } from "ai";
 import { reviewFindingSchema } from "./schema/review-result";
 import type { ReviewFinding } from "./schema/review-result";
 import { z } from "zod";
-import type { SandboxManager } from "@packages/sandbox";
-import { createLsTool } from "./tools/LsTool";
-import { createGlobTool } from "./tools/GlobTool";
-import { createReadFileTool } from "./tools/ReadFileTool";
-import { createGrepTool } from "./tools/GrepTool";
 import type { DependencyNode } from "./v2/types";
 
 export interface SubReviewInput {
@@ -16,9 +11,6 @@ export interface SubReviewInput {
   batchIndex: number;
   totalBatches: number;
   allChangedFiles: string[];
-  sandboxManager?: SandboxManager;
-  sandboxId?: string;
-  graphPath?: string;
   dependencyNodes?: DependencyNode[];
 }
 
@@ -50,12 +42,26 @@ function buildFileDiffText(
 function parseSubReviewJson(text: string): ReviewFinding[] {
   const cleaned = text.trim();
   const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return [];
+  if (!jsonMatch) {
+    console.warn(
+      `[sub-agent] JSON parse failed — no JSON object found. Raw text preview:`,
+      cleaned.slice(0, 500),
+    );
+    return [];
+  }
   try {
     const parsed = JSON.parse(jsonMatch[0]);
     const result = subReviewResultSchema.parse(parsed);
     return result.findings;
-  } catch {
+  } catch (err) {
+    console.warn(
+      `[sub-agent] JSON parse failed — schema validation error:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    console.warn(
+      `[sub-agent] Raw JSON parse attempt:`,
+      jsonMatch[0].slice(0, 500),
+    );
     try {
       const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
       if (!arrayMatch) return [];
@@ -79,29 +85,28 @@ function buildDependencyContext(
 
   if (myNodes.length === 0) return "";
 
-  const imports = new Set<string>();
-  const symbols = new Set<string>();
-  myNodes.forEach((n) => {
-    n.imports.forEach((i) => imports.add(i));
-    n.symbols.forEach((s) => symbols.add(s));
-  });
-
   return [
     "DEPENDENCY CONTEXT for your batch files:",
     myNodes
       .map((n) => {
         const tags = n.tags.length > 0 ? ` [${n.tags.join(", ")}]` : "";
-        const deps = n.imports.length > 0 ? `\n  imports: ${n.imports.slice(0, 5).join(", ")}` : "";
-        const syms = n.symbols.length > 0 ? `\n  symbols: ${n.symbols.slice(0, 8).join(", ")}` : "";
-        const refs = n.referenceHits > 0 ? `\n  references across codebase: ${n.referenceHits}` : "";
+        const deps =
+          n.imports.length > 0
+            ? `\n  imports: ${n.imports.slice(0, 5).join(", ")}`
+            : "";
+        const syms =
+          n.symbols.length > 0
+            ? `\n  symbols: ${n.symbols.slice(0, 8).join(", ")}`
+            : "";
+        const refs =
+          n.referenceHits > 0
+            ? `\n  references: ${n.referenceHits}`
+            : "";
         return `  ${n.path}${tags} (churn: ${n.churn})${deps}${syms}${refs}`;
       })
       .join("\n"),
     "",
-    "Cross-reference guidance:",
-    "- If your batch changes a symbol, check if there are callers of that symbol in other batches (could be broken).",
-    "- If your batch changes an exported interface, check consumers that import these files.",
-    "- Be explicit about cross-file issues even if the broken file is not in your batch — note it as a finding referencing the changed file.",
+    "Cross-reference: if your batch changes a symbol/export, check if callers in OTHER batches could break.",
   ].join("\n");
 }
 
@@ -119,9 +124,6 @@ export async function runSubReview(
 
   const startedAt = Date.now();
 
-  const hasTools =
-    input.sandboxManager && input.sandboxId;
-
   const depContext = buildDependencyContext(
     input.dependencyNodes,
     fileList,
@@ -129,23 +131,16 @@ export async function runSubReview(
 
   try {
     const system = [
-      "You are a PR review sub-agent. Review the files assigned to your batch.",
-      hasTools
-        ? "You HAVE file system access via readFile/ls/glob/grep. Use them to validate your findings against the actual codebase."
-        : "You do NOT have file system access. Analyze solely from the diffs below.",
-      "",
+      "You are a PR review sub-agent. Review the files in your batch from the diffs below.",
       "Focus on: bugs, breaking changes, security issues, data integrity, production risks, and cross-file impacts.",
       "Be specific. Include file paths and line numbers when possible.",
-      "You MAY report findings for files outside your batch IF they are impacted by changes in your batch files (e.g., a caller that now receives a different return type).",
+      "If a change in your batch affects code in another file, report it — even if that file isn't in your batch.",
       "",
-      "Cross-reference priority:",
-      "- If you change a function signature, check who calls it.",
-      "- If you change a data structure, check who consumes it.",
-      "- If you change an export, check who imports it.",
-      "",
+      "CRITICAL: You MUST output a complete JSON object with your findings.",
+      "Do NOT get cut off. Produce your JSON output in a single response.",
       "Output a SINGLE JSON object with a 'findings' array. Example:",
-      '{"findings": [{"severity":"high","file":"src/a.ts","line":42,"title":"...","message":"..."}]}',
-      "Output ONLY the JSON. No markdown fences, no preamble.",
+      '{"findings": [{"severity":"high","file":"src/a.ts","line":42,"title":"Null dereference","message":"..."}]}',
+      "Output ONLY the JSON. No markdown fences, no preamble, no trailing text.",
     ].join("\n");
 
     const prompt = [
@@ -161,34 +156,33 @@ export async function runSubReview(
       "Diffs for your batch:",
       diffText,
       "",
-      "Analyze the diffs and output findings. Consider cross-file impact within the full PR scope.",
+      "Analyze the diffs and output your findings as a JSON object NOW.",
     ].join("\n");
-
-    let tools;
-    if (hasTools) {
-      tools = {
-        ls: createLsTool(input.sandboxManager!, input.sandboxId!),
-        glob: createGlobTool(input.sandboxManager!, input.sandboxId!),
-        readFile: createReadFileTool(input.sandboxManager!, input.sandboxId!),
-        grep: createGrepTool(input.sandboxManager!, input.sandboxId!),
-      };
-    }
 
     const result = await generateText({
       model: input.model,
       system,
       prompt,
-      ...(tools ? { tools, maxSteps: 8 } : {}),
     });
 
     const elapsedMs = Date.now() - startedAt;
-    const findings = parseSubReviewJson(result.text ?? "");
+    const rawText = result.text ?? "";
+    const findings = parseSubReviewJson(rawText);
+
+    if (findings.length === 0) {
+      console.warn(
+        `[sub-agent/${input.batchName}] produced 0 findings. Raw output:`,
+        rawText.slice(0, 500),
+      );
+    }
 
     console.log(
       `[sub-agent/${input.batchName}] finished — ${findings.length} findings in ${elapsedMs}ms`,
     );
     findings.forEach((f, i) => {
-      const loc = f.file ? `${f.file}${f.line ? `:${f.line}` : ""}` : "?";
+      const loc = f.file
+        ? `${f.file}${f.line ? `:${f.line}` : ""}`
+        : "?";
       console.log(
         `[sub-agent/${input.batchName}] finding #${i + 1}: [${f.severity}] ${loc} — ${f.title}`,
       );

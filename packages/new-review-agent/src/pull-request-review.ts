@@ -14,7 +14,7 @@ import { prepareBranchContext } from "./v2/branch-context";
 import { buildDependencyMap } from "./v2/dependency-map";
 import { collectPatchesByFile } from "./v2/diff-context";
 import { runCrossReference } from "./cross-ref-agent";
-import type { DependencyMap } from "./v2/types";
+import type { DependencyMap, DependencyNode, DependencyEdge } from "./v2/types";
 
 export type PullRequestReviewVerdict =
   | "approve"
@@ -273,6 +273,52 @@ export async function runPullRequestReview(
       `[review] Step config — maxSteps=${extendedStepCap}, minSteps=${minSteps}, hasSubFindings=${hasSubFindings}, graphOk=${!graphFailed}`,
     );
 
+    let depMap: DependencyMap | undefined;
+    let depNodes: DependencyNode[] | undefined;
+    let depEdges: DependencyEdge[] | undefined;
+    let dependencyContext = "";
+
+    if (graphFailed || hasSubFindings) {
+      try {
+        console.log("[review] Building dependency map (graph failed or fan-out mode)...");
+        const branchCtx = await prepareBranchContext({
+          sandboxManager: manager,
+          sandboxId: sandbox.id,
+          branchName: input.headRef,
+          defaultBranch: input.baseRef,
+        });
+        const { patchesByFile } = await collectPatchesByFile({
+          sandboxManager: manager,
+          sandboxId: sandbox.id,
+          defaultBranch: branchCtx.defaultBranch,
+          changedFiles: branchCtx.changedFiles,
+        });
+        depMap = await buildDependencyMap({
+          sandboxManager: manager,
+          sandboxId: sandbox.id,
+          branch: branchCtx,
+          patchesByFile,
+        });
+        depNodes = depMap.nodes;
+        depEdges = depMap.edges;
+        dependencyContext = [
+          "DEPENDENCY MAP (patch-level analysis):",
+          ...depMap.summary,
+          "",
+          "Top symbols: " + depMap.topSymbols.slice(0, 10).join(", "),
+          "Hot files: " + depMap.hotFiles.slice(0, 8).join(", "),
+        ].join("\n");
+        console.log(
+          `[review] Dependency map built — ${depMap.nodes.length} nodes, ${depMap.edges.length} edges, tags=${depMap.tags.join(",")}`,
+        );
+      } catch (depErr) {
+        console.warn(
+          "[review] Dependency map build failed:",
+          depErr instanceof Error ? depErr.message : String(depErr),
+        );
+      }
+    }
+
     let subFindingsPrompt = "";
 
     if (hasSubFindings) {
@@ -280,59 +326,10 @@ export async function runPullRequestReview(
         `[review] FAN-OUT MODE: ${files.length} files exceeds threshold of ${threshold}, splitting into batches`,
       );
 
-      let dependencyContext = "";
-      let depMap: DependencyMap | undefined;
-      let depNodes = undefined;
-      let depEdges = undefined;
-
-      if (graphFailed) {
-        try {
-          console.log("[review] Building v2 dependency map as graph fallback...");
-          const branchCtx = await prepareBranchContext({
-            sandboxManager: manager,
-            sandboxId: sandbox.id,
-            branchName: input.headRef,
-            defaultBranch: input.baseRef,
-          });
-          const { patchesByFile } = await collectPatchesByFile({
-            sandboxManager: manager,
-            sandboxId: sandbox.id,
-            defaultBranch: branchCtx.defaultBranch,
-            changedFiles: branchCtx.changedFiles,
-          });
-          depMap = await buildDependencyMap({
-            sandboxManager: manager,
-            sandboxId: sandbox.id,
-            branch: branchCtx,
-            patchesByFile,
-          });
-          depNodes = depMap.nodes;
-          depEdges = depMap.edges;
-          dependencyContext = [
-            "DEPENDENCY MAP (patch-level analysis):",
-            ...depMap.summary,
-            "",
-            "Top symbols: " + depMap.topSymbols.slice(0, 10).join(", "),
-            "Hot files: " + depMap.hotFiles.slice(0, 8).join(", "),
-          ].join("\n");
-          console.log(
-            `[review] Dependency map built — ${depMap.nodes.length} nodes, ${depMap.edges.length} edges, tags=${depMap.tags.join(",")}`,
-          );
-        } catch (depErr) {
-          console.warn(
-            "[review] Dependency map fallback also failed:",
-            depErr instanceof Error ? depErr.message : String(depErr),
-          );
-        }
-      }
-
       const subResults = await runSubReviews({
         model,
         files,
         batchSize: 15,
-        sandboxManager: manager,
-        sandboxId: sandbox.id,
-        graphPath: effectiveGraphPath,
         dependencyNodes: depNodes,
         dependencyEdges: depEdges,
       });

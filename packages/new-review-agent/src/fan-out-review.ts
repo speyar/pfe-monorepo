@@ -1,7 +1,6 @@
 import type { LanguageModel } from "ai";
 import type { ReviewFinding } from "./schema/review-result";
 import { runSubReview, type SubReviewResult } from "./sub-review";
-import type { SandboxManager } from "@packages/sandbox";
 import type { DependencyNode, DependencyEdge } from "./v2/types";
 
 export interface FanOutReviewInput {
@@ -9,9 +8,6 @@ export interface FanOutReviewInput {
   files: Array<{ path: string; patch: string }>;
   batchSize?: number;
   maxBatches?: number;
-  sandboxManager?: SandboxManager;
-  sandboxId?: string;
-  graphPath?: string;
   dependencyNodes?: DependencyNode[];
   dependencyEdges?: DependencyEdge[];
 }
@@ -30,8 +26,6 @@ function clusterByDependencies(
   dependencyEdges: DependencyEdge[],
   maxBatchSize: number,
 ): Array<{ path: string; patch: string }>[] {
-  const pathToNode = new Map(dependencyNodes.map((n) => [n.path, n]));
-
   const adjacency: Map<string, Set<string>> = new Map();
   for (const f of files) {
     adjacency.set(f.path, new Set());
@@ -177,9 +171,6 @@ export async function runSubReviews(
     batchIndex: i + 1,
     totalBatches,
     allChangedFiles: allPaths,
-    sandboxManager: input.sandboxManager,
-    sandboxId: input.sandboxId,
-    graphPath: input.graphPath,
     dependencyNodes: input.dependencyNodes,
   }));
 
@@ -235,6 +226,7 @@ export function buildSubFindingsPrompt(
     "Your job: validate each finding against the actual codebase using readFile/grep/codebaseGraph.",
     "Cross-reference across files, deduplicate, adjust severity if needed.",
     "Add any new findings the sub-agents missed.",
+    "You MUST output a complete JSON with findings. Never return 0 findings if sub-agents reported issues without validating them.",
     "",
     "Reported findings:",
   ];

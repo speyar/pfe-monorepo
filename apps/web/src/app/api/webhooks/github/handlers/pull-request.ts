@@ -48,7 +48,7 @@ type InlineTargetResolution = { ok: true; target: InlineTarget } | { ok: false; 
 
 const MAX_INLINE_SNIPPET_LINES = 5
 const REVIEW_STATUS_MARKER = '<!-- pfe-review-agent-status -->'
-const MIN_INLINE_CONFIDENCE = 0.65
+const MIN_INLINE_CONFIDENCE = 0.5
 
 function buildReviewStatusComment(state: 'in_progress' | 'completed' | 'failed'): string {
   if (state === 'completed') {
@@ -370,9 +370,32 @@ function buildSnippet(sideMap: Map<number, string>, targetLine: number): string[
 }
 
 function buildInlineCommentBody(finding: ReviewFinding, target: InlineTarget): string {
-  const suggestionSection = finding.suggestion ? formatSuggestionSection(finding.suggestion) : ''
+  const severityEmoji =
+    finding.severity === "critical" ? "🚨" :
+    finding.severity === "high" ? "⚠️" :
+    finding.severity === "medium" ? "🔶" :
+    finding.severity === "low" ? "🔹" :
+    "ℹ️";
 
-  return [finding.message, suggestionSection].filter(Boolean).join('\n\n')
+  const header = `**${severityEmoji} [${finding.severity.toUpperCase()}] ${finding.title}**`;
+
+  const snippetSection =
+    target.snippet.length > 0
+      ? [
+          "",
+          "```diff",
+          ...target.snippet,
+          "```",
+        ].join("\n")
+      : "";
+
+  const suggestionSection = finding.suggestion
+    ? formatSuggestionSection(finding.suggestion)
+    : "";
+
+  return [header, "", finding.message, snippetSection, suggestionSection]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function scoreInlineConfidence(finding: ReviewFinding, target: InlineTarget): number {
@@ -846,51 +869,18 @@ export const handlePullRequestEvent = async ({
       files: filesForInput,
     }, { skills })
 
-    console.info('[github-webhook] AI review completed', {
-      deliveryId,
-      findingsCount: review.findings.length,
-      verdict: review.summary.verdict,
-      score: review.summary.score,
-      risk: review.summary.risk,
-    })
-
-    const reviewText = toMarkdownReview(review)
-    await upsertPullRequestComment(effectiveInstallationId, {
-      owner: ownerRepo.owner,
-      repo: ownerRepo.repo,
-      pullRequestNumber,
-      marker: REVIEW_COMMENT_MARKER,
-      body: [REVIEW_STATUS_MARKER, '✅ Review completed.', '', reviewText].join('\n'),
-    }).catch((e: Error) => console.log('[webhook] Failed to post comment:', e.message))
-
-    await savePullRequestReview({
-      installationId: effectiveInstallationId,
-      repository: body.repository,
+    await postReviewResults({
+      review,
+      checkRun,
+      effectiveInstallationId,
       ownerRepo,
-      pullRequestNumber: pullRequest.number,
-      pullRequestTitle: pullRequest.title,
+      pullRequestNumber,
+      pullRequest,
       pullRequestUrl,
-      prAuthor: body.pull_request?.user?.login ?? null,
-      prBody: body.pull_request?.body ?? null,
-      headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
-      baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
-      prState: body.pull_request?.state ?? null,
-      prMerged: body.pull_request?.merged ?? false,
-      prDraft: body.pull_request?.draft ?? false,
-      reviewText,
-      reviewerClerkUserId: githubInstallation.user.clerkUserId,
-      findings: review.findings.map((f) => ({
-        severity: f.severity,
-        file: f.file ?? 'unknown',
-        line: f.line ?? null,
-        quote: f.quote ?? null,
-        title: f.title,
-        message: f.message,
-        suggestion: f.suggestion ?? null,
-        postedToGitHub: false,
-        skipReason: null,
-      })),
-    }).catch((e: Error) => console.log('[webhook] Failed to save review:', e.message))
+      body,
+      files,
+      githubInstallation,
+    })
   } catch (error) {
     console.error('[github-webhook] review failed', {
       deliveryId,
