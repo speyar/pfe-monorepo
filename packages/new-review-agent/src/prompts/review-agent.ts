@@ -95,6 +95,57 @@ const record = await prisma.review.findUnique({ where: { id } })
 - **Secrets in client bundles**: \`process.env.NEXT_PUBLIC_*\` containing tokens, keys, or internal URLs.
 - **Error messages leaking internal state**: \`Response.json({ error: err.message })\` in production.
 
+### 6. CSRF (Cross-Site Request Forgery)
+
+- **Cookie-authenticated mutations**: POST/PUT/DELETE/PATCH on API routes that use cookie/session auth (\`clerk\`, \`next-auth\`) must have CSRF protection (token in header, SameSite=Strict, or custom header requirement). A route that reads auth from cookies but accepts JSON without a CSRF token or custom header can be exploited by an attacker's website -- report as P1.
+- **Custom header check**: If the route relies on \`Content-Type: application/json\` or a custom header like \`X-Requested-With\` for CSRF protection, verify that header is actually enforced, not just conventionally sent by your frontend.
+
+### 7. Mass Assignment
+
+- **Unfiltered body spread**: \`prisma.create({ data: { ...body } })\` or \`prisma.update({ data: { ...body } })\` where \`body\` contains the raw request body. A user can pass extra fields (\`role: "admin"\`, \`isPremium: true\`, \`balance: 999999\`) that map to the model schema -- report as P1.
+- **Fix pattern**: Always whitelist with \`pick(body, ['name', 'email'])\` or use Zod/valibot validation that strips unknown fields.
+
+### 8. Webhook HMAC / Signature Verification
+
+- **Missing signature check**: Webhook handlers (GitHub, Stripe, Slack, SendGrid) that process payloads without verifying the HMAC signature header. If a webhook endpoint accepts any POST without validating \`x-hub-signature-256\`, \`stripe-signature\`, etc., an attacker can forge events -- report as P0.
+- **Timing-safe comparison**: Verify that HMAC comparison uses \`timingSafeEqual\` or similar, not a simple string comparison.
+
+### 9. SSRF (Server-Side Request Forgery)
+
+- **User-controlled fetch URLs**: Code that takes a URL from user input (query param, body, header) and passes it to \`fetch()\`, \`axios.get()\`, or \`http.get()\` without validation. An attacker can reach internal services (\`169.254.169.254\` for cloud metadata, \`localhost:3000\` for internal APIs) -- report as P1.
+- **Fix pattern**: URL allowlist, block private IP ranges, or validate against a strict URL pattern.
+
+### 10. Rate Limiting / Abuse Protection
+
+- **No throttle on auth endpoints**: \`/sign-in\`, \`/api/auth/\`, password reset, OTP verification without rate limiting. Brute-force attack surface -- report as P2.
+- **No throttle on mutation endpoints**: Webhook replay, bulk operations, or expensive queries without limits.
+
+### 11. Cache Poisoning
+
+- **Auth-dependent responses cached**: API routes or pages that return user-specific data but lack \`Cache-Control: private\` or \`no-store\`. If an auth-dependent response is cached by a CDN or Next.js ISR, the next unauthenticated visitor receives the authenticated user's data -- report as P1.
+- **Next.js specific**: Check for \`export const dynamic = 'force-static'\` or \`revalidate\` on pages that depend on \`auth()\` or \`cookies()\`.
+
+### 12. TOCTOU / Race Conditions
+
+- **Non-atomic balance/state operations**: Code that reads a value, checks a condition, then writes — without a transaction, lock, or atomic update. Classic: "check if user has enough balance, then deduct" where two concurrent requests both pass the check -- report as P1.
+- **Pattern to flag**: \`prisma.$transaction\` missing on operations like balance transfers, subscription downgrades, inventory deductions.
+- **Clerk webhook race**: Handling \`user.created\` and \`user.updated\` concurrently without idempotency keys -- report as P2.
+
+### 13. CORS Misconfiguration
+
+- **Wildcard with credentials**: \`Access-Control-Allow-Origin: *\` combined with \`Access-Control-Allow-Credentials: true\`. This is invalid per spec but some middleware libraries produce it -- report as P1.
+- **Echoing origin**: \`Access-Control-Allow-Origin: req.headers.origin\` without validation -- report as P1.
+
+### 14. Token / Key Leakage
+
+- **Tokens in URLs**: API keys, installation IDs, or session tokens passed as query parameters instead of headers. These appear in server logs, referrer headers, and browser history -- report as P2.
+- **Secrets in error responses**: Stack traces, connection strings, or token values included in \`Response.json()\` or \`console.error()\` output that reaches the client -- report as P1.
+
+### 15. Prototype Pollution
+
+- **Unsafe object spreads**: \`{ ...userInput }\`, \`Object.assign(target, userInput)\`, or \`lodash.merge\` with user-controlled data. An attacker can inject \`__proto__\` or \`constructor\` keys to pollute object prototypes globally -- report as P2.
+- **JSON.parse without reviver**: \`JSON.parse(userInput)\` where the input could contain \`__proto__\` keys that pollute the parsed object.
+
 ---
 
 ## PRIORITY FRAMEWORK
