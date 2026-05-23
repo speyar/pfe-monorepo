@@ -1,36 +1,24 @@
-import { generateText, stepCountIs, type LanguageModel } from "ai";
+import type { LanguageModel, Tool } from "ai";
+import { generateText, stepCountIs } from "ai";
 
 import { reviewResultSchema } from "./schema/review-result";
+import type { OrchestratorResult } from "./schema/review-result";
+import type { DiffSummary } from "./diff-summarize";
+import type { SandboxManager } from "@packages/sandbox";
 import { REVIEW_AGENT_SYSTEM_PROMPT } from "./prompts/review-agent";
 import { buildReviewPrompt } from "./prompts/build-review-prompt";
 import { createLsTool } from "./tools/LsTool";
 import { createGlobTool } from "./tools/GlobTool";
 import { createReadFileTool } from "./tools/ReadFileTool";
+import { createGrepTool } from "./tools/GrepTool";
+import { createGitTool } from "./tools/GitTool";
 import { createCodebaseGraphTool } from "./tools/CodebaseGraphTool";
-import { createRequestSkillTool } from "./tools/RequestSkillTool";
-import type { SandboxManager } from "@packages/sandbox";
-import type { DiffSummary } from "./diff-summarize";
-
-export interface Skill {
-  name: string;
-  useCase: string;
-  description: string;
-  content: string;
-  targetAgents: string[];
-}
-
-function isStepDebugEnabled(): boolean {
-  return process.env.NEW_REVIEW_AGENT_DEBUG_STEPS === "1";
-}
-
-function preview(value: unknown, maxChars = 300): string {
-  const asText =
-    typeof value === "string" ? value : JSON.stringify(value ?? "", null, 0);
-  if (asText.length <= maxChars) {
-    return asText;
-  }
-  return `${asText.slice(0, maxChars)}... [truncated ${asText.length - maxChars} chars]`;
-}
+import {
+  buildSharedContext,
+  type SharedContext,
+} from "./orchestrator/shared-context";
+import { runSubAgents } from "./orchestrator/sub-agent-runner";
+import { runOrchestrator } from "./orchestrator/orchestrator";
 
 export interface ReviewAgentOptions {
   model: LanguageModel;
@@ -58,8 +46,14 @@ export interface ReviewFinding {
   suggestion?: string;
 }
 
+export interface AgentSummaryEntry {
+  agentId: string;
+  summary: string;
+}
+
 export interface ReviewResult {
   findings: ReviewFinding[];
+  agentSummaries?: AgentSummaryEntry[];
 }
 
 interface BranchSetupResult {
@@ -77,27 +71,6 @@ function splitLines(text: string): string[] {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-}
-
-function formatDiffSummaryForSystemPrompt(diffSummary?: DiffSummary): string {
-  if (!diffSummary) {
-    return "(none)";
-  }
-
-  const formatList = (items: string[]): string =>
-    items.length > 0 ? items.map((item) => `- ${item}`).join("\n") : "- (none)";
-
-  return [
-    `intent: ${diffSummary.intent}`,
-    "keyChanges:",
-    formatList(diffSummary.keyChanges),
-    "riskPoints:",
-    formatList(diffSummary.riskPoints),
-    "openQuestions:",
-    formatList(diffSummary.openQuestions),
-    "evidence:",
-    formatList(diffSummary.evidence),
-  ].join("\n");
 }
 
 async function runCommand(
@@ -126,38 +99,6 @@ async function runCommand(
       exitCode: 127,
     };
   }
-}
-
-function parseJsonResponse(text: string): ReviewResult {
-  const cleaned = text.trim();
-
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    return { findings: [] };
-  }
-
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    return reviewResultSchema.parse(parsed);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.log("[llm] failed to parse review JSON", message);
-    return { findings: [] };
-  }
-}
-
-function capFindings(result: ReviewResult, maxFindings: number): ReviewResult {
-  if (!Number.isInteger(maxFindings) || maxFindings < 1) {
-    return result;
-  }
-
-  if (result.findings.length <= maxFindings) {
-    return result;
-  }
-
-  return {
-    findings: result.findings.slice(0, maxFindings),
-  };
 }
 
 function isLikelyGeneratedOrLowSignalFile(path: string): boolean {
@@ -266,41 +207,123 @@ async function setupBranchAndContext(
   };
 }
 
-export async function runReviewAgent(
+function createAgentTools(
+  sandboxManager: SandboxManager,
+  sandboxId: string,
+  graphPath?: string,
+): Record<string, Tool> {
+  const tools: Record<string, Tool> = {
+    ls: createLsTool(sandboxManager, sandboxId),
+    glob: createGlobTool(sandboxManager, sandboxId),
+    readFile: createReadFileTool(sandboxManager, sandboxId),
+    grep: createGrepTool(sandboxManager, sandboxId),
+    git: createGitTool(sandboxManager, sandboxId),
+    ...(graphPath
+      ? {
+          codebaseGraph: createCodebaseGraphTool(
+            sandboxManager,
+            sandboxId,
+            graphPath,
+          ),
+        }
+      : {}),
+  };
+  return tools;
+}
+
+function formatDiffSummaryForSystemPrompt(diffSummary?: DiffSummary): string {
+  if (!diffSummary) {
+    return "(none)";
+  }
+
+  const formatList = (items: string[]): string =>
+    items.length > 0 ? items.map((item) => `- ${item}`).join("\n") : "- (none)";
+
+  return [
+    `intent: ${diffSummary.intent}`,
+    "keyChanges:",
+    formatList(diffSummary.keyChanges),
+    "riskPoints:",
+    formatList(diffSummary.riskPoints),
+    "openQuestions:",
+    formatList(diffSummary.openQuestions),
+    "evidence:",
+    formatList(diffSummary.evidence),
+  ].join("\n");
+}
+
+function parseJsonResponseWithReason(text: string): {
+  output: ReviewResult;
+  reason: string;
+} {
+  const cleaned = text.trim();
+
+  if (!cleaned) {
+    return { output: { findings: [] }, reason: "empty-text" };
+  }
+
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    return { output: { findings: [] }, reason: "no-json-object-found" };
+  }
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    try {
+      return {
+        output: reviewResultSchema.parse(parsed) as ReviewResult,
+        reason: "ok",
+      };
+    } catch (schemaError) {
+      const schemaMessage =
+        schemaError instanceof Error
+          ? schemaError.message
+          : String(schemaError);
+      return {
+        output: { findings: [] },
+        reason: `schema-parse-failed:${schemaMessage.split("\n")[0]}`,
+      };
+    }
+  } catch (jsonError) {
+    const jsonMessage =
+      jsonError instanceof Error ? jsonError.message : String(jsonError);
+    return {
+      output: { findings: [] },
+      reason: `json-parse-failed:${jsonMessage.split("\n")[0]}`,
+    };
+  }
+}
+
+function parseJsonResponse(text: string): ReviewResult {
+  return parseJsonResponseWithReason(text).output;
+}
+
+function capFindings(result: ReviewResult, maxFindings: number): ReviewResult {
+  if (!Number.isInteger(maxFindings) || maxFindings < 1) {
+    return result;
+  }
+
+  if (result.findings.length <= maxFindings) {
+    return result;
+  }
+
+  return {
+    findings: result.findings.slice(0, maxFindings),
+  };
+}
+
+async function runSingleAgentFallback(
   branchName: string,
   options: ReviewAgentOptions,
+  branchContext: BranchSetupResult,
+  changedFiles: string[],
+  workingDir: string,
 ): Promise<ReviewResult> {
+  console.log("[review-agent] falling back to single-agent review");
+
   const { sandboxManager, sandboxId } = options;
 
-  const cwdResult = await sandboxManager.runCommand({
-    sandboxId,
-    command: "pwd",
-  });
-  const workingDir = cwdResult.stdout.trim() || "/home/user";
-
-  const branchContext = await setupBranchAndContext(
-    sandboxManager,
-    sandboxId,
-    branchName,
-    options.defaultBranch,
-  );
-
-  const changedFilesResult = await runCommand(
-    sandboxManager,
-    sandboxId,
-    "git",
-    ["diff", "--name-only", `${branchContext.defaultBranch}...HEAD`],
-  );
-  const changedFiles = prioritizeChangedFiles(
-    splitLines(changedFilesResult.stdout),
-  );
-
-  const skills = options.skills ?? [];
-  const targetSkills = skills.filter((s) =>
-    s.targetAgents?.includes("review"),
-  );
-
-  const tools = {
+  const tools: Record<string, Tool> = {
     ls: createLsTool(sandboxManager, sandboxId),
     glob: createGlobTool(sandboxManager, sandboxId),
     readFile: createReadFileTool(sandboxManager, sandboxId),
@@ -318,33 +341,18 @@ export async function runReviewAgent(
       : {}),
   };
 
-  const maxSteps = Math.max(10, options.maxToolSteps ?? 20);
+  const maxSteps = options.maxToolSteps ?? 24;
   const minToolSteps = Math.max(
-    3,
-    Math.min(options.minToolSteps ?? 5, maxSteps - 3),
+    1,
+    Math.min(options.minToolSteps ?? 5, Math.max(1, maxSteps - 2)),
   );
+  const forceFinalizeStep = Math.max(minToolSteps, maxSteps - 2);
 
   let graphContextInfo = "";
   if (options.graphPath) {
-    try {
-      const graphResult = await runCommand(sandboxManager, sandboxId, "cat", [
-        options.graphPath,
-      ]);
-      if (graphResult.exitCode === 0 && graphResult.stdout) {
-        const graphData = JSON.parse(graphResult.stdout);
-        const nodeCount = graphData.metadata?.nodeCount ?? 0;
-        const edgeCount = graphData.metadata?.edgeCount ?? 0;
-        const fileCount = graphData.metadata?.fileCount ?? 0;
-        const packageCount = graphData.metadata?.packageCount ?? 0;
-        console.log(
-          `[review-agent] Codebase graph loaded — packages=${packageCount}, files=${fileCount}, nodes=${nodeCount}, edges=${edgeCount}`,
-        );
-
-        graphContextInfo = `
-
+    graphContextInfo = `
 CODEBASE GRAPH TOOL AVAILABLE:
 A codebaseGraph tool is available with precomputed dependency graph data.
-Graph stats: ${packageCount} packages, ${fileCount} files, ${nodeCount} nodes, ${edgeCount} edges.
 
 USE THE codebaseGraph TOOL for structural queries instead of grep:
 - findCallersOf: find who calls a changed function
@@ -357,16 +365,10 @@ USE THE codebaseGraph TOOL for structural queries instead of grep:
 - getNodeDetails: get full details of a specific node
 
 Prefer codebaseGraph over grep for dependency, caller, and impact questions.`;
-      }
-    } catch (error) {
-      console.log("[review-agent] Failed to load graph:", error);
-    }
   }
 
-  let toolStepCount = 0;
-
   const systemPrompt = `${REVIEW_AGENT_SYSTEM_PROMPT}
-  
+
 Current working directory: ${workingDir}
 Default branch (base for comparison): ${branchContext.defaultBranch}
 Target branch (to review): ${branchContext.activeBranch}
@@ -424,6 +426,9 @@ IMMEDIATE ACTION REQUIRED:
 6. You have a maximum of ${maxSteps} tool-using steps. You MUST output your final JSON findings before step ${maxSteps - 2} to avoid forced termination with 0 findings.
 7. If you are approaching step ${maxSteps - 3}, stop exploring and output your findings immediately — partial findings are better than zero findings.${graphContextInfo}`;
 
+  let toolStepCount = 0;
+  let finalText = "";
+
   const generation = await generateText({
     model: options.model,
     system: systemPrompt,
@@ -438,13 +443,16 @@ IMMEDIATE ACTION REQUIRED:
     tools,
     stopWhen: stepCountIs(maxSteps),
     abortSignal: options.signal,
-    experimental_onToolCallFinish: async ({ toolCall: tc, output }) => {
-      if (!tc) return;
-      console.log(`[toolCall] ${tc.toolName}-${JSON.stringify(tc.input)}`);
+    prepareStep: ({ stepNumber }) => {
+      if (stepNumber >= forceFinalizeStep) {
+        return {
+          toolChoice: "none",
+          activeTools: [],
+        };
+      }
+      return undefined;
     },
     onStepFinish: (step) => {
-      const toolResults =
-        (step as { toolResults?: unknown[] }).toolResults ?? [];
       if (step.toolCalls.length > 0) {
         toolStepCount += 1;
         if (toolStepCount >= maxSteps - 2) {
@@ -453,46 +461,114 @@ IMMEDIATE ACTION REQUIRED:
           );
         }
       }
+      if (step.text) {
+        finalText = step.text;
+      }
+      const toolNames =
+        step.toolCalls.map((toolCall) => toolCall.toolName).join(",") || "-";
       console.log(
-        `[step ${step.stepNumber}] finish=${JSON.stringify(step.finishReason)} toolCalls=${step.toolCalls.length} toolResults=${toolResults.length} toolSteps=${toolStepCount}/${minToolSteps}`,
+        `[fallback:step ${step.stepNumber}] finish=${JSON.stringify(step.finishReason)} rawFinish=${JSON.stringify(step.rawFinishReason)} toolCalls=${step.toolCalls.length} toolNames=${toolNames} toolSteps=${toolStepCount}/${minToolSteps} textLen=${(step.text ?? "").length}`,
       );
-
-      if (!isStepDebugEnabled()) {
-        return;
-      }
-
-      if (step.toolCalls.length > 0) {
-        console.log(
-          `[step ${step.stepNumber}] toolCalls detail`,
-          step.toolCalls.map((call) => ({
-            toolName: call?.toolName ?? "unknown",
-            toolCallId: call?.toolCallId ?? "unknown",
-            input: preview(call?.input ?? {}),
-          })),
-        );
-      }
-
-      if (toolResults.length > 0) {
-        console.log(
-          `[step ${step.stepNumber}] toolResults detail`,
-          toolResults.map((result) => preview(result)),
-        );
-      }
-
-      if (step.text && step.text.trim().length > 0) {
-        console.log(`[step ${step.stepNumber}] text`, preview(step.text, 500));
-      }
     },
   });
 
-  console.log("[llm] tool-assisted review request completed");
+  const text = finalText || generation.text || "";
+  const parsed = parseJsonResponseWithReason(text);
+  console.log(
+    `[fallback] done — steps=${generation.steps.length} finish=${JSON.stringify(generation.finishReason)} rawFinish=${JSON.stringify(generation.rawFinishReason)} warnings=${generation.warnings?.length ?? 0} toolSteps=${toolStepCount}/${minToolSteps} textLen=${text.length} parseReason=${parsed.reason}`,
+  );
 
-  if (isStepDebugEnabled()) {
-    console.log("[llm] final text", preview(generation.text, 1000));
+  return capFindings(parsed.output, options.maxFindings ?? 200);
+}
+
+export async function runReviewAgent(
+  branchName: string,
+  options: ReviewAgentOptions,
+): Promise<ReviewResult> {
+  const { sandboxManager, sandboxId } = options;
+
+  const cwdResult = await sandboxManager.runCommand({
+    sandboxId,
+    command: "pwd",
+  });
+  const workingDir = cwdResult.stdout.trim() || "/home/user";
+
+  const branchContext = await setupBranchAndContext(
+    sandboxManager,
+    sandboxId,
+    branchName,
+    options.defaultBranch,
+  );
+
+  const changedFilesResult = await runCommand(
+    sandboxManager,
+    sandboxId,
+    "git",
+    ["diff", "--name-only", `${branchContext.defaultBranch}...HEAD`],
+  );
+  const changedFiles = prioritizeChangedFiles(
+    splitLines(changedFilesResult.stdout),
+  );
+
+  const tools = createAgentTools(sandboxManager, sandboxId, options.graphPath);
+
+  const sharedContext: SharedContext = buildSharedContext({
+    branchName,
+    workingDir,
+    defaultBranch: branchContext.defaultBranch,
+    activeBranch: branchContext.activeBranch,
+    changedFiles,
+    diffSummary: options.diffSummary,
+    graphContextInfo: "",
+    rawDiff: options.initialDiff,
+  });
+
+  console.log(
+    `[review-agent] launching ${changedFiles.length} changed files across 8 sub-agents`,
+  );
+
+  const subAgentResults = await runSubAgents({
+    model: options.model,
+    sandboxManager,
+    sandboxId,
+    sharedContext,
+    tools,
+    concurrency: 8,
+    signal: options.signal,
+  });
+
+  const hasAnyFindings = subAgentResults.some((r) => r.findings.length > 0);
+
+  if (!hasAnyFindings) {
+    console.log(
+      "[review-agent] all sub-agents returned no findings, falling back to single-agent",
+    );
+    return runSingleAgentFallback(
+      branchName,
+      options,
+      branchContext,
+      changedFiles,
+      workingDir,
+    );
   }
 
-  const parsed = parseJsonResponse(generation.text ?? "") ?? {
-    findings: [],
+  const orchestratorResult: OrchestratorResult = await runOrchestrator({
+    model: options.model,
+    results: subAgentResults,
+    sharedContext,
+    tools,
+    signal: options.signal,
+  });
+
+  const maxFindings = options.maxFindings ?? 200;
+  const findings = orchestratorResult.findings.slice(0, maxFindings);
+
+  console.log(
+    `[review-agent] orchestrated review complete — ${findings.length} findings after dedup (maxFindings=${maxFindings})`,
+  );
+
+  return {
+    findings,
+    agentSummaries: orchestratorResult.agentSummaries,
   };
-  return capFindings(parsed, options.maxFindings ?? 25);
 }

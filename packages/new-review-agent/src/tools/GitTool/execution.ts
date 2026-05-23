@@ -68,7 +68,7 @@ export function createGitExecutor(manager: SandboxManager, sandboxId: string) {
           return "No changes";
         }
 
-        const output = truncateByLines(result.stdout, 250);
+        const output = truncateByLines(result.stdout, 3000);
         logToolEvent({
           tool: "git",
           phase: "finish",

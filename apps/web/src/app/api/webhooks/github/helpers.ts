@@ -189,6 +189,13 @@ export const toMarkdownReview = (review: ReviewResult): string => {
     return [finding.message, suggestionLine].filter(Boolean).join('\n\n')
   })
 
+  const agentSummaryLines = review.agentSummaries?.length
+    ? [
+        '### Review Coverage',
+        ...review.agentSummaries.map((as) => `**${as.agentId}**: ${as.summary}`),
+      ]
+    : []
+
   return [
     REVIEW_COMMENT_MARKER,
     '## Automated PR Review',
@@ -197,6 +204,8 @@ export const toMarkdownReview = (review: ReviewResult): string => {
     `- Risk: ${review.summary.risk}`,
     '',
     review.summary.overview,
+    '',
+    ...agentSummaryLines,
     '',
     review.findings.length > 0
       ? '### Findings\n' + findingLines.join('\n\n')

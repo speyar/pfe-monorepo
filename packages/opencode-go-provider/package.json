@@ -1,0 +1,22 @@
+{
+  "name": "@pfe-monorepo/opencode-go-provider",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Copilot provider for Vercel AI SDK",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check-types": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@ceira/better-copilot-provider": "workspace:*",
+    "ai": "^6.0.116"
+  },
+  "devDependencies": {
+    "@pfe-monorepo/typescript-config": "workspace:*",
+    "@types/node": "^24.5.2"
+  }
+}

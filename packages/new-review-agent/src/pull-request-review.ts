@@ -57,6 +57,7 @@ export interface PullRequestReviewSummary {
 export interface PullRequestReviewResult {
   summary: PullRequestReviewSummary;
   findings: PullRequestReviewFinding[];
+  agentSummaries?: { agentId: string; summary: string }[];
   notes?: string[];
 }
 
@@ -243,73 +244,20 @@ export async function runPullRequestReview(
   input: PullRequestReviewInput,
   options: PullRequestReviewOptions = {},
 ): Promise<PullRequestReviewResult> {
-  const mainModel = options.model ?? createMainModel();
-  const cheapModel = options.model ?? createCheapModel();
-
-  function createCheapModel(): LanguageModel {
-    const deepseekKey = process.env.DEEPSEEK_API_KEY;
-    if (deepseekKey) {
-      const provider = createOpenaiCompatible({
-        apiKey: deepseekKey.trim(),
-        baseURL: (
-          process.env.DEEPSEEK_BASE_URL ?? "https://opencode.ai/zen/go/v1"
-        ).trim(),
-        name: "deepseek",
-      });
-      const modelName = (
-        process.env.CHEAP_MODEL ??
-        process.env.DEEPSEEK_MODEL ??
-        "deepseek-v4-flash"
-      ).trim();
-      console.log(`[provider] cheap model: ${modelName}`);
-      return provider(modelName);
-    }
-    const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-    if (!copilotToken) {
-      throw new Error("Missing COPILOT_GITHUB_TOKEN (and no DEEPSEEK_API_KEY)");
-    }
-    const provider = createOpenaiCompatible({
-      apiKey: copilotToken,
-      baseURL:
-        process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-      name: "copilot",
-    });
-    const modelName = process.env.CHEAP_MODEL ?? process.env.REVIEW_MODEL ?? "gpt-4o-mini";
-    console.log(`[provider] cheap model (copilot): ${modelName}`);
-    return provider(modelName);
+  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
+  if (!copilotToken) {
+    throw new Error("Missing COPILOT_GITHUB_TOKEN");
   }
 
-  function createMainModel(): LanguageModel {
-    const deepseekKey = process.env.DEEPSEEK_API_KEY;
-    if (deepseekKey) {
-      const provider = createOpenaiCompatible({
-        apiKey: deepseekKey.trim(),
-        baseURL: (
-          process.env.DEEPSEEK_BASE_URL ?? "https://opencode.ai/zen/go/v1"
-        ).trim(),
-        name: "deepseek",
-      });
-      const modelName = (
-        process.env.MAIN_MODEL ??
-        process.env.DEEPSEEK_MODEL ??
-        process.env.REVIEW_MODEL ??
-        "deepseek-v4-pro"
-      ).trim();
-      console.log(`[provider] main model: ${modelName}`);
-      return provider(modelName);
-    }
-    const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-    if (!copilotToken) {
-      throw new Error("Missing COPILOT_GITHUB_TOKEN (and no DEEPSEEK_API_KEY)");
-    }
-    const provider = createOpenaiCompatible({
-      apiKey: copilotToken,
-      baseURL:
-        process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-      name: "copilot",
-    });
-    return provider(process.env.MAIN_MODEL ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini");
-  }
+  const modelName =
+    options.modelName ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini";
+
+  const provider = createOpenaiCompatible({
+    apiKey: copilotToken,
+    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
+    name: "copilot",
+  });
+  const model = provider(modelName);
 
   const githubClient = await getGitHubClient(input.installationId);
   const {
@@ -689,9 +637,9 @@ export async function runPullRequestReview(
       initialDiff,
       diffSummary: input.diffSummary,
       defaultBranch: input.baseRef,
-      maxFindings: options.maxFindings ?? 20,
-      maxToolSteps: extendedStepCap,
-      minToolSteps: minSteps,
+      maxFindings: options.maxFindings ?? 200,
+      maxToolSteps: options.maxToolSteps ?? 24,
+      minToolSteps: options.minToolSteps ?? 5,
       signal: options.signal,
       graphPath: effectiveGraphPath,
       skills: options.skills,
@@ -785,7 +733,7 @@ export async function runPullRequestReview(
     return {
       summary: buildSummary(findings, modelName, elapsedMs),
       findings,
-      notes: notes.length > 0 ? notes : undefined,
+      agentSummaries: review.agentSummaries,
     };
   } catch (error) {
     console.error("Error during pull request review", {

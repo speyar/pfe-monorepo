@@ -1,6 +1,7 @@
 import { generateText, type LanguageModel } from "ai";
 import { z } from "zod";
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
+import { estimateTokenCount } from "./tools/shared";
 
 const diffSummarySchema = z.object({
   intent: z.string().min(1),
@@ -87,11 +88,63 @@ export async function summarizeDiffWithDefaultModel(
     return null;
   }
 
+  const modelName =
+    input.modelName ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini";
+
   const provider = createOpenaiCompatible({
     apiKey: copilotToken,
     baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
     name: "copilot",
   });
+  const model = provider(modelName);
+
+  const normalizedFiles =
+    input.files?.filter((file) => file.patch.trim().length > 0) ?? [];
+
+  if (normalizedFiles.length > 0) {
+    const estimatedTokensFromFiles = normalizedFiles.reduce((total, file) => {
+      return total + estimateTokenCount(buildDiffBlockFromFile(file));
+    }, 0);
+
+    const fileBatchTriggerTokens = parsePositiveInt(
+      process.env.REVIEW_DIFF_SUMMARY_CHUNK_TRIGGER_TOKENS,
+      DEFAULT_CHUNK_TRIGGER_TOKENS,
+    );
+
+    if (estimatedTokensFromFiles >= fileBatchTriggerTokens) {
+      console.log("[diff-summarizer] switching to subagent orchestrator mode", {
+        estimatedTokens: estimatedTokensFromFiles,
+        fileBatchTriggerTokens,
+        files: normalizedFiles.length,
+      });
+
+      return summarizeDiffByFileBatches({
+        model,
+        files: normalizedFiles,
+        signal: input.signal,
+      });
+    }
+  }
+
+  const diff = input.diff ?? "";
+  const estimatedTokens = estimateTokenCount(diff);
+  const chunkTriggerTokens = parsePositiveInt(
+    process.env.REVIEW_DIFF_SUMMARY_CHUNK_TRIGGER_TOKENS,
+    DEFAULT_CHUNK_TRIGGER_TOKENS,
+  );
+
+  if (estimatedTokens >= chunkTriggerTokens) {
+    console.log("[diff-summarizer] switching to chunked mode", {
+      estimatedTokens,
+      chunkTriggerTokens,
+    });
+
+    return summarizeDiffChunked({
+      model,
+      diff,
+      signal: input.signal,
+    });
+  }
 
   return summarizeDiff({
     model: provider(

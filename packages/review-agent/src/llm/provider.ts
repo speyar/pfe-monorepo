@@ -39,5 +39,5 @@ export function createGitHubReviewModel(
     headers: input.headers,
   });
 
-  return provider(input.model ?? "gpt-5.3-codex");
+  return provider(input.model ?? "gpt-5.4-mini");
 }
