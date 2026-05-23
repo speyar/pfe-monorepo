@@ -26,3 +26,46 @@ export {
   generateCodebaseGraph,
   type GraphGeneratorOptions,
 } from "./graph-generator";
+
+export {
+  runCrossReference,
+  type CrossRefInput,
+  type CrossRefResult,
+} from "./cross-ref-agent";
+
+export {
+  runSubReviews,
+  mergeSubFindings,
+  buildSubFindingsPrompt,
+  type FanOutReviewInput,
+} from "./fan-out-review";
+
+export { runSubReview, type SubReviewInput, type SubReviewResult } from "./sub-review";
+
+export {
+  verifyAndDedupeFindings,
+  crossRefDedupe,
+} from "./v2/finding-verifier";
+
+export { EvidenceStore } from "./v2/evidence-store";
+
+export {
+  prepareBranchContext,
+} from "./v2/branch-context";
+
+export {
+  buildDependencyMap,
+} from "./v2/dependency-map";
+
+export {
+  collectPatchesByFile,
+  type DiffCollectionFailure,
+} from "./v2/diff-context";
+
+export {
+  runSkillWorker,
+} from "./v2/skill-worker";
+
+export {
+  routeSkills,
+} from "./v2/skill-router";

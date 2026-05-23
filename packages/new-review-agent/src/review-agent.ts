@@ -318,10 +318,10 @@ export async function runReviewAgent(
       : {}),
   };
 
-  const maxSteps = options.maxToolSteps ?? 20;
+  const maxSteps = Math.max(10, options.maxToolSteps ?? 20);
   const minToolSteps = Math.max(
-    1,
-    Math.min(options.minToolSteps ?? 5, maxSteps),
+    3,
+    Math.min(options.minToolSteps ?? 5, maxSteps - 3),
   );
 
   let graphContextInfo = "";
@@ -419,7 +419,9 @@ IMMEDIATE ACTION REQUIRED:
 1. Start from the precomputed diff provided in the user prompt.
 2. Use the precomputed codebase graph to discover impacted callers/usages and relevant symbols in changed files.
 3. Use readFile only for focused ranges (lineStart/lineEnd or maxLines) when validating evidence.
-4. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.${graphContextInfo}`;
+4. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.
+5. You have a maximum of ${maxSteps} tool-using steps. You MUST output your final JSON findings before step ${maxSteps - 2} to avoid forced termination with 0 findings.
+6. If you are approaching step ${maxSteps - 3}, stop exploring and output your findings immediately — partial findings are better than zero findings.${graphContextInfo}`;
 
   const generation = await generateText({
     model: options.model,
@@ -444,6 +446,11 @@ IMMEDIATE ACTION REQUIRED:
         (step as { toolResults?: unknown[] }).toolResults ?? [];
       if (step.toolCalls.length > 0) {
         toolStepCount += 1;
+        if (toolStepCount >= maxSteps - 2) {
+          console.warn(
+            `[step ${step.stepNumber}] APPROACHING STEP LIMIT — ${toolStepCount}/${maxSteps} tool steps used. Agent should output findings now.`,
+          );
+        }
       }
       console.log(
         `[step ${step.stepNumber}] finish=${JSON.stringify(step.finishReason)} toolCalls=${step.toolCalls.length} toolResults=${toolResults.length} toolSteps=${toolStepCount}/${minToolSteps}`,

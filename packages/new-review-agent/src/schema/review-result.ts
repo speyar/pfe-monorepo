@@ -8,6 +8,8 @@ export const reviewFindingSchema = z.object({
   title: z.string().min(1).max(100),
   message: z.string().min(1).max(4000),
   suggestion: z.string().optional(),
+  skill: z.string().optional(),
+  deduplicatedFrom: z.array(z.string()).optional(),
 });
 
 export const reviewResultSchema = z.object({

@@ -38,6 +38,33 @@ export interface GraphGenerationResult {
   elapsedMs: number;
 }
 
+async function readGraphMetadata(
+  manager: SandboxManager,
+  sandboxId: string,
+  outPath: string,
+): Promise<{
+  nodeCount: number;
+  edgeCount: number;
+  fileCount: number;
+  packageCount: number;
+} | null> {
+  const catResult = await runCmd(manager, sandboxId, "cat", [outPath]);
+  if (catResult.exitCode !== 0 || !catResult.stdout) {
+    return null;
+  }
+  try {
+    const graphData = JSON.parse(catResult.stdout);
+    return {
+      nodeCount: graphData.metadata?.nodeCount ?? 0,
+      edgeCount: graphData.metadata?.edgeCount ?? 0,
+      fileCount: graphData.metadata?.fileCount ?? 0,
+      packageCount: graphData.metadata?.packageCount ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function generateCodebaseGraph(
   manager: SandboxManager,
   sandboxId: string,
@@ -48,10 +75,15 @@ export async function generateCodebaseGraph(
   console.log("[graph-generator] Downloading codebase-graph CLI...");
   const downloadResult = await runCmd(manager, sandboxId, "curl", [
     "-L",
+    "--connect-timeout",
+    "15",
+    "--max-time",
+    "30",
     "-o",
     "/tmp/codebase-graph-cli.cjs",
     GRAPH_CLI_URL,
   ]);
+
   if (downloadResult.exitCode !== 0) {
     throw new Error(
       `Failed to download graph CLI: ${downloadResult.stderr || downloadResult.stdout}`,
@@ -61,7 +93,11 @@ export async function generateCodebaseGraph(
 
   const prettyFlag = options.pretty !== false ? "--pretty" : "";
 
-  console.log("[graph-generator] Running codebase-graph on:", options.rootPath);
+  console.log(
+    "[graph-generator] Running codebase-graph on:",
+    options.rootPath,
+  );
+
   const result = await runCmd(
     manager,
     sandboxId,
@@ -77,41 +113,33 @@ export async function generateCodebaseGraph(
     options.rootPath,
   );
 
-  if (result.exitCode !== 0) {
-    throw new Error(
-      `Failed to generate codebase graph: ${result.stderr || result.stdout}`,
-    );
-  }
-
-  console.log("[graph-generator] CLI stdout:", result.stdout.trim());
+  console.log("[graph-generator] CLI stdout:", result.stdout.slice(0, 500).trim());
   if (result.stderr.trim()) {
-    console.log("[graph-generator] CLI stderr:", result.stderr.trim());
-  }
-
-  console.log("[graph-generator] Reading graph metadata...");
-  const catResult = await runCmd(manager, sandboxId, "cat", [options.outPath]);
-  if (catResult.exitCode !== 0) {
     console.log(
-      "[graph-generator] Could not read graph file for metadata logging.",
+      "[graph-generator] CLI stderr:",
+      result.stderr.slice(0, 1000).trim(),
     );
   }
 
-  let nodeCount = 0;
-  let edgeCount = 0;
-  let fileCount = 0;
-  let packageCount = 0;
+  const metadata = await readGraphMetadata(manager, sandboxId, options.outPath);
 
-  if (catResult.exitCode === 0 && catResult.stdout) {
-    try {
-      const graphData = JSON.parse(catResult.stdout);
-      nodeCount = graphData.metadata?.nodeCount ?? 0;
-      edgeCount = graphData.metadata?.edgeCount ?? 0;
-      fileCount = graphData.metadata?.fileCount ?? 0;
-      packageCount = graphData.metadata?.packageCount ?? 0;
-    } catch {
-      console.log("[graph-generator] Could not parse graph JSON for metadata.");
+  if (result.exitCode !== 0) {
+    if (metadata && metadata.nodeCount > 0) {
+      console.log(
+        `[graph-generator] CLI exited with code ${result.exitCode} but produced ${metadata.nodeCount} nodes — using partial output`,
+      );
+    } else {
+      await runCmd(manager, sandboxId, "rm", ["-f", options.outPath]);
+      throw new Error(
+        `Failed to generate codebase graph: ${result.stderr || result.stdout}`,
+      );
     }
   }
+
+  const nodeCount = metadata?.nodeCount ?? 0;
+  const edgeCount = metadata?.edgeCount ?? 0;
+  const fileCount = metadata?.fileCount ?? 0;
+  const packageCount = metadata?.packageCount ?? 0;
 
   const elapsedMs = Date.now() - startedAt;
   console.log(
