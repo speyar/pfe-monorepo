@@ -1,9 +1,15 @@
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
+import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runMechanicAgent } from "./mechanic-agent";
 import type { FixResult } from "./schema/fix-result";
-import type { MechanicRepoInput, MechanicAgentOptions, SentryIssueContext } from "./types";
+import type {
+  MechanicRepoInput,
+  MechanicAgentOptions,
+  SentryIssueContext,
+} from "./types";
+import type { LanguageModel } from "ai";
 
 export interface SentryFixInput {
   issue: SentryIssueContext;
@@ -95,9 +101,7 @@ function buildSentryContextPrompt(input: SentryFixInput): string {
   }
 
   lines.push(``, `## Task`, ``);
-  lines.push(
-    `Find the root cause of this error in the codebase and fix it.`,
-  );
+  lines.push(`Find the root cause of this error in the codebase and fix it.`);
   lines.push(`Repository: ${input.repo.owner}/${input.repo.repo}`);
   lines.push(`Default branch: ${input.repo.defaultBranch ?? "main"}`);
 
@@ -108,19 +112,31 @@ export async function runSentryFix(
   input: SentryFixInput,
   options: MechanicAgentOptions = {},
 ): Promise<SentryFixResult> {
-  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-  if (!copilotToken) {
-    return {
-      success: false,
-      error: "Missing COPILOT_GITHUB_TOKEN",
-    };
-  }
+  const openCodeGoApiKey = process.env.OPENCODE_GO_API_KEY;
+  const modelName =
+    options.modelName ??
+    process.env.REVIEW_MODEL ??
+    (openCodeGoApiKey ? "deepseek-v4-flash" : "gpt-5.4-mini");
 
-  const provider = createOpenaiCompatible({
-    apiKey: copilotToken,
-    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-    name: "copilot",
-  });
+  let model: LanguageModel;
+  if (openCodeGoApiKey) {
+    model = createOpenCodeGoModel(modelName);
+  } else {
+    const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
+    if (!copilotToken) {
+      return {
+        success: false,
+        error: "Missing COPILOT_GITHUB_TOKEN (or set OPENCODE_GO_API_KEY)",
+      };
+    }
+
+    const provider = createOpenaiCompatible({
+      apiKey: copilotToken,
+      baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
+      name: "copilot",
+    });
+    model = provider(modelName);
+  }
 
   let githubClient;
   let token: string;
@@ -176,7 +192,7 @@ export async function runSentryFix(
     const sentryContextPrompt = buildSentryContextPrompt(input);
 
     const fix = await runMechanicAgent({
-      model: provider(options.modelName ?? "gpt-5.4-mini"),
+      model,
       sandboxManager: manager,
       sandboxId: sandbox.id,
       sentryContextPrompt,
@@ -220,7 +236,9 @@ export async function runSentryFix(
       };
     }
 
-    console.log("[sentry-fix] Changes detected, proceeding to git branch/commit/push...");
+    console.log(
+      "[sentry-fix] Changes detected, proceeding to git branch/commit/push...",
+    );
 
     const shortId = input.issue.id.slice(0, 8);
     const branchName = `fix/sentry-${shortId}`;
@@ -233,13 +251,19 @@ export async function runSentryFix(
       command: "git",
       args: ["remote", "set-url", "origin", authUrl],
     });
-    console.log(`[sentry-fix] Remote set-url: exitCode=${remoteResult.exitCode}`);
+    console.log(
+      `[sentry-fix] Remote set-url: exitCode=${remoteResult.exitCode}`,
+    );
 
     console.log(`[sentry-fix] Setting git user config...`);
     await manager.runCommand({
       sandboxId: sandbox.id,
       command: "git",
-      args: ["config", "user.email", "mechanic-agent[bot]@users.noreply.github.com"],
+      args: [
+        "config",
+        "user.email",
+        "mechanic-agent[bot]@users.noreply.github.com",
+      ],
     });
     await manager.runCommand({
       sandboxId: sandbox.id,
@@ -254,7 +278,9 @@ export async function runSentryFix(
         command: "git",
         args: ["checkout", "-b", branchName],
       });
-      console.log(`[sentry-fix] Branch created: exitCode=${branchResult.exitCode}`);
+      console.log(
+        `[sentry-fix] Branch created: exitCode=${branchResult.exitCode}`,
+      );
 
       const addResult = await manager.runCommand({
         sandboxId: sandbox.id,
@@ -276,15 +302,22 @@ Sentry issue: ${input.issue.permalink}
 ${fix.rootCause}`,
         ],
       });
-      console.log(`[sentry-fix] Git commit: exitCode=${commitResult.exitCode}, stdout=${commitResult.stdout?.trim()}`);
+      console.log(
+        `[sentry-fix] Git commit: exitCode=${commitResult.exitCode}, stdout=${commitResult.stdout?.trim()}`,
+      );
 
       const pushResult = await manager.runCommand({
         sandboxId: sandbox.id,
         command: "git",
         args: ["push", "origin", branchName],
       });
-      const pushStderr = (pushResult.stderr ?? "").replace(/x-access-token:[^@]+@/g, "x-access-token:***@");
-      console.log(`[sentry-fix] Git push: exitCode=${pushResult.exitCode}, stderr=${pushStderr.slice(0, 1000)}`);
+      const pushStderr = (pushResult.stderr ?? "").replace(
+        /x-access-token:[^@]+@/g,
+        "x-access-token:***@",
+      );
+      console.log(
+        `[sentry-fix] Git push: exitCode=${pushResult.exitCode}, stderr=${pushStderr.slice(0, 1000)}`,
+      );
 
       if (pushResult.exitCode !== 0) {
         return {
@@ -321,16 +354,12 @@ ${fix.rootCause}`,
       ``,
       `### Files Changed`,
       ``,
-      ...fix.filesChanged.map(
-        (f) => `- \`${f.path}\`: ${f.description}`,
-      ),
+      ...fix.filesChanged.map((f) => `- \`${f.path}\`: ${f.description}`),
       ``,
       `### Verification`,
       ``,
       `Lint/typecheck passed: ${fix.verificationPassed ? "✅" : "❌"}`,
-      fix.verificationNotes
-        ? `\n\`\`\`\n${fix.verificationNotes}\n\`\`\``
-        : "",
+      fix.verificationNotes ? `\n\`\`\`\n${fix.verificationNotes}\n\`\`\`` : "",
     ]
       .filter(Boolean)
       .join("\n");

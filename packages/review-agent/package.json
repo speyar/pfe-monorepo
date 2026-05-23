@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@ceira/better-copilot-provider": "workspace:*",
+    "@pfe-monorepo/opencode-go-provider": "workspace:*",
     "ai": "^6.0.116",
     "zod": "^4.1.8"
   },

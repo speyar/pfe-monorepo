@@ -1,9 +1,11 @@
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
+import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runReviewAgent } from "./review-agent";
 import type { DiffSummary } from "./diff-summarize";
 import { generateCodebaseGraph } from "./graph-generator";
+import type { LanguageModel } from "ai";
 
 export type PullRequestReviewVerdict =
   | "approve"
@@ -128,19 +130,30 @@ export async function runPullRequestReview(
   input: PullRequestReviewInput,
   options: PullRequestReviewOptions = {},
 ): Promise<PullRequestReviewResult> {
-  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
+  const openCodeGoApiKey = process.env.OPENCODE_GO_API_KEY;
+  const modelName =
+    options.modelName ??
+    process.env.REVIEW_MODEL ??
+    (openCodeGoApiKey ? "deepseek-v4-flash" : "gpt-5.4-mini");
 
-  console.log("copilotToken", copilotToken);
+  let model: LanguageModel;
+  if (openCodeGoApiKey) {
+    model = createOpenCodeGoModel(modelName);
+  } else {
+    const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
+    if (!copilotToken) {
+      throw new Error(
+        "Missing COPILOT_GITHUB_TOKEN (or set OPENCODE_GO_API_KEY)",
+      );
+    }
 
-  if (!copilotToken) {
-    throw new Error("Missing COPILOT_GITHUB_TOKEN");
+    const provider = createOpenaiCompatible({
+      apiKey: copilotToken,
+      baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
+      name: "copilot",
+    });
+    model = provider(modelName);
   }
-
-  const provider = createOpenaiCompatible({
-    apiKey: copilotToken,
-    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-    name: "copilot",
-  });
 
   const githubClient = await getGitHubClient(input.installationId);
   const {
@@ -176,19 +189,30 @@ export async function runPullRequestReview(
     });
     const workingDir = cwdResult.stdout.trim() || "/home/user";
     const graphPath = `${workingDir}/codebase-graph.json`;
+    let resolvedGraphPath: string | undefined;
 
     console.log("Generating codebase graph...");
-    const graphResult = await generateCodebaseGraph(manager, sandbox.id, {
-      rootPath: workingDir,
-      outPath: graphPath,
-      pretty: true,
-    });
-    console.log(
-      `Codebase graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
-    );
+    try {
+      const graphResult = await generateCodebaseGraph(manager, sandbox.id, {
+        rootPath: workingDir,
+        outPath: graphPath,
+        pretty: true,
+      });
+      resolvedGraphPath = graphResult.graphPath;
+      console.log(
+        `Codebase graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
+      );
+    } catch (error) {
+      console.warn(
+        "Codebase graph generation failed; continuing without graph context",
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
+    }
 
     const review = await runReviewAgent(input.headRef, {
-      model: provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini"),
+      model,
       sandboxManager: manager,
       sandboxId: sandbox.id,
       initialDiff: input.initialDiff,
@@ -198,14 +222,14 @@ export async function runPullRequestReview(
       maxToolSteps: options.maxToolSteps ?? 24,
       minToolSteps: options.minToolSteps ?? 5,
       signal: options.signal,
-      graphPath,
+      graphPath: resolvedGraphPath,
     });
 
     const findings = toFindings(review.findings);
     const elapsedMs = Date.now() - startedAt;
 
     return {
-      summary: buildSummary(findings, "gpt-5.4-mini", elapsedMs),
+      summary: buildSummary(findings, modelName, elapsedMs),
       findings,
     };
   } catch (error) {
@@ -219,7 +243,7 @@ export async function runPullRequestReview(
         score: 0,
         overview: "An error occurred during the review process.",
         risk: "unknown",
-        model: "gpt-5.4-mini",
+        model: modelName,
         elapsedMs: Date.now() - startedAt,
       },
       findings: [],

@@ -7,7 +7,7 @@ export interface GraphGeneratorOptions {
 }
 
 const GRAPH_CLI_URL =
-  "https://github.com/speyar/pfe-monorepo/releases/download/v0.0.1/codebase-graph-cli.cjs";
+  "https://github.com/speyar/pfe-monorepo/releases/download/v0.0.2/codebase-graph-cli.cjs";
 
 async function runCmd(
   manager: SandboxManager,

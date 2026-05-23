@@ -324,9 +324,15 @@ function parsePackageSources(pkgContext: PackageContext): SourceFile[] {
       continue;
     }
 
-    const sourceFile = project.addSourceFileAtPathIfExists(file.absolutePath);
-    if (sourceFile) {
-      sourceFiles.push(sourceFile);
+    try {
+      const sourceFile = project.addSourceFileAtPathIfExists(file.absolutePath);
+      if (sourceFile) {
+        sourceFiles.push(sourceFile);
+      }
+    } catch {
+      console.error(
+        `[codebase-graph] Skipping file (failed to parse): ${file.absolutePath}`,
+      );
     }
   }
 
@@ -393,15 +399,28 @@ function isExportedDeclaration(node: NamedDeclarationNode): boolean {
   return false;
 }
 
+function safeGetTypeText(type: { getText: () => string }): string {
+  try {
+    return type.getText();
+  } catch {
+    return "unknown";
+  }
+}
+
 function getFunctionNodeSignature(
   node: FunctionDeclaration | MethodDeclaration,
 ): string {
-  const signature = node.getSignature();
-  const declaration = signature?.getDeclaration();
-  if (declaration) {
-    const text = declaration.getText();
-    const bodyIndex = text.indexOf("{");
-    return bodyIndex > 0 ? text.slice(0, bodyIndex).trim() : text;
+  try {
+    const signature = node.getSignature();
+    const declaration = signature?.getDeclaration();
+    if (declaration) {
+      const text = declaration.getText();
+      const bodyIndex = text.indexOf("{");
+      return bodyIndex > 0 ? text.slice(0, bodyIndex).trim() : text;
+    }
+  } catch {
+    // ts-morph's TypeChecker.getSignatureFromNode can throw when
+    // a function's symbol/type is unresolvable
   }
 
   return node.getText();
@@ -446,11 +465,15 @@ function createDeclarationGraphNode(
     Node.isMethodDeclaration(declaration)
   ) {
     graphNode.signature = getFunctionNodeSignature(declaration);
-    graphNode.returnType = declaration.getReturnType().getText();
-    graphNode.parameters = declaration.getParameters().map((parameter) => ({
-      name: parameter.getName(),
-      type: parameter.getType().getText(),
-    }));
+    try {
+      graphNode.returnType = safeGetTypeText(declaration.getReturnType());
+      graphNode.parameters = declaration.getParameters().map((parameter) => ({
+        name: parameter.getName(),
+        type: safeGetTypeText(parameter.getType()),
+      }));
+    } catch {
+      // ts-morph type resolution may throw for complex generic types
+    }
   }
 
   context.graph.addNode(graphNode);
@@ -972,14 +995,26 @@ export function buildCodebaseGraph(
     const sourceFiles = parsePackageSources(pkgContext);
 
     for (const sourceFile of sourceFiles) {
-      addImportEdges(context, sourceFile, pkgContext);
-      extractDeclarations(context, sourceFile);
+      try {
+        addImportEdges(context, sourceFile, pkgContext);
+        extractDeclarations(context, sourceFile);
+      } catch {
+        console.error(
+          `[codebase-graph] Skipping declaration extraction for file: ${sourceFile.getFilePath()}`,
+        );
+      }
     }
 
     for (const sourceFile of sourceFiles) {
-      addCallEdges(context, sourceFile);
-      addVariableUsageEdges(context, sourceFile);
-      addTypeAndInheritanceEdges(context, sourceFile);
+      try {
+        addCallEdges(context, sourceFile);
+        addVariableUsageEdges(context, sourceFile);
+        addTypeAndInheritanceEdges(context, sourceFile);
+      } catch {
+        console.error(
+          `[codebase-graph] Skipping edge resolution for file: ${sourceFile.getFilePath()}`,
+        );
+      }
     }
   }
 

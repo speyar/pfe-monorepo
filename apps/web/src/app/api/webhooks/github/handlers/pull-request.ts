@@ -587,6 +587,12 @@ export const handlePullRequestEvent = async ({
 
   const diffSummary = await summarizeDiffWithDefaultModel({
     diff: initialDiff,
+    files: filesForReview
+      .filter((file) => typeof file.patch === 'string' && file.patch.length > 0)
+      .map((file) => ({
+        path: file.path,
+        patch: file.patch as string,
+      })),
   }).catch((error) => {
     console.warn('[github-webhook] diff summarizer failed', {
       deliveryId,
@@ -706,7 +712,11 @@ export const handlePullRequestEvent = async ({
         if (!targetResolution.ok) {
           skippedByReason[targetResolution.reason] =
             (skippedByReason[targetResolution.reason] ?? 0) + 1
-          findingStatuses.push({ finding, postedToGitHub: false, skipReason: targetResolution.reason })
+          findingStatuses.push({
+            finding,
+            postedToGitHub: false,
+            skipReason: targetResolution.reason,
+          })
           continue
         }
 
@@ -716,7 +726,11 @@ export const handlePullRequestEvent = async ({
 
         if (confidence < MIN_INLINE_CONFIDENCE) {
           skippedByReason.low_inline_confidence = (skippedByReason.low_inline_confidence ?? 0) + 1
-          findingStatuses.push({ finding, postedToGitHub: false, skipReason: 'low_inline_confidence' })
+          findingStatuses.push({
+            finding,
+            postedToGitHub: false,
+            skipReason: 'low_inline_confidence',
+          })
           continue
         }
 

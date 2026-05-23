@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "pfe-monorepo",
@@ -127,6 +126,7 @@
         "@ceira/better-copilot-provider": "workspace:*",
         "@packages/sandbox": "workspace:*",
         "@pfe-monorepo/github-api": "workspace:*",
+        "@pfe-monorepo/opencode-go-provider": "workspace:*",
         "ai": "^6.0.116",
         "zod": "^4.1.8",
       },
@@ -150,11 +150,24 @@
         "bun-types": "^1.0.0",
       },
     },
+    "packages/opencode-go-provider": {
+      "name": "@pfe-monorepo/opencode-go-provider",
+      "version": "0.1.0",
+      "dependencies": {
+        "@ai-sdk/openai-compatible": "^1.0.0",
+        "ai": "^6.0.116",
+      },
+      "devDependencies": {
+        "@pfe-monorepo/typescript-config": "workspace:*",
+        "@types/node": "^24.5.2",
+      },
+    },
     "packages/review-agent": {
       "name": "@pfe-monorepo/review-agent",
       "version": "0.0.0",
       "dependencies": {
         "@ceira/better-copilot-provider": "workspace:*",
+        "@pfe-monorepo/opencode-go-provider": "workspace:*",
         "ai": "^6.0.116",
         "zod": "^4.1.8",
       },
@@ -189,6 +202,8 @@
   },
   "packages": {
     "@ai-sdk/gateway": ["@ai-sdk/gateway@3.0.66", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.19", "@vercel/oidc": "3.1.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-SIQ0YY0iMuv+07HLsZ+bB990zUJ6S4ujORAh+Jv1V2KGNn73qQKnGO0JBk+w+Res8YqOFSycwDoWcFlQrVxS4A=="],
+
+    "@ai-sdk/openai-compatible": ["@ai-sdk/openai-compatible@1.0.39", "", { "dependencies": { "@ai-sdk/provider": "2.0.3", "@ai-sdk/provider-utils": "3.0.25" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-001hdQPPXxYBWrz5d+eAmBVYmwzsB+guIey1DFXi1ZEE5H3j7fRrhPpX55MdM9Fle2DS7WZ8b3qkumCIWE92YQ=="],
 
     "@ai-sdk/provider": ["@ai-sdk/provider@3.0.8", "", { "dependencies": { "json-schema": "^0.4.0" } }, "sha512-oGMAgGoQdBXbZqNG0Ze56CHjDZ1IDYOwGYxYjO5KLSlz5HiNQ9udIXsPZ61VWaHGZ5XW/jyjmr6t2xz2jGVwbQ=="],
 
@@ -575,6 +590,8 @@
     "@pfe-monorepo/mechanic-agent": ["@pfe-monorepo/mechanic-agent@workspace:packages/mechanic-agent"],
 
     "@pfe-monorepo/new-review-agent": ["@pfe-monorepo/new-review-agent@workspace:packages/new-review-agent"],
+
+    "@pfe-monorepo/opencode-go-provider": ["@pfe-monorepo/opencode-go-provider@workspace:packages/opencode-go-provider"],
 
     "@pfe-monorepo/review-agent": ["@pfe-monorepo/review-agent@workspace:packages/review-agent"],
 
@@ -2031,6 +2048,10 @@
     "zustand": ["zustand@5.0.11", "", { "peerDependencies": { "@types/react": ">=18.0.0", "immer": ">=9.0.6", "react": ">=18.0.0", "use-sync-external-store": ">=1.2.0" }, "optionalPeers": ["@types/react", "immer", "react", "use-sync-external-store"] }, "sha512-fdZY+dk7zn/vbWNCYmzZULHRrss0jx5pPFiOuMZ/5HJN6Yv3u+1Wswy/4MpZEkEGhtNH+pwxZB8OKgUBPzYAGg=="],
 
     "@ai-sdk/gateway/@vercel/oidc": ["@vercel/oidc@3.1.0", "", {}, "sha512-Fw28YZpRnA3cAHHDlkt7xQHiJ0fcL+NRcIqsocZQUSmbzeIKRpwttJjik5ZGanXP+vlA4SbTg+AbA3bP363l+w=="],
+
+    "@ai-sdk/openai-compatible/@ai-sdk/provider": ["@ai-sdk/provider@2.0.3", "", { "dependencies": { "json-schema": "^0.4.0" } }, "sha512-h88OPkavHTiN9tMn2l5awAznGB0lXzjcLhgR1/rvjB2zlLprsNxbM2tt6OJsHUxduLC3klq0/eqaSf6fX5XVww=="],
+
+    "@ai-sdk/openai-compatible/@ai-sdk/provider-utils": ["@ai-sdk/provider-utils@3.0.25", "", { "dependencies": { "@ai-sdk/provider": "2.0.3", "@standard-schema/spec": "^1.0.0", "eventsource-parser": "^3.0.6" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-CvsRu+32Y8a167s+lrIBtsybvgTHp8j9y+6BeTvLeoW3Q+okw/b4CnNUFOLIXsRaKHQKAH+IHNJPYWywfpw0LA=="],
 
     "@antfu/ni/tinyexec": ["tinyexec@1.0.2", "", {}, "sha512-W/KYk+NFhkmsYpuHq5JykngiOCnxeVL8v8dFnqxSD8qEEdRfXk1SDM6JzNqcERbcGYj9tMrDQBYV9cjgnunFIg=="],
 
