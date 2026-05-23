@@ -220,17 +220,52 @@ export function buildSubFindingsPrompt(
     `[fan-out] building main agent prompt with ${findings.length} sub-agent findings`,
   );
 
+  const apiRouteFindings = findings.filter(
+    (f) =>
+      f.file &&
+      (f.file.includes("/api/") ||
+        f.file.endsWith("route.ts") ||
+        f.file.endsWith("route.tsx")),
+  );
+
   const lines: string[] = [
     `Sub-agents reported ${findings.length} findings across all batches.`,
     "",
-    "Your job: validate each finding against the actual codebase using readFile/grep/codebaseGraph.",
-    "Cross-reference across files, deduplicate, adjust severity if needed.",
-    "Add any new findings the sub-agents missed.",
-    "You MUST output a complete JSON with findings. Never return 0 findings if sub-agents reported issues without validating them.",
+    "Your job is to SYSTEMATICALLY VALIDATE each finding against the actual codebase.",
+    "You MUST use readFile to read the referenced files and verify the reported issues.",
     "",
-    "Reported findings:",
+    "For EACH finding, you must decide:",
+    "  CONFIRM — The finding is real and the severity is correct. Output it as-is.",
+    "  REJECT  — The finding is a false positive. Omit it from your output.",
+    "  ADJUST  — The finding is real but the severity is wrong. Output with corrected severity and note the adjustment in message.",
+    "",
+    "VALIDATION CHECKLIST for each finding:",
+    "1. Read the file at the reported location. Does the code actually match?",
+    "2. For API route / security findings: check authentication (read full file for auth(), getAuth(), middleware).",
+    "3. For IDOR findings: verify the query lacks user-scoping by reading the file. Do NOT reject an IDOR finding until you've confirmed user-scoping EXISTS.",
+    "4. Is the severity correct? Escalate low/medium security findings to critical if they affect production.",
+    "5. Is the suggestion actionable? If a sub-agent gave a prose suggestion, turn it into concrete code where possible.",
+    "",
+    "You MUST re-report every confirmed sub-agent finding in your output.",
+    "If ALL sub-agent findings are false positives, output at least one info finding explaining why they were rejected.",
+    "",
   ];
 
+  if (apiRouteFindings.length > 0) {
+    lines.push(
+      "⚠️  CRITICAL: The following sub-agent findings are on API routes. You MUST read each route file in full",
+      "to verify authentication and authorization scoping before making your decision:",
+    );
+    apiRouteFindings.forEach((f, i) => {
+      lines.push(`  ${i + 1}. ${f.file} — [${f.severity}] ${f.title}`);
+    });
+    lines.push(
+      "If you reject any of these, explain exactly WHY the route is secure (auth present, query scoped, etc.)",
+    );
+    lines.push("");
+  }
+
+  lines.push("Reported findings:");
   findings.forEach((f, i) => {
     const loc = f.file
       ? `${f.file}${f.line ? `:${f.line}` : ""}`

@@ -1,6 +1,6 @@
 import type { SandboxManager } from "@packages/sandbox";
 import { runWithConcurrency } from "./parallel-scheduler";
-import { normalizePath, runCommand, textPreview } from "./utils";
+import { normalizePath, runCommand, textPreview, smartTruncateDiff, isSecurityCriticalFile } from "./utils";
 import { debug } from "./debug";
 
 export interface DiffCollectionFailure {
@@ -27,13 +27,14 @@ export async function collectPatchesByFile(input: {
     6,
     async (filePath) => {
       const normalized = normalizePath(filePath);
+      const contextLines = isSecurityCriticalFile(normalized) ? 80 : 40;
       const firstAttempt = await runCommand(
         input.sandboxManager,
         input.sandboxId,
         "git",
         [
           "diff",
-          "--unified=40",
+          `--unified=${contextLines}`,
           `${input.defaultBranch}...HEAD`,
           "--",
           normalized,
@@ -42,7 +43,7 @@ export async function collectPatchesByFile(input: {
       if (firstAttempt.exitCode === 0) {
         return {
           path: normalized,
-          patch: textPreview(firstAttempt.stdout, 12_000),
+          patch: smartTruncateDiff(firstAttempt.stdout, 12_000, normalized),
           failure: null,
         };
       }
@@ -50,12 +51,12 @@ export async function collectPatchesByFile(input: {
         input.sandboxManager,
         input.sandboxId,
         "git",
-        ["diff", "--unified=40", "HEAD~1..HEAD", "--", normalized],
+        ["diff", `--unified=${contextLines}`, "HEAD~1..HEAD", "--", normalized],
       );
       if (retryAttempt.exitCode === 0) {
         return {
           path: normalized,
-          patch: textPreview(retryAttempt.stdout, 12_000),
+          patch: smartTruncateDiff(retryAttempt.stdout, 12_000, normalized),
           failure: null,
         };
       }

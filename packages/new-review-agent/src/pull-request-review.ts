@@ -423,23 +423,45 @@ export async function runPullRequestReview(
       subFindingsContext: subFindingsPrompt || undefined,
     });
 
-    if (
-      review.findings.length === 0 &&
-      hasSubFindings &&
-      subFindingsPrompt
-    ) {
+    const hasOnlyLowSeverityFindings =
+      review.findings.length > 0 &&
+      review.findings.every((f) => f.severity === "low" || f.severity === "info");
+
+    const hasSecurityFiles =
+      files.some(
+        (f) =>
+          f.path.includes("/api/") ||
+          f.path.endsWith("route.ts") ||
+          f.path.endsWith("route.tsx") ||
+          f.path.includes("/auth/") ||
+          f.path.includes("/webhooks/"),
+      );
+
+    const needsRetry =
+      (review.findings.length === 0 && hasSubFindings && subFindingsPrompt) ||
+      (hasOnlyLowSeverityFindings && hasSecurityFiles && hasSubFindings);
+
+    if (needsRetry) {
+      const retryReason =
+        review.findings.length === 0
+          ? "Main agent returned 0 findings with sub-context"
+          : `Main agent returned only low/info findings on security-critical files`;
       console.log(
-        "[review] Main agent returned 0 findings with sub-context — running validation re-query...",
+        `[review] ${retryReason} — running validation re-query...`,
       );
       const retryPrompt = [
         subFindingsPrompt,
         "",
-        "CRITICAL: You just reviewed and returned 0 findings.",
-        "The sub-agents above reported findings. Please explicitly:",
-        "1. Validate each sub-agent finding against the codebase (confirm, reject, or adjust severity).",
-        "2. Explain why each finding was rejected if you disagree with it.",
-        "3. Add any missed findings.",
-        "4. Output a JSON with at minimum the validated findings from sub-agents.",
+        "CRITICAL: Your initial review had significant gaps.",
+        review.findings.length === 0
+          ? "You returned 0 findings. The sub-agents above reported issues."
+          : "You returned only low-severity findings on files tagged as security-critical (API routes, auth).",
+        "Please explicitly:",
+        "1. Validate each sub-agent finding against the codebase using readFile (confirm, reject, or adjust severity).",
+        "2. For every API route file, read the full file and verify authentication + query user-scoping.",
+        "3. Explain why each finding was rejected if you disagree with it.",
+        "4. Add any missed findings, especially security issues.",
+        "5. Output a JSON with at minimum the validated findings from sub-agents.",
         "",
         "If ALL sub-agent findings were false positives, output them but set severity to 'info' and explain in each message why they were rejected.",
       ].join("\n");
@@ -468,11 +490,15 @@ export async function runPullRequestReview(
           "Main agent validated all sub-agent findings and found none that required reporting against the actual codebase.",
         );
       } else {
+        const newCount = review.findings.length;
+        const hasSecurityIssues = review.findings.some(
+          (f) => f.severity === "critical" || f.severity === "high",
+        );
         console.log(
-          `[review] Re-query recovered ${review.findings.length} findings`,
+          `[review] Re-query recovered ${newCount} findings${hasSecurityIssues ? " including security issues" : ""}`,
         );
         notes.push(
-          `Initial agent pass returned 0 findings; re-query recovered ${review.findings.length} findings.`,
+          `Initial agent pass returned ${needsRetry && review.findings.length > 0 ? "only low-severity" : "0"} findings; re-query recovered ${newCount} findings${hasSecurityIssues ? " (security issues detected)" : ""}.`,
         );
       }
     }

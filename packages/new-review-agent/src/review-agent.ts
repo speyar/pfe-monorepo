@@ -419,9 +419,10 @@ IMMEDIATE ACTION REQUIRED:
 1. Start from the precomputed diff provided in the user prompt.
 2. Use the precomputed codebase graph to discover impacted callers/usages and relevant symbols in changed files.
 3. Use readFile only for focused ranges (lineStart/lineEnd or maxLines) when validating evidence.
-4. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.
-5. You have a maximum of ${maxSteps} tool-using steps. You MUST output your final JSON findings before step ${maxSteps - 2} to avoid forced termination with 0 findings.
-6. If you are approaching step ${maxSteps - 3}, stop exploring and output your findings immediately — partial findings are better than zero findings.${graphContextInfo}`;
+4. SECURITY MANDATE: For EVERY changed API route file (\`/api/\` or \`route.ts\`), you MUST use readFile to read the complete file. Verify authentication presence and authorization scoping on every database query. This is not optional — if you skip this step, you will miss the most critical security findings.
+5. Continue exploration for at least ${minToolSteps} tool-using steps before finalizing JSON.
+6. You have a maximum of ${maxSteps} tool-using steps. You MUST output your final JSON findings before step ${maxSteps - 2} to avoid forced termination with 0 findings.
+7. If you are approaching step ${maxSteps - 3}, stop exploring and output your findings immediately — partial findings are better than zero findings.${graphContextInfo}`;
 
   const generation = await generateText({
     model: options.model,

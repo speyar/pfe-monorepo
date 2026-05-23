@@ -44,7 +44,7 @@ type InlineTarget = {
   snippet: string[]
 }
 
-type InlineTargetResolution = { ok: true; target: InlineTarget } | { ok: false; reason: string }
+type InlineTargetResolution = { ok: true; maps: DiffLineMaps; target: InlineTarget } | { ok: false; reason: string }
 
 const MAX_INLINE_SNIPPET_LINES = 5
 const REVIEW_STATUS_MARKER = '<!-- pfe-review-agent-status -->'
@@ -90,6 +90,47 @@ function looksLikeCode(value: string): boolean {
   }
 
   return startsLikeCode || endsLikeCode
+}
+
+function looksLikeMultiLineCode(lines: string[]): boolean {
+  if (lines.length <= 1) return false
+
+  const codeLines = lines.filter((line) => {
+    const trimmed = line.trim()
+    if (!trimmed) return false
+
+    return (
+      /^(\s{2,}|\t)/.test(line) ||
+      /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class|else|case|default|break|continue|try|catch|finally)\b/.test(trimmed) ||
+      /^[A-Za-z_$][\w$.\]]*\s*(=|\+=|-=|\*=|\/=|\(|\[|:)/.test(trimmed) ||
+      /^[})\]]/.test(trimmed) ||
+      /[;{}]$/.test(trimmed) ||
+      /^[/][/]/.test(trimmed) ||
+      /^\s*</.test(trimmed) ||
+      /=>/.test(trimmed) ||
+      /^import\b/.test(trimmed)
+    )
+  })
+
+  return codeLines.length >= lines.length * 0.5
+}
+
+function looksLikePureProse(text: string): boolean {
+  const trimmed = text.trim()
+  if (trimmed.length < 10) return false
+
+  const hasCodePunctuation = /[{}();=+\-*/<>\[\]]/.test(trimmed)
+  const startsWithKeyword = /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class)\b/.test(trimmed)
+  const hasMultipleCodeLines = trimmed.split('\n').filter(l => l.trim()).length >= 3
+
+  if (hasCodePunctuation || startsWithKeyword || hasMultipleCodeLines) return false
+
+  const wordCount = trimmed.split(/\s+/).length
+  const startsWithCapital = /^[A-Z]/.test(trimmed)
+  const hasUrl = /https?:\/\//.test(trimmed)
+  const hasGitHubRef = /#\d+/.test(trimmed)
+
+  return startsWithCapital && wordCount >= 8 && !hasUrl && !hasGitHubRef
 }
 
 function extractCodeFromSuggestion(text: string): string | null {
@@ -147,13 +188,22 @@ function formatSuggestionSection(suggestion: string): string {
     return ''
   }
 
-  const lineCount = normalized.split(/\r?\n/).length
+  const lines = normalized.split(/\r?\n/)
+  const lineCount = lines.filter((l) => l.trim()).length
+
+  if (looksLikePureProse(normalized)) {
+    return normalized
+  }
 
   if (lineCount === 1) {
     const codeCandidate = extractCodeFromSuggestion(normalized)
     if (codeCandidate) {
       return ['```suggestion', codeCandidate, '```'].join('\n')
     }
+  }
+
+  if (lineCount >= 2 && looksLikeMultiLineCode(lines)) {
+    return ['```suggestion', normalized, '```'].join('\n')
   }
 
   return normalized
@@ -256,9 +306,7 @@ function findLineByQuote(
 
   const exactMatches: number[] = []
   const normalizedMatches: number[] = []
-  const includeMatches: number[] = []
   const normalizedQuote = normalizeCodeForComparison(quoteTrimmed)
-  const normalizedQuoteLower = normalizedQuote.toLowerCase()
 
   for (const [lineNumber, rawLine] of sideMap.entries()) {
     const content = rawLine.slice(1)
@@ -275,22 +323,12 @@ function findLineByQuote(
     const normalizedContent = normalizeCodeForComparison(contentTrimmed)
     if (normalizedContent === normalizedQuote) {
       normalizedMatches.push(lineNumber)
-      continue
-    }
-
-    const normalizedContentLower = normalizedContent.toLowerCase()
-    if (
-      normalizedContentLower.includes(normalizedQuoteLower) ||
-      normalizedQuoteLower.includes(normalizedContentLower)
-    ) {
-      includeMatches.push(lineNumber)
     }
   }
 
   return (
     chooseClosestLine(exactMatches, preferredLine) ??
-    chooseClosestLine(normalizedMatches, preferredLine) ??
-    chooseClosestLine(includeMatches, preferredLine)
+    chooseClosestLine(normalizedMatches, preferredLine)
   )
 }
 
@@ -404,7 +442,7 @@ function scoreInlineConfidence(finding: ReviewFinding, target: InlineTarget): nu
   if (target.matchedBy === 'quote') {
     score += 0.5
   } else {
-    score += 0.25
+    score += 0.15
   }
 
   if (typeof finding.line === 'number') {
@@ -421,6 +459,22 @@ function scoreInlineConfidence(finding: ReviewFinding, target: InlineTarget): nu
   }
 
   return Math.min(1, score)
+}
+
+function isNearChangedLine(maps: DiffLineMaps, target: InlineTarget): boolean {
+  const sideMap = target.side === 'RIGHT' ? maps.right : maps.left
+  const changeMarker = target.side === 'RIGHT' ? '+' : '-'
+  const window = 3
+
+  for (let offset = -window; offset <= window; offset += 1) {
+    const lineNumber = target.line + offset
+    const line = sideMap.get(lineNumber)
+    if (line && line.startsWith(changeMarker)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 function resolveInlineTarget(
@@ -448,6 +502,7 @@ function resolveInlineTarget(
     if (typeof rightQuotedLine === 'number') {
       return {
         ok: true,
+        maps,
         target: {
           path: normalizedPath,
           line: rightQuotedLine,
@@ -462,6 +517,7 @@ function resolveInlineTarget(
     if (typeof leftQuotedLine === 'number') {
       return {
         ok: true,
+        maps,
         target: {
           path: normalizedPath,
           line: leftQuotedLine,
@@ -481,6 +537,7 @@ function resolveInlineTarget(
   if (rightLine) {
     return {
       ok: true,
+      maps,
       target: {
         path: normalizedPath,
         line: finding.line,
@@ -495,6 +552,7 @@ function resolveInlineTarget(
   if (leftLine) {
     return {
       ok: true,
+      maps,
       target: {
         path: normalizedPath,
         line: finding.line,
@@ -755,7 +813,10 @@ export const handlePullRequestEvent = async ({
         }
         const confidence = scoreInlineConfidence(finding, targetResolution.target)
         inlineTargetStats[`matched_by_${targetResolution.target.matchedBy}`] = (inlineTargetStats[`matched_by_${targetResolution.target.matchedBy}`] ?? 0) + 1
-        if (confidence < MIN_INLINE_CONFIDENCE) {
+
+        const nearChange = isNearChangedLine(targetResolution.maps, targetResolution.target)
+        const effectiveConfidence = nearChange ? confidence : confidence - 0.35
+        if (effectiveConfidence < MIN_INLINE_CONFIDENCE) {
           skippedByReason.low_inline_confidence = (skippedByReason.low_inline_confidence ?? 0) + 1
           findingStatuses.push({ finding, postedToGitHub: false, skipReason: 'low_inline_confidence' })
           continue

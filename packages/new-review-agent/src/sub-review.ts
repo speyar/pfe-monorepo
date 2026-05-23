@@ -85,7 +85,7 @@ function buildDependencyContext(
 
   if (myNodes.length === 0) return "";
 
-  return [
+  const depContext = [
     "DEPENDENCY CONTEXT for your batch files:",
     myNodes
       .map((n) => {
@@ -107,7 +107,77 @@ function buildDependencyContext(
       .join("\n"),
     "",
     "Cross-reference: if your batch changes a symbol/export, check if callers in OTHER batches could break.",
-  ].join("\n");
+  ];
+
+  const batchFileSetLower = new Set(
+    (batchFiles ?? []).map((f) => f.toLowerCase()),
+  );
+
+  const apiRouteFiles = (batchFiles ?? []).filter(
+    (f) =>
+      batchFileSetLower.has(f.toLowerCase()) &&
+      (f.includes("/api/") || f.endsWith("route.ts") || f.endsWith("route.tsx")),
+  );
+
+  if (apiRouteFiles.length > 0) {
+    const authImports = myNodes
+      .filter(
+        (n) =>
+          n.imports.some(
+            (imp) =>
+              imp.toLowerCase().includes("auth") ||
+              imp.toLowerCase().includes("clerk") ||
+              imp.toLowerCase().includes("session") ||
+              imp.toLowerCase().includes("next-auth"),
+          ) || n.tags.includes("auth"),
+      );
+
+    const unprotectedRoutes = apiRouteFiles
+      .filter(
+        (f) =>
+          !myNodes.some(
+            (n) =>
+              n.path === f &&
+              (n.imports.some(
+                (imp) =>
+                  imp.toLowerCase().includes("auth") ||
+                  imp.toLowerCase().includes("clerk") ||
+                  imp.toLowerCase().includes("session"),
+              ) ||
+                n.tags.includes("auth")),
+          ),
+      )
+      .map((f) => `  ${f} — NO AUTH IMPORTS DETECTED`);
+
+    depContext.push("");
+    depContext.push("SECURITY CONTEXT (do NOT skip — this is the most important section):");
+
+    if (unprotectedRoutes.length > 0) {
+      depContext.push(
+        "⚠️  The following API routes in your batch have NO authentication imports:",
+      );
+      depContext.push(...unprotectedRoutes);
+      depContext.push(
+        "Each of these routes may be accessible without authentication. Verify in their diffs.",
+      );
+    }
+
+    if (authImports.length > 0) {
+      depContext.push(
+        `✓  These files import auth modules: ${authImports.map((n) => n.path).join(", ")}`,
+      );
+    }
+
+    depContext.push("");
+    depContext.push("SECURITY CHECKLIST (run this checklist against EVERY API route in your batch):");
+    depContext.push("1. AUTH CHECK: Does the route verify authentication? Look for auth(), getAuth(), getSession(), or middleware guards.");
+    depContext.push("2. IDOR CHECK: Does every prisma query scope by the authenticated user? If a query filters by id/slug only without userId/ownerId, report P0.");
+    depContext.push('   Example of IDOR: prisma.review.findUnique({ where: { id } }) — no userId scope = any user can read any review.');
+    depContext.push("3. PARAMS CHECK: Can a user change URL params or request body to access/modify another user's data?");
+    depContext.push("4. CALLBACK CHECK: If an OAuth/webhook callback is in a protected route group, will it redirect unauthenticated users?");
+  }
+
+  return depContext.join("\n");
 }
 
 export async function runSubReview(
@@ -133,6 +203,12 @@ export async function runSubReview(
     const system = [
       "You are a PR review sub-agent. Review the files in your batch from the diffs below.",
       "Focus on: bugs, breaking changes, security issues, data integrity, production risks, and cross-file impacts.",
+      "",
+      "SECURITY is your highest priority. For every API route or data-access file in your batch:",
+      "- Check if every database query (prisma.findUnique, findFirst, delete, update) includes user-scoping in the where clause.",
+      "- If a query filters by id alone without userId/ownerId, it's a P0 IDOR vulnerability — ANY authenticated user can access another user's data.",
+      "- Check if the route verifies authentication (auth(), getAuth(), getSession()).",
+      "",
       "Be specific. Include file paths and line numbers when possible.",
       "If a change in your batch affects code in another file, report it — even if that file isn't in your batch.",
       "",

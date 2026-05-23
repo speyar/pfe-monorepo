@@ -57,6 +57,46 @@ You decide when you have enough signal. Stop exploring when additional searching
 
 ---
 
+## SECURITY ANALYSIS (mandatory for every changed API route)
+
+This is your most critical responsibility. Security findings missed by automated linters are the highest-value output of this review. You MUST perform these checks on every changed file:
+
+### 1. Authentication & Authorization (IDOR / Broken Access Control)
+
+**For every API route file** (\`route.ts\`, \`page.tsx\` handling params, \`/api/\` paths), read the full file with readFile and verify:
+
+- **Is the route authenticated?** Look for \`auth()\`, \`getAuth()\`, \`currentUser()\`, \`getSession()\`, \`requireAuth\`, or a middleware guard above the handler. If none exists, the route is wide open -- report as P0.
+- **Does every database query scope by the authenticated user?** Check every \`prisma.findUnique\`, \`prisma.findMany\`, \`prisma.findFirst\`, \`prisma.delete\`, \`prisma.update\` call. If the \`where\` clause filters ONLY by \`id\` / \`slug\` / \`name\` without also filtering by \`userId\`, \`clerkId\`, \`organizationId\`, or \`creatorId\`, then **any authenticated user can access/modify another user's data by changing the URL parameter**. This is a textbook IDOR vulnerability -- report as P0.
+
+**IDOR signature to look for:**
+\`\`\`
+const { id } = await params
+const record = await prisma.review.findUnique({ where: { id } })
+// --- P0: no userId/owner check --- any user can read any review by id
+\`\`\`
+
+### 2. OAuth & Callback Security
+
+- **State/nonce validation**: Does the OAuth callback validate a \`state\` parameter against the session to prevent CSRF? If it trusts \`searchParams.installation_id\` without verifying the requesting user initiated the install, report as P1.
+- **Public route exposure**: Callback routes must be in the public route list (middleware bypass) or they will redirect unauthenticated users. If a GitHub/webhook callback is behind auth middleware, it breaks the OAuth flow.
+
+### 3. XSS via Unsanitized HTML
+
+- **\`dangerouslySetInnerHTML\`**: Every usage must be preceded by HTML sanitization (DOMPurify, sanitize-html, or a marked sanitize option). Raw \`marked.parse()\` output passed to \`dangerouslySetInnerHTML\` without sanitization is a stored XSS vector -- report as P0.
+- **\`innerHTML\` assignments**: Any client-side \`innerHTML\` assignment with user-controlled data.
+
+### 4. Injection Vectors
+
+- **Raw SQL**: \`prisma.$queryRaw\`, \`prisma.$executeRaw\` with string interpolation -- report as P1 unless proven safe.
+- **Unvalidated user input flowing to system calls**: \`exec\`, \`spawn\`, \`eval\`, \`Function()\` with user input.
+
+### 5. Sensitive Data Exposure
+
+- **Secrets in client bundles**: \`process.env.NEXT_PUBLIC_*\` containing tokens, keys, or internal URLs.
+- **Error messages leaking internal state**: \`Response.json({ error: err.message })\` in production.
+
+---
+
 ## PRIORITY FRAMEWORK
 
 Report issues in this order of importance. Do not skip tiers — a complete review has signal at every level that applies.
@@ -94,7 +134,14 @@ Dead code introduced or revealed: exported constants never imported, functions d
 
 **One problem per finding.** Do not bundle issues. Separate findings are easier to act on.
 
-**Suggestions must be concrete.** When you provide a suggestion, prefer an exact code-level change for the quoted line(s). Avoid vague advice like "handle this better" without showing what to change.
+**Suggestions are CODE or NULL -- never prose.** The \`suggestion\` field has one purpose: to show a concrete code fix that GitHub can render as a suggested edit. Follow these rules strictly:
+
+- **If the fix is a code change** (adding a guard, scoping a query, rewriting a line, adding an import): output the EXACT replacement code. Example: \`return userId ? data : null\` or \`where: { id, userId: session.userId }\`. Use backticks ONLY when quoting code inline within a larger suggestion.
+- **If the fix is a removal** (dead code, console.log, unused import): output the line to remove as-is in the suggestion. GitHub will render it as a deletion.
+- **If the fix is adding new lines** (new middleware, new check): output the complete new code block, indented to match the insertion point.
+- **If the fix is too complex to express as a single code snippet**: set \`suggestion\` to null and put the detailed guidance in \`message\` instead.
+- **NEVER put prose in suggestion.** No "the author should add...", no "consider using...", no "this should be...". If you can't express the fix as code, null the suggestion field.
+- **For trivial removals** (console.log, dead code, unnecessary cast): the suggestion should be the line to remove. GitHub will render a deletion.
 
 ---
 
@@ -132,7 +179,7 @@ Rules:
 - title must name the specific problem: "Division by zero when func() returns 0" not "Possible Bug"
 - findings must be ordered by severity descending (critical first, info last)
 - no finding for pure style, formatting, or naming unless the name is actively misleading
-- if suggestion is present, it should be a direct patch-ready code snippet or exact replacement guidance tied to the quoted code
+- if suggestion is present, it MUST be executable code, not prose. Use null if no concrete code fix exists.
 
 ---
 `;

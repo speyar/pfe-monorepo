@@ -30,6 +30,47 @@ function looksLikeCode(value: string): boolean {
   return startsLikeCode || endsLikeCode
 }
 
+function looksLikeMultiLineCode(lines: string[]): boolean {
+  if (lines.length <= 1) return false
+
+  const codeLines = lines.filter((line) => {
+    const trimmed = line.trim()
+    if (!trimmed) return false
+
+    return (
+      /^(\s{2,}|\t)/.test(line) ||
+      /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class|else|case|default|break|continue|try|catch|finally)\b/.test(trimmed) ||
+      /^[A-Za-z_$][\w$.\]]*\s*(=|\+=|-=|\*=|\/=|\(|\[|:)/.test(trimmed) ||
+      /^[})\]]/.test(trimmed) ||
+      /[;{}]$/.test(trimmed) ||
+      /^[/][/]/.test(trimmed) ||
+      /^\s*</.test(trimmed) ||
+      /=>/.test(trimmed) ||
+      /^import\b/.test(trimmed)
+    )
+  })
+
+  return codeLines.length >= lines.length * 0.5
+}
+
+function looksLikePureProse(text: string): boolean {
+  const trimmed = text.trim()
+  if (trimmed.length < 10) return false
+
+  const hasCodePunctuation = /[{}();=+\-*/<>\[\]]/.test(trimmed)
+  const startsWithKeyword = /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class)\b/.test(trimmed)
+  const hasMultipleCodeLines = trimmed.split('\n').filter(l => l.trim()).length >= 3
+
+  if (hasCodePunctuation || startsWithKeyword || hasMultipleCodeLines) return false
+
+  const wordCount = trimmed.split(/\s+/).length
+  const startsWithCapital = /^[A-Z]/.test(trimmed)
+  const hasUrl = /https?:\/\//.test(trimmed)
+  const hasGitHubRef = /#\d+/.test(trimmed)
+
+  return startsWithCapital && wordCount >= 8 && !hasUrl && !hasGitHubRef
+}
+
 function extractCodeFromSuggestion(text: string): string | null {
   const trimmed = text.trim()
   if (!trimmed) {
@@ -85,13 +126,22 @@ function formatSuggestionSection(suggestion: string): string {
     return ''
   }
 
-  const lineCount = normalized.split(/\r?\n/).length
+  const lines = normalized.split(/\r?\n/)
+  const lineCount = lines.filter((l) => l.trim()).length
+
+  if (looksLikePureProse(normalized)) {
+    return normalized
+  }
 
   if (lineCount === 1) {
     const codeCandidate = extractCodeFromSuggestion(normalized)
     if (codeCandidate) {
       return ['```suggestion', codeCandidate, '```'].join('\n')
     }
+  }
+
+  if (lineCount >= 2 && looksLikeMultiLineCode(lines)) {
+    return ['```suggestion', normalized, '```'].join('\n')
   }
 
   return normalized
