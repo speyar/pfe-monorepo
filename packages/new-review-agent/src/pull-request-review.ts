@@ -438,7 +438,7 @@ export async function runPullRequestReview(
     let effectiveGraphPath: string | undefined;
     let graphAvailable = false;
     try {
-      const timeoutMs = 120_000;
+      const timeoutMs = 300_000;
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("Graph generation timed out")), timeoutMs),
       );
