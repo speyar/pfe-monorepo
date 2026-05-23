@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "OpenCode Go provider for Vercel AI SDK",
+  "description": "Copilot provider for Vercel AI SDK",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -12,7 +12,7 @@
     "check-types": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@ai-sdk/openai-compatible": "^1.0.0",
+    "@ceira/better-copilot-provider": "workspace:*",
     "ai": "^6.0.116"
   },
   "devDependencies": {

@@ -1,5 +1,4 @@
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import type { LanguageModel } from "ai";
 
 import { ProviderConfigError } from "../errors/review-errors";
@@ -15,12 +14,6 @@ export interface CreateGitHubReviewModelInput {
 export function createGitHubReviewModel(
   input: CreateGitHubReviewModelInput = {},
 ): LanguageModel {
-  const openCodeGoApiKey = input.apiKey ?? process.env.OPENCODE_GO_API_KEY;
-
-  if (openCodeGoApiKey) {
-    return createOpenCodeGoModel(input.model, { apiKey: openCodeGoApiKey });
-  }
-
   const apiKey =
     input.apiKey ??
     input.githubToken ??
@@ -29,7 +22,7 @@ export function createGitHubReviewModel(
 
   if (!apiKey) {
     throw new ProviderConfigError(
-      "Set OPENCODE_GO_API_KEY, COPILOT_GITHUB_TOKEN, or OPENAI_API_KEY, or pass apiKey/githubToken.",
+      "Set COPILOT_GITHUB_TOKEN or OPENAI_API_KEY, or pass apiKey/githubToken.",
     );
   }
 
@@ -46,12 +39,5 @@ export function createGitHubReviewModel(
     headers: input.headers,
   });
 
-  return provider(input.model ?? "gpt-5.3-codex");
-}
-
-export function createOpenCodeGoReviewModel(
-  model?: string,
-  apiKey?: string,
-): LanguageModel {
-  return createOpenCodeGoModel(model, { apiKey });
+  return provider(input.model ?? "gpt-5.4-mini");
 }

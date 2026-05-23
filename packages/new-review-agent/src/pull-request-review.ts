@@ -1,5 +1,4 @@
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runReviewAgent } from "./review-agent";
@@ -34,6 +33,7 @@ export interface PullRequestReviewSummary {
 export interface PullRequestReviewResult {
   summary: PullRequestReviewSummary;
   findings: PullRequestReviewFinding[];
+  agentSummaries?: { agentId: string; summary: string }[];
   notes?: string[];
 }
 
@@ -130,30 +130,20 @@ export async function runPullRequestReview(
   input: PullRequestReviewInput,
   options: PullRequestReviewOptions = {},
 ): Promise<PullRequestReviewResult> {
-  const openCodeGoApiKey = process.env.OPENCODE_GO_API_KEY;
-  const modelName =
-    options.modelName ??
-    process.env.REVIEW_MODEL ??
-    (openCodeGoApiKey ? "deepseek-v4-flash" : "gpt-5.4-mini");
-
-  let model: LanguageModel;
-  if (openCodeGoApiKey) {
-    model = createOpenCodeGoModel(modelName);
-  } else {
-    const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-    if (!copilotToken) {
-      throw new Error(
-        "Missing COPILOT_GITHUB_TOKEN (or set OPENCODE_GO_API_KEY)",
-      );
-    }
-
-    const provider = createOpenaiCompatible({
-      apiKey: copilotToken,
-      baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-      name: "copilot",
-    });
-    model = provider(modelName);
+  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
+  if (!copilotToken) {
+    throw new Error("Missing COPILOT_GITHUB_TOKEN");
   }
+
+  const modelName =
+    options.modelName ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini";
+
+  const provider = createOpenaiCompatible({
+    apiKey: copilotToken,
+    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
+    name: "copilot",
+  });
+  const model = provider(modelName);
 
   const githubClient = await getGitHubClient(input.installationId);
   const {
@@ -218,7 +208,7 @@ export async function runPullRequestReview(
       initialDiff: input.initialDiff,
       diffSummary: input.diffSummary,
       defaultBranch: input.baseRef,
-      maxFindings: options.maxFindings ?? 20,
+      maxFindings: options.maxFindings ?? 200,
       maxToolSteps: options.maxToolSteps ?? 24,
       minToolSteps: options.minToolSteps ?? 5,
       signal: options.signal,
@@ -231,6 +221,7 @@ export async function runPullRequestReview(
     return {
       summary: buildSummary(findings, modelName, elapsedMs),
       findings,
+      agentSummaries: review.agentSummaries,
     };
   } catch (error) {
     console.error("Error during pull request review", {

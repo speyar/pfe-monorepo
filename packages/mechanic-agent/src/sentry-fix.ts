@@ -1,5 +1,4 @@
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runMechanicAgent } from "./mechanic-agent";
@@ -112,31 +111,23 @@ export async function runSentryFix(
   input: SentryFixInput,
   options: MechanicAgentOptions = {},
 ): Promise<SentryFixResult> {
-  const openCodeGoApiKey = process.env.OPENCODE_GO_API_KEY;
-  const modelName =
-    options.modelName ??
-    process.env.REVIEW_MODEL ??
-    (openCodeGoApiKey ? "deepseek-v4-flash" : "gpt-5.4-mini");
-
-  let model: LanguageModel;
-  if (openCodeGoApiKey) {
-    model = createOpenCodeGoModel(modelName);
-  } else {
-    const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-    if (!copilotToken) {
-      return {
-        success: false,
-        error: "Missing COPILOT_GITHUB_TOKEN (or set OPENCODE_GO_API_KEY)",
-      };
-    }
-
-    const provider = createOpenaiCompatible({
-      apiKey: copilotToken,
-      baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-      name: "copilot",
-    });
-    model = provider(modelName);
+  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
+  if (!copilotToken) {
+    return {
+      success: false,
+      error: "Missing COPILOT_GITHUB_TOKEN",
+    };
   }
+
+  const modelName =
+    options.modelName ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini";
+
+  const provider = createOpenaiCompatible({
+    apiKey: copilotToken,
+    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
+    name: "copilot",
+  });
+  const model = provider(modelName);
 
   let githubClient;
   let token: string;

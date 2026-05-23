@@ -1,32 +1,37 @@
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
 import type { LanguageModel } from "ai";
 
-const DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1";
-const DEFAULT_MODEL = "deepseek-v4-flash";
+const DEFAULT_BASE_URL = "https://api.githubcopilot.com";
+const DEFAULT_MODEL = "gpt-5.4-mini";
+
+export interface CreateOpenCodeGoProviderOptions {
+  apiKey?: string;
+  baseURL?: string;
+  headers?: Record<string, string>;
+}
 
 export interface CreateOpenCodeGoModelOptions {
   apiKey?: string;
   baseURL?: string;
   model?: string;
+  headers?: Record<string, string>;
 }
 
-export function createOpenCodeGoProvider(options?: {
-  apiKey?: string;
-  baseURL?: string;
-}) {
-  const apiKey = options?.apiKey ?? process.env.OPENCODE_GO_API_KEY;
+function createOpenCodeGoProvider(options?: CreateOpenCodeGoProviderOptions) {
+  const apiKey = options?.apiKey ?? process.env.COPILOT_GITHUB_TOKEN;
 
   if (!apiKey) {
     throw new Error(
-      "OpenCode Go API key is required. Set OPENCODE_GO_API_KEY env var or pass apiKey option.",
+      "Copilot API key is required. Set COPILOT_GITHUB_TOKEN env var or pass apiKey option.",
     );
   }
 
-  return createOpenAICompatible({
+  return createOpenaiCompatible({
     apiKey,
     baseURL:
-      options?.baseURL ?? process.env.OPENCODE_GO_BASE_URL ?? DEFAULT_BASE_URL,
-    name: "opencode-go",
+      options?.baseURL ?? process.env.COPILOT_BASE_URL ?? DEFAULT_BASE_URL,
+    name: "copilot",
+    headers: options?.headers,
   });
 }
 
@@ -34,10 +39,14 @@ export function createOpenCodeGoModel(
   modelId?: string,
   options?: CreateOpenCodeGoModelOptions,
 ): LanguageModel {
-  const provider = createOpenCodeGoProvider(options);
+  const provider = createOpenCodeGoProvider({
+    apiKey: options?.apiKey,
+    baseURL: options?.baseURL,
+    headers: options?.headers,
+  });
 
   const model =
-    options?.model ?? modelId ?? process.env.OPENCODE_GO_MODEL ?? DEFAULT_MODEL;
+    options?.model ?? modelId ?? process.env.COPILOT_MODEL ?? DEFAULT_MODEL;
 
-  return provider.chatModel(model);
+  return provider.chat(model) as unknown as LanguageModel;
 }

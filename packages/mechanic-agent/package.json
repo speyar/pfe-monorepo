@@ -22,7 +22,6 @@
     "@ceira/better-copilot-provider": "workspace:*",
     "@packages/sandbox": "workspace:*",
     "@pfe-monorepo/github-api": "workspace:*",
-    "@pfe-monorepo/opencode-go-provider": "workspace:*",
     "ai": "^6.0.116",
     "zod": "^4.1.8"
   },
