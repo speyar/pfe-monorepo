@@ -39,7 +39,9 @@ function looksLikeMultiLineCode(lines: string[]): boolean {
 
     return (
       /^(\s{2,}|\t)/.test(line) ||
-      /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class|else|case|default|break|continue|try|catch|finally)\b/.test(trimmed) ||
+      /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class|else|case|default|break|continue|try|catch|finally)\b/.test(
+        trimmed,
+      ) ||
       /^[A-Za-z_$][\w$.\]]*\s*(=|\+=|-=|\*=|\/=|\(|\[|:)/.test(trimmed) ||
       /^[})\]]/.test(trimmed) ||
       /[;{}]$/.test(trimmed) ||
@@ -58,8 +60,11 @@ function looksLikePureProse(text: string): boolean {
   if (trimmed.length < 10) return false
 
   const hasCodePunctuation = /[{}();=+\-*/<>\[\]]/.test(trimmed)
-  const startsWithKeyword = /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class)\b/.test(trimmed)
-  const hasMultipleCodeLines = trimmed.split('\n').filter(l => l.trim()).length >= 3
+  const startsWithKeyword =
+    /^(if|for|while|switch|return|const|let|var|await|throw|import|export|function|class)\b/.test(
+      trimmed,
+    )
+  const hasMultipleCodeLines = trimmed.split('\n').filter((l) => l.trim()).length >= 3
 
   if (hasCodePunctuation || startsWithKeyword || hasMultipleCodeLines) return false
 
@@ -196,6 +201,12 @@ export const toMarkdownReview = (review: ReviewResult): string => {
       ]
     : []
 
+  const severityLegend = [
+    '---',
+    '> Severity: **P0** Data leak | **P1** Access control | **P2** Logic bug | **P3** Performance | **P4** Style',
+    '',
+  ].join('\n')
+
   return [
     REVIEW_COMMENT_MARKER,
     '## Automated PR Review',
@@ -207,6 +218,7 @@ export const toMarkdownReview = (review: ReviewResult): string => {
     '',
     ...agentSummaryLines,
     '',
+    severityLegend,
     review.findings.length > 0
       ? '### Findings\n' + findingLines.join('\n\n')
       : '### Findings\nNo blocking findings detected.',

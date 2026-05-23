@@ -37,7 +37,7 @@ export interface ReviewAgentOptions {
 }
 
 export interface ReviewFinding {
-  severity: "critical" | "high" | "medium" | "low" | "info";
+  severity: "P0" | "P1" | "P2" | "P3" | "P4";
   file?: string;
   line?: number;
   quote?: string;
@@ -396,7 +396,9 @@ Diff summary usage rules:
 - If summary conflicts with code or diff, trust the code/diff.
 - Prefer concrete code-level suggestions over abstract advice.
 
-${targetSkills.length > 0 ? `
+${
+  targetSkills.length > 0
+    ? `
 ---
 ## AVAILABLE SKILLS
 
@@ -404,8 +406,12 @@ The following skills are configured for your agent. Review their names and use c
 
 ${targetSkills.map((s) => `- Name: ${s.name}\n  Use Case: ${s.useCase}`).join("\n")}
 
-Use the requestSkill tool to load any matching skill's full instructions.` : ""}
-${options.subFindingsContext ? `
+Use the requestSkill tool to load any matching skill's full instructions.`
+    : ""
+}
+${
+  options.subFindingsContext
+    ? `
 ---
 ## SUB-AGENT FINDINGS
 
@@ -415,7 +421,9 @@ Cross-reference each finding against the actual codebase using readFile/grep/cod
 Validate: is it real? Is the severity correct?
 Deduplicate: merge findings pointing to the same issue.
 Add any new findings the sub-agents missed.
-Output the final deduplicated set.` : ""}
+Output the final deduplicated set.`
+    : ""
+}
 
 IMMEDIATE ACTION REQUIRED:
 1. Start from the precomputed diff provided in the user prompt.

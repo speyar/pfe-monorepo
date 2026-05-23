@@ -2,7 +2,7 @@ import type { LanguageModel } from "ai";
 import type { SandboxManager } from "@packages/sandbox";
 
 export interface V2ReviewFinding {
-  severity: "critical" | "high" | "medium" | "low" | "info";
+  severity: "P0" | "P1" | "P2" | "P3" | "P4";
   file?: string;
   line?: number;
   quote?: string;

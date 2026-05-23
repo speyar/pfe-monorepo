@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const reviewFindingSchema = z.object({
-  severity: z.enum(["critical", "high", "medium", "low", "info"]),
+  severity: z.enum(["P0", "P1", "P2", "P3", "P4"]),
   file: z.string().optional(),
   line: z.number().int().positive().optional(),
   quote: z.string().optional(),
