@@ -1,4 +1,4 @@
-import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
+import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runMechanicAgent } from "./mechanic-agent";
@@ -111,23 +111,18 @@ export async function runSentryFix(
   input: SentryFixInput,
   options: MechanicAgentOptions = {},
 ): Promise<SentryFixResult> {
-  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-  if (!copilotToken) {
+  const apiKey = process.env.OPENCODEGO_API_KEY;
+  if (!apiKey) {
     return {
       success: false,
-      error: "Missing COPILOT_GITHUB_TOKEN",
+      error: "Missing OPENCODEGO_API_KEY",
     };
   }
 
   const modelName =
-    options.modelName ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini";
+    options.modelName ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.5";
 
-  const provider = createOpenaiCompatible({
-    apiKey: copilotToken,
-    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-    name: "copilot",
-  });
-  const model = provider(modelName);
+  const model = createOpenCodeGoModel(modelName);
 
   let githubClient;
   let token: string;

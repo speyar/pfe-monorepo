@@ -1,43 +1,35 @@
-import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
+import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import type { LanguageModel } from "ai";
 
 import { ProviderConfigError } from "../errors/review-errors";
 
-export interface CreateGitHubReviewModelInput {
+export interface CreateOpenCodeGoReviewModelInput {
   apiKey?: string;
-  githubToken?: string;
   baseURL?: string;
   headers?: Record<string, string>;
   model?: string;
 }
 
-export function createGitHubReviewModel(
-  input: CreateGitHubReviewModelInput = {},
+export function createOpenCodeGoReviewModel(
+  input: CreateOpenCodeGoReviewModelInput = {},
 ): LanguageModel {
   const apiKey =
     input.apiKey ??
-    input.githubToken ??
-    process.env.COPILOT_GITHUB_TOKEN ??
+    process.env.OPENCODEGO_API_KEY ??
     process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
     throw new ProviderConfigError(
-      "Set COPILOT_GITHUB_TOKEN or OPENAI_API_KEY, or pass apiKey/githubToken.",
+      "Set OPENCODEGO_API_KEY or OPENAI_API_KEY, or pass apiKey.",
     );
   }
 
-  const baseURL =
-    input.baseURL ??
-    process.env.COPILOT_BASE_URL ??
-    process.env.OPENAI_BASE_URL ??
-    "https://api.githubcopilot.com";
-
-  const provider = createOpenaiCompatible({
-    apiKey,
-    baseURL,
-    name: "copilot",
-    headers: input.headers,
-  });
-
-  return provider(input.model ?? "gpt-5.4-mini");
+  return createOpenCodeGoModel(
+    input.model ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.5",
+    {
+      apiKey,
+      baseURL: input.baseURL ?? process.env.OPENCODEGO_BASE_URL,
+      headers: input.headers,
+    },
+  );
 }

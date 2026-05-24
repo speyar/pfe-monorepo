@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
 import {
-  createGitHubReviewModel,
+  createOpenCodeGoReviewModel,
   runReview,
   type ReviewRequest,
 } from "../index";
@@ -26,7 +26,7 @@ function printUsage(): void {
     "Options:",
     "  --input <path>              Path to a ReviewRequest JSON file.",
     "  --file <path>               Path to a source file for ad-hoc review.",
-    "  --model <name>              Copilot model (default: gpt-5.3-codex).",
+    "  --model <name>              OpenCode Go model (default: kimi-k2.5).",
     "  --temperature <number>      Temperature between 0 and 2.",
     "  --max-output-tokens <int>   Max output tokens for model generation.",
     "  -h, --help                  Show this help message.",
@@ -193,7 +193,7 @@ async function main(): Promise<void> {
     : await loadRequest(args.inputPath ?? DEFAULT_INPUT_PATH);
 
   const result = await runReview(request, {
-    model: createGitHubReviewModel({ model: args.model }),
+    model: createOpenCodeGoReviewModel({ model: args.model }),
     temperature: args.temperature,
     maxOutputTokens: args.maxOutputTokens,
   });

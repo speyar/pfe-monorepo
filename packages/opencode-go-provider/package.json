@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Copilot provider for Vercel AI SDK",
+  "description": "OpenCode Go provider for Vercel AI SDK — Kimi, Qwen, GLM, DeepSeek and more",
   "exports": {
     ".": "./src/index.ts"
   },

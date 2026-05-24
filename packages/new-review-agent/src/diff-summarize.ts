@@ -1,6 +1,6 @@
 import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
-import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
+import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { estimateTokenCount } from "./tools/shared";
 
 const diffSummarySchema = z.object({
@@ -894,20 +894,15 @@ export async function summarizeDiff(
 export async function summarizeDiffWithDefaultModel(
   input: SummarizeDiffWithDefaultModelInput,
 ): Promise<DiffSummary | null> {
-  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-  if (!copilotToken) {
+  const apiKey = process.env.OPENCODEGO_API_KEY;
+  if (!apiKey) {
     return null;
   }
 
   const modelName =
-    input.modelName ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini";
+    input.modelName ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.5";
 
-  const provider = createOpenaiCompatible({
-    apiKey: copilotToken,
-    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-    name: "copilot",
-  });
-  const model = provider(modelName);
+  const model = createOpenCodeGoModel(modelName);
 
   const normalizedFiles =
     input.files?.filter((file) => file.patch.trim().length > 0) ?? [];

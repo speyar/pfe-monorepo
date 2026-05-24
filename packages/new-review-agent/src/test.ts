@@ -1,18 +1,14 @@
-import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
+import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
 
-const copilotToken =
-  process.env.COPILOT_GITHUB_TOKEN ??
+const apiKey =
+  process.env.OPENCODEGO_API_KEY ??
   process.env.GH_TOKEN ??
   process.env.GITHUB_TOKEN ??
   process.env.OPENAI_API_KEY;
 
-const provider = createOpenaiCompatible({
-  apiKey: copilotToken,
-  baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-  name: "copilot",
-});
+const model = createOpenCodeGoModel(process.env.OPENCODEGO_MODEL ?? "kimi-k2.5", { apiKey });
 
 const repeatSentence = tool({
   description: "Repeat the given sentence",
@@ -31,7 +27,7 @@ const drawShape = tool({
 });
 
 const generation = await generateText({
-  model: provider("gpt-5.4-mini"),
+  model,
   system:
     "You are a test agent. Use the repeat_sentence tool to repeat a sentence (If the user asks for 10 repetions, use the tool 10 times, if the user asks for 5, use the tool 5 times). Use the draw_shape tool to draw shapes. WHEN THE USER SPECIFIES.",
   prompt: "Repeat a 'hello im newwwwww' 10 times and then draw a circle.",

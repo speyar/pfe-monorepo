@@ -29,8 +29,8 @@ export {
 } from "./errors/review-errors";
 
 export {
-  createGitHubReviewModel,
-  type CreateGitHubReviewModelInput,
+  createOpenCodeGoReviewModel,
+  type CreateOpenCodeGoReviewModelInput,
 } from "./llm/provider";
 export { buildReviewPrompt, DEFAULT_REVIEW_SYSTEM_PROMPT } from "./llm/prompts";
 

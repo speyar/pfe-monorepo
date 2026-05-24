@@ -1,8 +1,8 @@
 import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
 import type { LanguageModel } from "ai";
 
-const DEFAULT_BASE_URL = "https://api.githubcopilot.com";
-const DEFAULT_MODEL = "gpt-5.4-mini";
+const DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1";
+const DEFAULT_MODEL = "kimi-k2.5";
 
 export interface CreateOpenCodeGoProviderOptions {
   apiKey?: string;
@@ -18,19 +18,19 @@ export interface CreateOpenCodeGoModelOptions {
 }
 
 function createOpenCodeGoProvider(options?: CreateOpenCodeGoProviderOptions) {
-  const apiKey = options?.apiKey ?? process.env.COPILOT_GITHUB_TOKEN;
+  const apiKey = options?.apiKey ?? process.env.OPENCODEGO_API_KEY;
 
   if (!apiKey) {
     throw new Error(
-      "Copilot API key is required. Set COPILOT_GITHUB_TOKEN env var or pass apiKey option.",
+      "OpenCode Go API key is required. Set OPENCODEGO_API_KEY env var or pass apiKey option.",
     );
   }
 
   return createOpenaiCompatible({
     apiKey,
     baseURL:
-      options?.baseURL ?? process.env.COPILOT_BASE_URL ?? DEFAULT_BASE_URL,
-    name: "copilot",
+      options?.baseURL ?? process.env.OPENCODEGO_BASE_URL ?? DEFAULT_BASE_URL,
+    name: "opencode-go",
     headers: options?.headers,
   });
 }
@@ -46,7 +46,7 @@ export function createOpenCodeGoModel(
   });
 
   const model =
-    options?.model ?? modelId ?? process.env.COPILOT_MODEL ?? DEFAULT_MODEL;
+    options?.model ?? modelId ?? process.env.OPENCODEGO_MODEL ?? DEFAULT_MODEL;
 
   return provider.chat(model) as unknown as LanguageModel;
 }

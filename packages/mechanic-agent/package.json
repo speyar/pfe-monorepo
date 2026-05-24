@@ -19,7 +19,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@ceira/better-copilot-provider": "workspace:*",
+    "@pfe-monorepo/opencode-go-provider": "workspace:*",
     "@packages/sandbox": "workspace:*",
     "@pfe-monorepo/github-api": "workspace:*",
     "ai": "^6.0.116",

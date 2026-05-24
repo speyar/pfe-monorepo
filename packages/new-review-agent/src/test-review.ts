@@ -1,26 +1,22 @@
-import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
+import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { runReviewAgent } from "./index";
 
 async function main() {
-  const copilotToken =
-    process.env.COPILOT_GITHUB_TOKEN ??
+  const apiKey =
+    process.env.OPENCODEGO_API_KEY ??
     process.env.GH_TOKEN ??
     process.env.GITHUB_TOKEN ??
     process.env.OPENAI_API_KEY;
 
-  if (!copilotToken) {
+  if (!apiKey) {
     throw new Error(
-      "Missing COPILOT_GITHUB_TOKEN (or GH_TOKEN / GITHUB_TOKEN / OPENAI_API_KEY).",
+      "Missing OPENCODEGO_API_KEY (or GH_TOKEN / GITHUB_TOKEN / OPENAI_API_KEY).",
     );
   }
 
-  const provider = createOpenaiCompatible({
-    apiKey: copilotToken,
-    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-    name: "copilot",
-  });
+  const model = createOpenCodeGoModel(process.env.OPENCODEGO_MODEL ?? "kimi-k2.5", { apiKey });
 
   // const client = await getGitHubClient(120638931);
   const client = await getGitHubClient(115597577);
@@ -49,7 +45,7 @@ async function main() {
 
   try {
     const result = await runReviewAgent("react", {
-      model: provider(process.env.REVIEW_MODEL ?? "gpt-5.4-mini"),
+      model,
       sandboxManager: manager,
       sandboxId: sandbox.id,
       defaultBranch: "main",
