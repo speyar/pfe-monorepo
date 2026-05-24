@@ -63,6 +63,7 @@ export interface RunSubAgentInput {
   maxToolSteps?: number;
   minToolSteps?: number;
   signal?: AbortSignal;
+  providerOptions?: Record<string, Record<string, unknown>>;
 }
 
 export interface RunSubAgentOutput {
@@ -78,6 +79,7 @@ async function generateWithFallback(input: {
   tools: Record<string, Tool>;
   maxSteps: number;
   signal?: AbortSignal;
+  providerOptions?: Record<string, Record<string, unknown>>;
 }): Promise<{ output: SubAgentResult | null; text: string }> {
   try {
     let fallbackToolStepCount = 0;
@@ -89,6 +91,7 @@ async function generateWithFallback(input: {
       tools: input.tools,
       stopWhen: stepCountIs(input.maxSteps),
       abortSignal: input.signal,
+      providerOptions: input.providerOptions as any,
       onStepFinish: (step) => {
         if (step.toolCalls.length > 0) {
           fallbackToolStepCount += 1;
@@ -160,6 +163,7 @@ export async function runSubAgent(
       tools: input.tools,
       stopWhen: stepCountIs(maxSteps),
       abortSignal: input.signal,
+      providerOptions: input.providerOptions as any,
       prepareStep: ({ stepNumber }) => {
         if (stepNumber >= forceFinalizeStep) {
           return {
@@ -214,6 +218,7 @@ export async function runSubAgent(
       tools: {},
       maxSteps: Math.min(maxSteps, 8),
       signal: input.signal,
+      providerOptions: input.providerOptions,
     });
 
     if (fallback.output && Array.isArray(fallback.output.findings)) {
@@ -243,6 +248,7 @@ export async function runSubAgent(
       tools: {},
       maxSteps: Math.min(maxSteps, 8),
       signal: input.signal,
+      providerOptions: input.providerOptions,
     });
 
     if (fallback.output && Array.isArray(fallback.output.findings)) {

@@ -1,4 +1,4 @@
-import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
+import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runReviewAgent } from "./review-agent";
@@ -49,6 +49,8 @@ export interface PullRequestReviewInput {
 
 export interface PullRequestReviewOptions {
   modelName?: string;
+  agentModelNames?: Record<string, string>;
+  reasoningEffort?: string;
   ownerId?: string;
   repositoryUrl?: string;
   maxFindings?: number;
@@ -130,20 +132,26 @@ export async function runPullRequestReview(
   input: PullRequestReviewInput,
   options: PullRequestReviewOptions = {},
 ): Promise<PullRequestReviewResult> {
-  const copilotToken = process.env.COPILOT_GITHUB_TOKEN;
-  if (!copilotToken) {
-    throw new Error("Missing COPILOT_GITHUB_TOKEN");
+  const apiKey = process.env.OPENCODEGO_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing OPENCODEGO_API_KEY");
   }
 
   const modelName =
-    options.modelName ?? process.env.REVIEW_MODEL ?? "gpt-5.4-mini";
+    options.modelName ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.5";
 
-  const provider = createOpenaiCompatible({
-    apiKey: copilotToken,
-    baseURL: process.env.COPILOT_BASE_URL ?? "https://api.githubcopilot.com",
-    name: "copilot",
-  });
-  const model = provider(modelName);
+  const model = createOpenCodeGoModel(modelName);
+
+  const agentModelOverrides: Record<string, LanguageModel> = {};
+  for (const [agentId, mName] of Object.entries(options.agentModelNames ?? {})) {
+    agentModelOverrides[agentId] = createOpenCodeGoModel(mName);
+  }
+
+  const providerOptions = {
+    "opencode-go": {
+      reasoningEffort: options.reasoningEffort ?? "max",
+    },
+  };
 
   const githubClient = await getGitHubClient(input.installationId);
   const {
@@ -203,6 +211,7 @@ export async function runPullRequestReview(
 
     const review = await runReviewAgent(input.headRef, {
       model,
+      agentModelOverrides,
       sandboxManager: manager,
       sandboxId: sandbox.id,
       initialDiff: input.initialDiff,
@@ -213,6 +222,7 @@ export async function runPullRequestReview(
       minToolSteps: options.minToolSteps ?? 5,
       signal: options.signal,
       graphPath: resolvedGraphPath,
+      providerOptions,
     });
 
     const findings = toFindings(review.findings);

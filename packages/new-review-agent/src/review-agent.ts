@@ -22,6 +22,7 @@ import { runOrchestrator } from "./orchestrator/orchestrator";
 
 export interface ReviewAgentOptions {
   model: LanguageModel;
+  agentModelOverrides?: Record<string, LanguageModel>;
   sandboxManager: SandboxManager;
   sandboxId: string;
   initialDiff?: string;
@@ -32,6 +33,7 @@ export interface ReviewAgentOptions {
   defaultBranch?: string;
   maxFindings?: number;
   graphPath?: string;
+  providerOptions?: Record<string, Record<string, unknown>>;
 }
 
 export interface ReviewFinding {
@@ -414,6 +416,7 @@ IMMEDIATE ACTION REQUIRED:
     tools,
     stopWhen: stepCountIs(maxSteps),
     abortSignal: options.signal,
+    providerOptions: options.providerOptions as any,
     prepareStep: ({ stepNumber }) => {
       if (stepNumber >= forceFinalizeStep) {
         return {
@@ -495,12 +498,14 @@ export async function runReviewAgent(
 
   const subAgentResults = await runSubAgents({
     model: options.model,
+    agentModelOverrides: options.agentModelOverrides,
     sandboxManager,
     sandboxId,
     sharedContext,
     tools,
     concurrency: 8,
     signal: options.signal,
+    providerOptions: options.providerOptions,
   });
 
   const hasAnyFindings = subAgentResults.some((r) => r.findings.length > 0);
@@ -524,6 +529,7 @@ export async function runReviewAgent(
     sharedContext,
     tools,
     signal: options.signal,
+    providerOptions: options.providerOptions,
   });
 
   const maxFindings = options.maxFindings ?? 200;

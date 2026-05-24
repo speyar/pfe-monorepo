@@ -6,12 +6,14 @@ import type { SharedContext } from "./shared-context";
 
 export interface SubAgentRunnerInput {
   model: LanguageModel;
+  agentModelOverrides?: Record<string, LanguageModel>;
   sandboxManager: SandboxManager;
   sandboxId: string;
   sharedContext: SharedContext;
   tools: Record<string, Tool>;
   concurrency?: number;
   signal?: AbortSignal;
+  providerOptions?: Record<string, Record<string, unknown>>;
 }
 
 async function mapWithConcurrency<T, R>(input: {
@@ -50,10 +52,12 @@ async function runSingleSubAgent(
   const startedAt = Date.now();
   console.log(`[sub-agent-runner] starting ${definition.agentId}`);
 
+  const agentModel = input.agentModelOverrides?.[definition.agentId] ?? input.model;
+
   const result = await runSubAgent({
     agentId: definition.agentId,
     agentPrompt: definition.systemPrompt,
-    model: input.model,
+    model: agentModel,
     sandboxManager: input.sandboxManager,
     sandboxId: input.sandboxId,
     sharedContext: input.sharedContext,
@@ -61,6 +65,7 @@ async function runSingleSubAgent(
     maxToolSteps: definition.maxToolSteps,
     minToolSteps: definition.minToolSteps,
     signal: input.signal,
+    providerOptions: input.providerOptions,
   });
 
   console.log(

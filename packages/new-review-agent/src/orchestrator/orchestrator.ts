@@ -137,6 +137,7 @@ export async function runOrchestrator(input: {
   sharedContext: SharedContext;
   tools: Record<string, Tool>;
   signal?: AbortSignal;
+  providerOptions?: Record<string, Record<string, unknown>>;
 }): Promise<OrchestratorResult> {
   const dedupedResults = deterministicDeduplicate(input.results);
 
@@ -194,6 +195,7 @@ export async function runOrchestrator(input: {
         system: ORCHESTRATOR_SYSTEM_PROMPT,
         prompt: attemptPrompts[attemptIndex] ?? basePrompt,
         abortSignal: input.signal,
+        providerOptions: input.providerOptions as any,
       };
       if (hasTools) {
         genOpts.tools = input.tools;
