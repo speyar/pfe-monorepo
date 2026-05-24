@@ -26,7 +26,7 @@ function printUsage(): void {
     "Options:",
     "  --input <path>              Path to a ReviewRequest JSON file.",
     "  --file <path>               Path to a source file for ad-hoc review.",
-    "  --model <name>              OpenCode Go model (default: kimi-k2.5).",
+"    --model <name>              OpenCode Go model (default: deepseek-v4-flash).",
     "  --temperature <number>      Temperature between 0 and 2.",
     "  --max-output-tokens <int>   Max output tokens for model generation.",
     "  -h, --help                  Show this help message.",

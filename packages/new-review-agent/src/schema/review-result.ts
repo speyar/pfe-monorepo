@@ -1,12 +1,12 @@
 import { z } from "zod";
 
 export const reviewFindingSchema = z.object({
-  severity: z.enum(["P0", "P1", "P2", "P3", "P4"]),
+  severity: z.enum(["P0", "P1", "P2", "P3", "P4"]).catch("P3"),
   file: z.string().optional(),
-  line: z.number().int().positive().optional(),
+  line: z.number().int().positive().optional().catch(undefined),
   quote: z.string().optional(),
-  title: z.string().min(1).max(100),
-  message: z.string().min(1).max(4000),
+  title: z.string().max(100).default("Issue"),
+  message: z.string().max(4000).default("No description"),
   suggestion: z.string().optional(),
 });
 

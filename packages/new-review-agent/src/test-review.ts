@@ -16,7 +16,7 @@ async function main() {
     );
   }
 
-  const model = createOpenCodeGoModel(process.env.OPENCODEGO_MODEL ?? "kimi-k2.5", { apiKey });
+  const model = createOpenCodeGoModel(process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash", { apiKey });
 
   // const client = await getGitHubClient(120638931);
   const client = await getGitHubClient(115597577);

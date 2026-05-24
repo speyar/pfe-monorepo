@@ -2,7 +2,7 @@ import { createOpenaiCompatible } from "@ceira/better-copilot-provider";
 import type { LanguageModel } from "ai";
 
 const DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1";
-const DEFAULT_MODEL = "kimi-k2.5";
+const DEFAULT_MODEL = "deepseek-v4-flash";
 
 export interface CreateOpenCodeGoProviderOptions {
   apiKey?: string;

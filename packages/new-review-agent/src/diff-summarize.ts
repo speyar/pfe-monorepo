@@ -900,7 +900,7 @@ export async function summarizeDiffWithDefaultModel(
   }
 
   const modelName =
-    input.modelName ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.5";
+    input.modelName ?? process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash";
 
   const model = createOpenCodeGoModel(modelName);
 

@@ -8,7 +8,7 @@ const apiKey =
   process.env.GITHUB_TOKEN ??
   process.env.OPENAI_API_KEY;
 
-const model = createOpenCodeGoModel(process.env.OPENCODEGO_MODEL ?? "kimi-k2.5", { apiKey });
+const model = createOpenCodeGoModel(process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash", { apiKey });
 
 const repeatSentence = tool({
   description: "Repeat the given sentence",

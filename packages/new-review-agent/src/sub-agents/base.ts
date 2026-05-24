@@ -1,6 +1,9 @@
 import { generateText, stepCountIs, type LanguageModel, type Tool } from "ai";
 import type { SandboxManager } from "@packages/sandbox";
-import { subAgentResultSchema } from "../schema/review-result";
+import {
+  reviewFindingSchema,
+  subAgentResultSchema,
+} from "../schema/review-result";
 import type { SubAgentResult } from "../schema/review-result";
 import {
   buildSubAgentSystemPrompt,
@@ -16,40 +19,62 @@ function parseJsonResponseWithReason(text: string): {
     return { output: null, reason: "empty-text" };
   }
 
-  let jsonStr = cleaned;
+  function tryParse(raw: string): unknown {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
 
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  function fixJson(raw: string): string {
+    return raw
+      .replace(/,\s*([}\]])/g, "$1") // trailing commas
+      .replace(/'/g, '"') // single quotes
+      .replace(/(\w+):/g, '"$1":') // unquoted keys
+      .replace(/\/\/.*$/gm, ""); // line comments
+  }
+
+  let parsed: unknown;
+
+  // Strategy 1: direct parse
+  parsed = tryParse(cleaned);
+
+  // Strategy 2: extract {...} via regex
+  if (parsed === undefined) {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      parsed = tryParse(match[0]) ?? tryParse(fixJson(match[0]));
+    }
+  }
+
+  if (parsed === undefined) {
     return { output: null, reason: "no-json-object-found" };
   }
 
-  jsonStr = jsonMatch[0];
+  const obj = parsed as Record<string, unknown>;
+  const rawFindings = Array.isArray(obj?.findings) ? obj.findings : [];
 
-  try {
-    const parsed = JSON.parse(jsonStr);
-    try {
-      return {
-        output: subAgentResultSchema.parse(parsed) as SubAgentResult,
-        reason: "ok",
-      };
-    } catch (schemaError) {
-      const schemaMessage =
-        schemaError instanceof Error
-          ? schemaError.message
-          : String(schemaError);
-      return {
-        output: null,
-        reason: `schema-parse-failed:${schemaMessage.split("\n")[0]}`,
-      };
-    }
-  } catch (jsonError) {
-    const jsonMessage =
-      jsonError instanceof Error ? jsonError.message : String(jsonError);
-    return {
-      output: null,
-      reason: `json-parse-failed:${jsonMessage.split("\n")[0]}`,
-    };
+  if (rawFindings.length === 0) {
+    return { output: { findings: [] }, reason: "empty-findings" };
   }
+
+  const valid = rawFindings
+    .map((f: unknown) => reviewFindingSchema.safeParse(f))
+    .filter((r): r is { success: true; data: SubAgentResult["findings"][number] } => r.success)
+    .map((r) => r.data);
+
+  const dropped = rawFindings.length - valid.length;
+  if (dropped > 0) {
+    console.log(
+      `[parseJson] dropped ${dropped}/${rawFindings.length} invalid findings`,
+    );
+  }
+
+  return {
+    output: { findings: valid },
+    reason: valid.length > 0 ? "ok" : "all-findings-invalid",
+  };
 }
 
 export interface RunSubAgentInput {

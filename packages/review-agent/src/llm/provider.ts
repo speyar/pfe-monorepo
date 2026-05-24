@@ -25,7 +25,7 @@ export function createOpenCodeGoReviewModel(
   }
 
   return createOpenCodeGoModel(
-    input.model ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.5",
+    input.model ?? process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash",
     {
       apiKey,
       baseURL: input.baseURL ?? process.env.OPENCODEGO_BASE_URL,
