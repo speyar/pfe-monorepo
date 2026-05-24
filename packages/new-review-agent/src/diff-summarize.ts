@@ -4,11 +4,11 @@ import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { estimateTokenCount } from "./tools/shared";
 
 const diffSummarySchema = z.object({
-  intent: z.string().min(1),
-  keyChanges: z.array(z.string().min(1)).max(3),
-  riskPoints: z.array(z.string().min(1)).max(3),
-  openQuestions: z.array(z.string().min(1)).max(2),
-  evidence: z.array(z.string().min(1)).max(6),
+  intent: z.string().default(""),
+  keyChanges: z.array(z.string()).max(3).catch([]),
+  riskPoints: z.array(z.string()).max(3).catch([]),
+  openQuestions: z.array(z.string()).max(2).catch([]),
+  evidence: z.array(z.string()).max(6).catch([]),
 });
 
 export type DiffSummary = z.infer<typeof diffSummarySchema>;

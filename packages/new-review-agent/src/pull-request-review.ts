@@ -149,7 +149,7 @@ export async function runPullRequestReview(
 
   const providerOptions = {
     "opencode-go": {
-      reasoningEffort: options.reasoningEffort ?? "max",
+      reasoningEffort: options.reasoningEffort ?? "high",
     },
   };
 
