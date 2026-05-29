@@ -128,6 +128,7 @@ export function convertToOpenAICompatibleChatMessages(
           tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
           reasoning_text: reasoningOpaque ? reasoningText : undefined,
           reasoning_opaque: reasoningOpaque,
+          reasoning_content: reasoningText ?? undefined,
           ...metadata,
         });
 

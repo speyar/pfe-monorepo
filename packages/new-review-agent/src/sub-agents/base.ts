@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, type LanguageModel, type Tool } from "ai";
+import { generateText, Output, stepCountIs, type LanguageModel, type Tool } from "ai";
 import type { SandboxManager } from "@packages/sandbox";
 import {
   reviewFindingSchema,
@@ -14,7 +14,12 @@ function parseJsonResponseWithReason(text: string): {
   output: SubAgentResult | null;
   reason: string;
 } {
-  const cleaned = text.trim();
+  const cleaned = text
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
   if (!cleaned) {
     return { output: null, reason: "empty-text" };
   }
@@ -107,38 +112,23 @@ async function generateWithFallback(input: {
   providerOptions?: Record<string, Record<string, unknown>>;
 }): Promise<{ output: SubAgentResult | null; text: string }> {
   try {
-    let fallbackToolStepCount = 0;
-
-    const generation = await generateText({
+    const result = await generateText({
       model: input.model,
       system: input.system,
       prompt: input.prompt,
-      tools: input.tools,
-      stopWhen: stepCountIs(input.maxSteps),
+      output: Output.object({
+        schema: subAgentResultSchema,
+        name: "review_findings",
+        description: "Structured review findings from sub-agent",
+      }),
       abortSignal: input.signal,
-      providerOptions: input.providerOptions as any,
-      onStepFinish: (step) => {
-        if (step.toolCalls.length > 0) {
-          fallbackToolStepCount += 1;
-        }
-        const toolNames =
-          step.toolCalls.map((toolCall) => toolCall.toolName).join(",") || "-";
-        console.log(
-          `[fallback:step ${step.stepNumber}] finish=${JSON.stringify(step.finishReason)} rawFinish=${JSON.stringify(step.rawFinishReason)} toolCalls=${step.toolCalls.length} toolNames=${toolNames} toolSteps=${fallbackToolStepCount} textLen=${(step.text ?? "").length}`,
-        );
-      },
     });
 
-    const text = generation.text ?? "";
-    const parsed = parseJsonResponseWithReason(text);
-    const output = parsed.output;
-
-    const textPreview = text.length > 200 ? text.slice(0, 200) + "..." : text;
     console.log(
-      `[generateWithFallback] done steps=${generation.steps.length} finish=${JSON.stringify(generation.finishReason)} rawFinish=${JSON.stringify(generation.rawFinishReason)} warnings=${generation.warnings?.length ?? 0} textLen=${text.length} parseReason=${parsed.reason} preview=${JSON.stringify(textPreview)}`,
+      `[generateWithFallback] done — ${result.output?.findings?.length ?? 0} findings (structured)`,
     );
 
-    return { output, text };
+    return { output: (result.output ?? null) as SubAgentResult | null, text: "" };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const name =
@@ -165,7 +155,23 @@ export async function runSubAgent(
     2,
     Math.min(input.minToolSteps ?? 4, Math.max(2, maxSteps - 3)),
   );
-  const forceFinalizeStep = Math.max(minToolSteps + 1, maxSteps - 2);
+  const forceFinalizeStep = Math.max(minToolSteps + 1, maxSteps - 3);
+
+  const schemaDefinition = [
+    '{',
+    '  "findings": [',
+    '    {',
+    '      "severity": "P0" | "P1" | "P2" | "P3" | "P4",',
+    '      "file": "<filepath>" (optional),',
+    '      "line": <positive integer> (optional),',
+    '      "quote": "<exact text from code>" (optional),',
+    '      "title": "<short title, max 100 chars>" (default "Issue"),',
+    '      "message": "<detailed description, max 4000 chars>" (default "No description"),',
+    '      "suggestion": "<concrete suggestion>" (optional)',
+    '    }',
+    '  ]',
+    '}',
+  ].join("\n");
 
   const userPrompt = [
     `You are the ${input.agentId} reviewer. Review the changes in this PR for issues in your domain.`,
@@ -173,7 +179,9 @@ export async function runSubAgent(
     "The PRECOMPUTED DIFF is in the system prompt above. Study it first, then use tools for deeper investigation.",
     `You have at most ${maxSteps} steps. You MUST use at least ${minToolSteps} tool-using steps before returning JSON.`,
     `Do not stop calling tools until you have inspected at least 5 files. By step ${forceFinalizeStep}, stop calling tools and return final JSON.`,
-    'Return only JSON with shape {"findings": [...]} and no surrounding prose.',
+    "Return ONLY valid JSON matching this exact schema and no surrounding prose:",
+    schemaDefinition,
+    "Example: {\"findings\": [{\"severity\": \"P2\", \"file\": \"src/auth.ts\", \"line\": 42, \"title\": \"Missing input validation\", \"message\": \"User input is not sanitized before DB query\"}]}",
     "IMPORTANT: You are expected to find real issues. If you find none, you failed your job.",
   ].join("\n");
 
@@ -194,6 +202,12 @@ export async function runSubAgent(
           return {
             toolChoice: "none",
             activeTools: [],
+            system: `${systemPrompt}
+
+You must now output ONLY valid JSON with NO surrounding text or markdown fences.
+The JSON must match this exact schema:
+${schemaDefinition}
+Return ONLY this JSON object, nothing else.`,
           };
         }
         return undefined;
@@ -203,7 +217,7 @@ export async function runSubAgent(
           toolStepCount += 1;
         }
         if (step.text) {
-          finalText = step.text;
+          finalText += step.text;
         }
         const toolNames =
           step.toolCalls.map((toolCall) => toolCall.toolName).join(",") || "-";

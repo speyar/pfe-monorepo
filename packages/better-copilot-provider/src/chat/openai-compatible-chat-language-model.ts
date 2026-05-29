@@ -255,8 +255,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
       });
     }
 
-    // reasoning content (Copilot uses reasoning_text):
-    const reasoning = choice.message.reasoning_text;
+    // reasoning content: Copilot uses reasoning_text, DeepSeek uses reasoning_content
+    const reasoning = choice.message.reasoning_text ?? choice.message.reasoning_content;
     if (reasoning != null && reasoning.length > 0) {
       content.push({
         type: "reasoning",
@@ -528,8 +528,8 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
               reasoningOpaque = delta.reasoning_opaque;
             }
 
-            // enqueue reasoning before text deltas (Copilot uses reasoning_text):
-            const reasoningContent = delta.reasoning_text;
+            // enqueue reasoning before text deltas: Copilot uses reasoning_text, DeepSeek uses reasoning_content
+            const reasoningContent = delta.reasoning_text ?? delta.reasoning_content;
             if (reasoningContent) {
               if (!isActiveReasoning) {
                 controller.enqueue({
@@ -835,6 +835,8 @@ const OpenAICompatibleChatResponseSchema = z.object({
         // Copilot-specific reasoning fields
         reasoning_text: z.string().nullish(),
         reasoning_opaque: z.string().nullish(),
+        // DeepSeek / standard OpenAI reasoning field
+        reasoning_content: z.string().nullish(),
         tool_calls: z
           .array(
             z.object({
@@ -874,6 +876,8 @@ const createOpenAICompatibleChatChunkSchema = <
               // Copilot-specific reasoning fields
               reasoning_text: z.string().nullish(),
               reasoning_opaque: z.string().nullish(),
+              // DeepSeek / standard OpenAI reasoning field
+              reasoning_content: z.string().nullish(),
               tool_calls: z
                 .array(
                   z.object({
