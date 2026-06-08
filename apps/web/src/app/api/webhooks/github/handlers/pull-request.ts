@@ -314,11 +314,19 @@ function findLineByQuote(
     return undefined
   }
 
+  const quoteLines = quoteTrimmed.split(/\r?\n/).filter((l) => l.trim())
+  const firstQuoteLine = quoteLines[0]?.trim() ?? ''
+  if (!firstQuoteLine) {
+    return undefined
+  }
+
   const exactMatches: number[] = []
   const normalizedMatches: number[] = []
   const includeMatches: number[] = []
-  const normalizedQuote = normalizeCodeForComparison(quoteTrimmed)
-  const normalizedQuoteLower = normalizedQuote.toLowerCase()
+  const normalizedFirst = normalizeCodeForComparison(firstQuoteLine)
+  const normalizedFirstLower = normalizedFirst.toLowerCase()
+  const normalizedFull = normalizeCodeForComparison(quoteTrimmed)
+  const normalizedFullLower = normalizedFull.toLowerCase()
 
   for (const [lineNumber, rawLine] of sideMap.entries()) {
     const content = rawLine.slice(1)
@@ -327,21 +335,33 @@ function findLineByQuote(
       continue
     }
 
-    if (contentTrimmed === quoteTrimmed) {
-      exactMatches.push(lineNumber)
-      continue
+    if (quoteLines.length === 1) {
+      if (contentTrimmed === firstQuoteLine) {
+        exactMatches.push(lineNumber)
+        continue
+      }
+
+      const normalizedContent = normalizeCodeForComparison(contentTrimmed)
+      if (normalizedContent === normalizedFirst) {
+        normalizedMatches.push(lineNumber)
+        continue
+      }
     }
 
     const normalizedContent = normalizeCodeForComparison(contentTrimmed)
-    if (normalizedContent === normalizedQuote) {
+    const normalizedContentLower = normalizedContent.toLowerCase()
+
+    if (
+      normalizedContentLower === normalizedFirstLower ||
+      normalizedContentLower === normalizedFullLower
+    ) {
       normalizedMatches.push(lineNumber)
       continue
     }
 
-    const normalizedContentLower = normalizedContent.toLowerCase()
     if (
-      normalizedContentLower.includes(normalizedQuoteLower) ||
-      normalizedQuoteLower.includes(normalizedContentLower)
+      normalizedFirstLower.length > 5 &&
+      normalizedContentLower.includes(normalizedFirstLower)
     ) {
       includeMatches.push(lineNumber)
     }
