@@ -18,8 +18,8 @@ echo "==> Generating Prisma client..."
 cd "$APP_DIR"
 node /var/www/falcon/node_modules/.bin/prisma generate
 
-echo "==> Running Prisma migrations..."
-node /var/www/falcon/node_modules/.bin/prisma migrate deploy
+echo "==> Syncing Prisma schema..."
+node /var/www/falcon/node_modules/.bin/prisma db push --skip-generate
 
 echo "==> Building..."
 cd "$DEPLOY_DIR"
