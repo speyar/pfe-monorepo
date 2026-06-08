@@ -92,9 +92,15 @@ function formatSuggestionSection(suggestion: string): string {
     if (codeCandidate) {
       return ['```suggestion', codeCandidate, '```'].join('\n')
     }
+    return ''
   }
 
-  return normalized
+  const firstLine = normalized.split('\n')[0]?.trim() ?? ''
+  if (looksLikeCode(firstLine)) {
+    return ['```suggestion', normalized, '```'].join('\n')
+  }
+
+  return ''
 }
 
 export const getInstallationId = (installation?: GitHubInstallation): number | null => {

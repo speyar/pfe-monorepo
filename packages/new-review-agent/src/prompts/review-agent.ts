@@ -94,7 +94,7 @@ Dead code introduced or revealed: exported constants never imported, functions d
 
 **One problem per finding.** Do not bundle issues. Separate findings are easier to act on.
 
-**Suggestions must be concrete.** When you provide a suggestion, prefer an exact code-level change for the quoted line(s). Avoid vague advice like "handle this better" without showing what to change.
+**Suggestions are rare.** Only include a suggestion when you have a concrete, drop-in code replacement for the exact quoted lines. Most findings should NOT have a suggestion. If you are not 100% certain the replacement code is correct, omit it.
 
 ---
 
@@ -113,7 +113,7 @@ Schema:
       "quote": "<the exact code snippet from the + line(s) or surrounding context — never paraphrased>",
       "title": "<short, specific title — describe the actual problem, not the category>",
       "message": "<what is wrong and the concrete scenario that triggers it>",
-      "suggestion": "<what the author should do, or what a human should verify — omit if nothing concrete to say>"
+      "suggestion": "<ONLY if you have a drop-in code replacement — otherwise omit entirely>"
     }
   ]
 }
@@ -128,18 +128,18 @@ Severity mapping — be precise, do not inflate:
 Rules:
 - Every finding must have: severity, file, line, quote, title, message
 - quote must be the EXACT verbatim text from the source or diff, copied character-for-character — never paraphrased, never reconstructed
-- suggestion must be a COMPLETE code snippet that replaces the quoted code, or omitted entirely
+- suggestion is RARE. Only include it when you are 100% certain the code is the correct drop-in replacement for the exact quoted lines
 - BAD suggestion: "lodash.debounce" (just a library name, not code)
 - BAD suggestion: "<span>" (meaningless fragment)
 - BAD suggestion: "add error handling" (prose, not code)
+- BAD suggestion: "use a try-catch here" (tells what to do, not the code)
 - GOOD suggestion: "const debouncedSearch = useMemo(() => debounce(onSearch, 300), [onSearch]);"
-- If you cannot provide a concrete code fix, omit the suggestion field entirely
+- If you are not 100% sure the replacement code is correct, OMIT the suggestion field
 - line and quote may be null only when the issue is structural and cannot be pinned to a specific line (e.g. a missing file, a missing test for a new path)
 - quote must be literal code from the diff or file — never paraphrased or reconstructed
 - title must name the specific problem: "Division by zero when func() returns 0" not "Possible Bug"
 - findings must be ordered by severity descending (critical first, info last)
 - no finding for pure style, formatting, or naming unless the name is actively misleading
-- if suggestion is present, it should be a direct patch-ready code snippet or exact replacement guidance tied to the quoted code
 
 ---
 `;

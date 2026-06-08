@@ -171,7 +171,7 @@ export async function runSubAgent(
     '      "quote": "<EXACT verbatim text copied character-for-character from the source or diff>",',
     '      "title": "<short title describing the specific problem, max 100 chars>",',
     '      "message": "<what is wrong and the scenario that triggers it>",',
-    '      "suggestion": "<complete replacement code snippet, or omit if no code fix>"',
+    '      "suggestion": "<ONLY if you have a drop-in code replacement — otherwise omit entirely>"',
     '    }',
     '  ]',
     '}',
@@ -180,12 +180,13 @@ export async function runSubAgent(
   const quoteAndSuggestionRules = [
     "CRITICAL RULES FOR quote AND suggestion:",
     '- quote: MUST be the exact verbatim text from the file/diff, copied character-for-character. Never paraphrase or rewrite.',
-    "- suggestion: If you provide a code fix, it MUST be a COMPLETE code snippet that replaces the quoted line(s). NOT a library name, NOT a fragment, NOT prose.",
+    "- suggestion is RARE. Most findings should NOT have a suggestion. Only include it when you are 100% certain the code is the correct drop-in replacement for the exact quoted lines.",
     '  GOOD suggestion: "const debouncedSearch = useMemo(() => debounce(onSearch, 300), [onSearch]);"',
     '  BAD suggestion: "lodash.debounce" (just a library name)',
     '  BAD suggestion: "<span>" (meaningless fragment)',
     '  BAD suggestion: "add error handling" (prose, not code)',
-    "  If you cannot provide a concrete code fix, omit the suggestion field entirely.",
+    '  BAD suggestion: "use a try-catch here" (tells what to do, not the code)',
+    "  If you are not 100% sure the replacement code is correct, OMIT the suggestion field.",
     "- Every finding MUST include file, line, and quote. These are not optional.",
   ].join("\n");
 
@@ -200,7 +201,7 @@ export async function runSubAgent(
     "",
     "Return ONLY valid JSON matching this exact schema and no surrounding prose:",
     schemaDefinition,
-    "Example: {\"findings\": [{\"severity\": \"P2\", \"file\": \"src/auth.ts\", \"line\": 42, \"quote\": \"const user = db.findUnique({ where: { id: req.params.id } });\", \"title\": \"Missing authorization check\", \"message\": \"User input is not sanitized before DB query\", \"suggestion\": \"const user = db.findUnique({ where: { id: req.params.id } });\\nif (!user || user.orgId !== session.orgId) throw new NotFoundError();\"}]}",
+    "Example: {\"findings\": [{\"severity\": \"P2\", \"file\": \"src/auth.ts\", \"line\": 42, \"quote\": \"const user = db.findUnique({ where: { id: req.params.id } });\", \"title\": \"Missing authorization check\", \"message\": \"User input is not sanitized before DB query\"}]}",
     "IMPORTANT: You are expected to find real issues. If you find none, you failed your job.",
   ].join("\n");
 
