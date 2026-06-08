@@ -2,6 +2,7 @@ import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
 import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
 import { estimateTokenCount } from "./tools/shared";
+import { addUsageTelemetry } from "./telemetry/usage-telemetry";
 
 const diffSummarySchema = z.object({
   intent: z.string().default(""),
@@ -578,6 +579,7 @@ async function orchestratorMerge(input: {
       }),
       abortSignal: input.signal,
     });
+    addUsageTelemetry(result.usage as unknown);
 
     const merged = result.output;
 
@@ -750,6 +752,7 @@ async function reduceChunkSummaries(input: {
       }),
       abortSignal: input.signal,
     });
+    addUsageTelemetry(result.usage as unknown);
 
     return result.output;
   } catch (error) {
@@ -868,6 +871,7 @@ export async function summarizeDiff(
       prompt: userPrompt,
       abortSignal: input.signal,
     });
+    addUsageTelemetry(result.usage as unknown);
 
     const parsed = parseJsonObjectFromText(result.text ?? "");
     const normalized = normalizeCandidateSummary(parsed);

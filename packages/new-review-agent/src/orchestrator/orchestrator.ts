@@ -4,6 +4,7 @@ import type { OrchestratorResult } from "../schema/review-result";
 import type { RunSubAgentOutput } from "../sub-agents/base";
 import type { SharedContext } from "./shared-context";
 import { ORCHESTRATOR_SYSTEM_PROMPT } from "./orchestrator-prompt";
+import { addUsageTelemetry } from "../telemetry/usage-telemetry";
 
 function truncateText(value: string | undefined, maxLength: number): string {
   if (!value) {
@@ -202,6 +203,7 @@ export async function runOrchestrator(input: {
         genOpts.maxSteps = 10;
       }
       const generation = await (generateText as any)(genOpts);
+      addUsageTelemetry((generation as { usage?: unknown }).usage);
 
       const text = generation.text ?? "";
       const parsed = parseOrchestratorJsonWithReason(text);

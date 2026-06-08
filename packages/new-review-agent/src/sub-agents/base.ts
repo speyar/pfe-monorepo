@@ -9,6 +9,7 @@ import {
   buildSubAgentSystemPrompt,
   type SharedContext,
 } from "../orchestrator/shared-context";
+import { addUsageTelemetry } from "../telemetry/usage-telemetry";
 
 function parseJsonResponseWithReason(text: string): {
   output: SubAgentResult | null;
@@ -123,6 +124,7 @@ async function generateWithFallback(input: {
       }),
       abortSignal: input.signal,
     });
+    addUsageTelemetry(result.usage as unknown);
 
     console.log(
       `[generateWithFallback] done — ${result.output?.findings?.length ?? 0} findings (structured)`,
@@ -226,6 +228,7 @@ Return ONLY this JSON object, nothing else.`,
         );
       },
     });
+    addUsageTelemetry(generation.usage as unknown);
 
     const text = finalText || generation.text || "";
     const parsed = parseJsonResponseWithReason(text);

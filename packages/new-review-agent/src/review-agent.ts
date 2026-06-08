@@ -19,6 +19,7 @@ import {
 } from "./orchestrator/shared-context";
 import { runSubAgents } from "./orchestrator/sub-agent-runner";
 import { runOrchestrator } from "./orchestrator/orchestrator";
+import { addUsageTelemetry } from "./telemetry/usage-telemetry";
 
 export interface ReviewAgentOptions {
   model: LanguageModel;
@@ -440,6 +441,7 @@ IMMEDIATE ACTION REQUIRED:
       );
     },
   });
+  addUsageTelemetry(generation.usage as unknown);
 
   const text = finalText || generation.text || "";
   const parsed = parseJsonResponseWithReason(text);
