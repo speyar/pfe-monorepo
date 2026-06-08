@@ -526,7 +526,7 @@ export async function runReviewAgent(
   }
 
   const orchestratorResult: OrchestratorResult = await runOrchestrator({
-    model: options.model,
+    model: options.agentModelOverrides?.["orchestrator"] ?? options.model,
     results: subAgentResults,
     sharedContext,
     tools: {},

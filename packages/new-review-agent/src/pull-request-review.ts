@@ -148,6 +148,9 @@ export async function runPullRequestReview(
   )) {
     agentModelOverrides[agentId] = createOpenCodeGoModel(mName);
   }
+  if (!agentModelOverrides["orchestrator"]) {
+    agentModelOverrides["orchestrator"] = createOpenCodeGoModel("deepseek-v4-flash");
+  }
 
   const providerOptions = {
     "opencode-go": {
