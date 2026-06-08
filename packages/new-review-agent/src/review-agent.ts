@@ -529,7 +529,6 @@ export async function runReviewAgent(
     model: options.agentModelOverrides?.["orchestrator"] ?? options.model,
     results: subAgentResults,
     signal: options.signal,
-    providerOptions: options.providerOptions,
   });
 
   const maxFindings = options.maxFindings ?? 200;

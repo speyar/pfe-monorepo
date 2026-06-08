@@ -104,7 +104,6 @@ export async function runOrchestrator(input: {
   model: LanguageModel;
   results: RunSubAgentOutput[];
   signal?: AbortSignal;
-  providerOptions?: Record<string, Record<string, unknown>>;
 }): Promise<OrchestratorResult> {
   const dedupedResults = deterministicDeduplicate(input.results);
 
@@ -120,6 +119,11 @@ export async function runOrchestrator(input: {
 
   const attemptStart = Date.now();
   const prompt = buildOrchestratorPrompt(dedupedResults);
+  const modelLabel = (input.model as { modelId?: string }).modelId ?? "unknown";
+
+  console.log(
+    `[orchestrator] calling ${modelLabel} — prompt=${prompt.length}chars ${totalFindings}findings from ${dedupedResults.length}agents`,
+  );
 
   try {
     const generation = await (generateText as any)({
@@ -127,19 +131,19 @@ export async function runOrchestrator(input: {
       system: ORCHESTRATOR_SYSTEM_PROMPT,
       prompt,
       abortSignal: input.signal,
-      providerOptions: input.providerOptions as any,
     });
     addUsageTelemetry((generation as { usage?: unknown }).usage);
 
+    const elapsed = Date.now() - attemptStart;
     const text = generation.text ?? "";
     const parsed = parseFindingsJson(text);
 
     console.log(
-      `[orchestrator] done — ${Date.now() - attemptStart}ms textLen=${text.length} parseReason=${parsed.reason}`,
+      `[orchestrator] done — ${elapsed}ms textLen=${text.length} steps=${generation.steps.length} finish=${JSON.stringify(generation.finishReason)} parseReason=${parsed.reason}`,
     );
 
     if (parsed.findings) {
-      console.log(`[orchestrator] merge complete — ${parsed.findings.length} findings`);
+      console.log(`[orchestrator] merge complete — ${parsed.findings.length} findings (${elapsed}ms)`);
       return {
         findings: parsed.findings,
         agentSummaries: dedupedResults.map((r) => ({ agentId: r.agentId, summary: r.summary })),
@@ -148,10 +152,11 @@ export async function runOrchestrator(input: {
 
     console.warn("[orchestrator] LLM output not parseable, using deterministic fallback");
   } catch (error) {
-    console.warn("[orchestrator] LLM merge failed, using deterministic fallback", {
-      error: error instanceof Error ? error.message : String(error),
-      ms: Date.now() - attemptStart,
-    });
+    const elapsed = Date.now() - attemptStart;
+    console.warn(
+      `[orchestrator] LLM merge failed after ${elapsed}ms, using deterministic fallback`,
+      { error: error instanceof Error ? error.message : String(error) },
+    );
   }
 
   const allFindings = dedupedResults.flatMap((r) => r.findings);
