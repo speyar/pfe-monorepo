@@ -32,6 +32,7 @@ function createOpenCodeGoProvider(options?: CreateOpenCodeGoProviderOptions) {
       options?.baseURL ?? process.env.OPENCODEGO_BASE_URL ?? DEFAULT_BASE_URL,
     name: "opencode-go",
     headers: options?.headers,
+    supportsStructuredOutputs: true,
   });
 }
 

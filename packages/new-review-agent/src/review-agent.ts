@@ -529,7 +529,7 @@ export async function runReviewAgent(
     model: options.model,
     results: subAgentResults,
     sharedContext,
-    tools,
+    tools: {},
     signal: options.signal,
     providerOptions: options.providerOptions,
   });
