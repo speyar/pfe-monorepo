@@ -1,4 +1,4 @@
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
+import { createReviewModel } from "@pfe-monorepo/opencode-go-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runReviewAgent } from "./review-agent";
@@ -140,16 +140,16 @@ export async function runPullRequestReview(
   const modelName =
     options.modelName ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.6";
 
-  const model = createOpenCodeGoModel(modelName);
+  const model = createReviewModel(modelName);
 
   const agentModelOverrides: Record<string, LanguageModel> = {};
   for (const [agentId, mName] of Object.entries(
     options.agentModelNames ?? {},
   )) {
-    agentModelOverrides[agentId] = createOpenCodeGoModel(mName);
+    agentModelOverrides[agentId] = createReviewModel(mName);
   }
   if (!agentModelOverrides["orchestrator"]) {
-    agentModelOverrides["orchestrator"] = createOpenCodeGoModel("deepseek-v4-flash");
+    agentModelOverrides["orchestrator"] = createReviewModel("deepseek-v4-flash");
   }
 
   const providerOptions = {

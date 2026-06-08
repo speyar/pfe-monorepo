@@ -1,4 +1,4 @@
-import { generateText, Output, stepCountIs, type LanguageModel, type Tool } from "ai";
+import { generateText, stepCountIs, type LanguageModel, type Tool } from "ai";
 import type { SandboxManager } from "@packages/sandbox";
 import {
   reviewFindingSchema,
@@ -117,20 +117,22 @@ async function generateWithFallback(input: {
       model: input.model,
       system: input.system,
       prompt: input.prompt,
-      output: Output.object({
-        schema: subAgentResultSchema,
-        name: "review_findings",
-        description: "Structured review findings from sub-agent",
-      }),
       abortSignal: input.signal,
+      providerOptions: input.providerOptions as any,
     });
     addUsageTelemetry(result.usage as unknown);
 
+    const text = result.text ?? "";
+    const parsed = parseJsonResponseWithReason(text);
     console.log(
-      `[generateWithFallback] done — ${result.output?.findings?.length ?? 0} findings (structured)`,
+      `[generateWithFallback] done — ${parsed.output?.findings?.length ?? 0} findings (${parsed.reason})`,
     );
 
-    return { output: (result.output ?? null) as SubAgentResult | null, text: "" };
+    if (parsed.output && parsed.output.findings.length > 0) {
+      return { output: parsed.output, text };
+    }
+
+    return { output: null, text };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const name =
@@ -164,15 +166,27 @@ export async function runSubAgent(
     '  "findings": [',
     '    {',
     '      "severity": "P0" | "P1" | "P2" | "P3" | "P4",',
-    '      "file": "<filepath>" (optional),',
-    '      "line": <positive integer> (optional),',
-    '      "quote": "<exact text from code>" (optional),',
-    '      "title": "<short title, max 100 chars>" (default "Issue"),',
-    '      "message": "<detailed description, max 4000 chars>" (default "No description"),',
-    '      "suggestion": "<concrete suggestion>" (optional)',
+    '      "file": "<filepath>",',
+    '      "line": <positive integer>,',
+    '      "quote": "<EXACT verbatim text copied character-for-character from the source or diff>",',
+    '      "title": "<short title describing the specific problem, max 100 chars>",',
+    '      "message": "<what is wrong and the scenario that triggers it>",',
+    '      "suggestion": "<complete replacement code snippet, or omit if no code fix>"',
     '    }',
     '  ]',
     '}',
+  ].join("\n");
+
+  const quoteAndSuggestionRules = [
+    "CRITICAL RULES FOR quote AND suggestion:",
+    '- quote: MUST be the exact verbatim text from the file/diff, copied character-for-character. Never paraphrase or rewrite.',
+    "- suggestion: If you provide a code fix, it MUST be a COMPLETE code snippet that replaces the quoted line(s). NOT a library name, NOT a fragment, NOT prose.",
+    '  GOOD suggestion: "const debouncedSearch = useMemo(() => debounce(onSearch, 300), [onSearch]);"',
+    '  BAD suggestion: "lodash.debounce" (just a library name)',
+    '  BAD suggestion: "<span>" (meaningless fragment)',
+    '  BAD suggestion: "add error handling" (prose, not code)',
+    "  If you cannot provide a concrete code fix, omit the suggestion field entirely.",
+    "- Every finding MUST include file, line, and quote. These are not optional.",
   ].join("\n");
 
   const userPrompt = [
@@ -181,9 +195,12 @@ export async function runSubAgent(
     "The PRECOMPUTED DIFF is in the system prompt above. Study it first, then use tools for deeper investigation.",
     `You have at most ${maxSteps} steps. You MUST use at least ${minToolSteps} tool-using steps before returning JSON.`,
     `Do not stop calling tools until you have inspected at least 5 files. By step ${forceFinalizeStep}, stop calling tools and return final JSON.`,
+    "",
+    quoteAndSuggestionRules,
+    "",
     "Return ONLY valid JSON matching this exact schema and no surrounding prose:",
     schemaDefinition,
-    "Example: {\"findings\": [{\"severity\": \"P2\", \"file\": \"src/auth.ts\", \"line\": 42, \"title\": \"Missing input validation\", \"message\": \"User input is not sanitized before DB query\"}]}",
+    "Example: {\"findings\": [{\"severity\": \"P2\", \"file\": \"src/auth.ts\", \"line\": 42, \"quote\": \"const user = db.findUnique({ where: { id: req.params.id } });\", \"title\": \"Missing authorization check\", \"message\": \"User input is not sanitized before DB query\", \"suggestion\": \"const user = db.findUnique({ where: { id: req.params.id } });\\nif (!user || user.orgId !== session.orgId) throw new NotFoundError();\"}]}",
     "IMPORTANT: You are expected to find real issues. If you find none, you failed your job.",
   ].join("\n");
 
@@ -209,6 +226,9 @@ export async function runSubAgent(
 You must now output ONLY valid JSON with NO surrounding text or markdown fences.
 The JSON must match this exact schema:
 ${schemaDefinition}
+
+${quoteAndSuggestionRules}
+
 Return ONLY this JSON object, nothing else.`,
           };
         }

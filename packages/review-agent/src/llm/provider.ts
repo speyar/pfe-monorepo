@@ -1,4 +1,4 @@
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
+import { createReviewModel } from "@pfe-monorepo/opencode-go-provider";
 import type { LanguageModel } from "ai";
 
 import { ProviderConfigError } from "../errors/review-errors";
@@ -24,7 +24,7 @@ export function createOpenCodeGoReviewModel(
     );
   }
 
-  return createOpenCodeGoModel(
+  return createReviewModel(
     input.model ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.6",
     {
       apiKey,

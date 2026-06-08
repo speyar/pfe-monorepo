@@ -1,6 +1,6 @@
-import { generateText, Output, type LanguageModel } from "ai";
+import { generateText, type LanguageModel } from "ai";
 import { z } from "zod";
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
+import { createReviewModel } from "@pfe-monorepo/opencode-go-provider";
 import { estimateTokenCount } from "./tools/shared";
 import { addUsageTelemetry } from "./telemetry/usage-telemetry";
 
@@ -552,47 +552,63 @@ async function orchestratorMerge(input: {
     totalFiles: input.totalFiles,
   });
 
+  const mergeSystem = [
+    "You merge partial PR diff summaries produced by parallel subagents.",
+    "Keep only high-signal changes and avoid duplicates.",
+    "Return only what is directly supported by subagent summaries.",
+    "Keep output concise and concrete.",
+    "Return ONLY valid JSON with keys: intent, keyChanges, riskPoints, openQuestions, evidence.",
+    "No markdown fences. No extra text.",
+  ].join(" ");
+
+  const mergePrompt = [
+    "Merge these subagent summaries into the required JSON fields:",
+    "- intent: one sentence",
+    "- keyChanges: 2-3 bullets of behavior-impacting changes",
+    "- riskPoints: 1-3 likely misunderstanding/bug-prone areas",
+    "- openQuestions: 0-2 unknowns not provable from summaries",
+    "- evidence: up to 6 file/line or hunk references backing claims",
+    "",
+    `Coverage: summarized ${input.summaries.length}/${input.totalBatches} subagent batches and ${coveredFiles}/${input.totalFiles} files.`,
+    summariesText,
+  ].join("\n");
+
   try {
     const result = await generateText({
       model: input.model,
-      system: [
-        "You merge partial PR diff summaries produced by parallel subagents.",
-        "Keep only high-signal changes and avoid duplicates.",
-        "Return only what is directly supported by subagent summaries.",
-        "Keep output concise and concrete.",
-      ].join(" "),
-      prompt: [
-        "Merge these subagent summaries into the required JSON fields:",
-        "- intent: one sentence",
-        "- keyChanges: 2-3 bullets of behavior-impacting changes",
-        "- riskPoints: 1-3 likely misunderstanding/bug-prone areas",
-        "- openQuestions: 0-2 unknowns not provable from summaries",
-        "- evidence: up to 6 file/line or hunk references backing claims",
-        "",
-        `Coverage: summarized ${input.summaries.length}/${input.totalBatches} subagent batches and ${coveredFiles}/${input.totalFiles} files.`,
-        summariesText,
-      ].join("\n"),
-      output: Output.object({
-        schema: diffSummarySchema,
-        name: "diff_summary",
-        description: "Concise, grounded summary of a PR diff.",
-      }),
+      system: mergeSystem,
+      prompt: mergePrompt,
       abortSignal: input.signal,
     });
     addUsageTelemetry(result.usage as unknown);
 
-    const merged = result.output;
+    const parsed = parseJsonObjectFromText(result.text ?? "");
+    const merged = normalizeCandidateSummary(parsed);
 
     console.log("[diff-summarizer] orchestrator merge finish", {
       partialSummaries: input.summaries.length,
       totalBatches: input.totalBatches,
-      intent: merged.intent,
-      keyChanges: merged.keyChanges,
-      riskPoints: merged.riskPoints,
-      evidenceCount: merged.evidence.length,
+      intent: merged?.intent,
+      keyChanges: merged?.keyChanges,
+      riskPoints: merged?.riskPoints,
+      evidenceCount: merged?.evidence.length,
     });
 
-    return merged;
+    if (merged) {
+      return merged;
+    }
+
+    console.warn(
+      "[diff-summarizer] orchestrator merge produced invalid output; using local merge",
+    );
+
+    return mergeSummariesLocally(
+      input.summaries.map((batchSummary) => batchSummary.summary),
+      {
+        coveredChunks: input.summaries.length,
+        totalChunks: input.totalBatches,
+      },
+    );
   } catch (error) {
     console.warn(
       "[diff-summarizer] orchestrator merge failed; using local merge",
@@ -733,6 +749,8 @@ async function reduceChunkSummaries(input: {
         "Keep only high-signal changes and avoid duplicates.",
         "Return only what is directly supported by chunk summaries.",
         "Keep output concise and concrete.",
+        "Return ONLY valid JSON with keys: intent, keyChanges, riskPoints, openQuestions, evidence.",
+        "No markdown fences. No extra text.",
       ].join(" "),
       prompt: [
         "Merge these chunk summaries into the required JSON fields:",
@@ -745,16 +763,28 @@ async function reduceChunkSummaries(input: {
         `Coverage: summarized ${input.chunkCount} of ${input.totalChunkCount} chunks.`,
         chunksText,
       ].join("\n"),
-      output: Output.object({
-        schema: diffSummarySchema,
-        name: "diff_summary",
-        description: "Concise, grounded summary of a PR diff.",
-      }),
       abortSignal: input.signal,
     });
     addUsageTelemetry(result.usage as unknown);
 
-    return result.output;
+    const parsed = parseJsonObjectFromText(result.text ?? "");
+    const normalized = normalizeCandidateSummary(parsed);
+    if (normalized) {
+      return normalized;
+    }
+
+    console.warn(
+      "[diff-summarizer] reduce output invalid; using local merge",
+      {
+        chunkCount: input.chunkCount,
+        totalChunkCount: input.totalChunkCount,
+      },
+    );
+
+    return mergeSummariesLocally(input.summaries, {
+      coveredChunks: input.chunkCount,
+      totalChunks: input.totalChunkCount,
+    });
   } catch (error) {
     console.warn(
       "[diff-summarizer] reduce schema validation failed; using local merge",
@@ -906,7 +936,7 @@ export async function summarizeDiffWithDefaultModel(
   const modelName =
     input.modelName ?? process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash";
 
-  const model = createOpenCodeGoModel(modelName);
+  const model = createReviewModel(modelName);
 
   const normalizedFiles =
     input.files?.filter((file) => file.patch.trim().length > 0) ?? [];

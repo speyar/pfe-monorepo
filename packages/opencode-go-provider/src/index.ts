@@ -32,7 +32,6 @@ function createOpenCodeGoProvider(options?: CreateOpenCodeGoProviderOptions) {
       options?.baseURL ?? process.env.OPENCODEGO_BASE_URL ?? DEFAULT_BASE_URL,
     name: "opencode-go",
     headers: options?.headers,
-    supportsStructuredOutputs: true,
   });
 }
 
@@ -50,4 +49,56 @@ export function createOpenCodeGoModel(
     options?.model ?? modelId ?? process.env.OPENCODEGO_MODEL ?? DEFAULT_MODEL;
 
   return provider.chat(model) as unknown as LanguageModel;
+}
+
+const COPILOT_DEFAULT_BASE_URL = "https://api.githubcopilot.com";
+const COPILOT_DEFAULT_MODEL = "gpt-5.4-mini";
+
+function createCopilotProvider(options?: { apiKey?: string; baseURL?: string; headers?: Record<string, string> }) {
+  const apiKey =
+    options?.apiKey ??
+    process.env.COPILOT_GITHUB_TOKEN ??
+    process.env.GITHUB_TOKEN;
+
+  if (!apiKey) {
+    throw new Error(
+      "GitHub Copilot token is required. Set COPILOT_GITHUB_TOKEN or GITHUB_TOKEN env var.",
+    );
+  }
+
+  return createOpenaiCompatible({
+    apiKey,
+    baseURL: options?.baseURL ?? process.env.COPILOT_BASE_URL ?? COPILOT_DEFAULT_BASE_URL,
+    name: "github-copilot",
+    headers: options?.headers,
+  });
+}
+
+export function createCopilotModel(
+  modelId?: string,
+  options?: { apiKey?: string; baseURL?: string; model?: string; headers?: Record<string, string> },
+): LanguageModel {
+  const provider = createCopilotProvider({
+    apiKey: options?.apiKey,
+    baseURL: options?.baseURL,
+    headers: options?.headers,
+  });
+
+  const model =
+    options?.model ?? modelId ?? process.env.COPILOT_MODEL ?? COPILOT_DEFAULT_MODEL;
+
+  return provider.chat(model) as unknown as LanguageModel;
+}
+
+export function createReviewModel(
+  modelId?: string,
+  options?: { apiKey?: string; baseURL?: string; model?: string; headers?: Record<string, string> },
+): LanguageModel {
+  const provider = process.env.REVIEW_PROVIDER ?? "copilot";
+
+  if (provider === "opencode") {
+    return createOpenCodeGoModel(modelId, options);
+  }
+
+  return createCopilotModel(modelId, options);
 }

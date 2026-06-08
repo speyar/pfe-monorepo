@@ -127,6 +127,13 @@ Severity mapping — be precise, do not inflate:
 
 Rules:
 - Every finding must have: severity, file, line, quote, title, message
+- quote must be the EXACT verbatim text from the source or diff, copied character-for-character — never paraphrased, never reconstructed
+- suggestion must be a COMPLETE code snippet that replaces the quoted code, or omitted entirely
+- BAD suggestion: "lodash.debounce" (just a library name, not code)
+- BAD suggestion: "<span>" (meaningless fragment)
+- BAD suggestion: "add error handling" (prose, not code)
+- GOOD suggestion: "const debouncedSearch = useMemo(() => debounce(onSearch, 300), [onSearch]);"
+- If you cannot provide a concrete code fix, omit the suggestion field entirely
 - line and quote may be null only when the issue is structural and cannot be pinned to a specific line (e.g. a missing file, a missing test for a new path)
 - quote must be literal code from the diff or file — never paraphrased or reconstructed
 - title must name the specific problem: "Division by zero when func() returns 0" not "Possible Bug"

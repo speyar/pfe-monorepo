@@ -1,4 +1,4 @@
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
+import { createReviewModel } from "@pfe-monorepo/opencode-go-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runMechanicAgent } from "./mechanic-agent";
@@ -122,7 +122,7 @@ export async function runSentryFix(
   const modelName =
     options.modelName ?? process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash";
 
-  const model = createOpenCodeGoModel(modelName);
+  const model = createReviewModel(modelName);
 
   let githubClient;
   let token: string;

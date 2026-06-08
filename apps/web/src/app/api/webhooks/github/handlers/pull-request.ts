@@ -21,6 +21,28 @@ import {
 } from '../helpers'
 import type { PullRequestPayload } from '../types'
 
+type ReviewDedupeEntry = {
+  timestamp: number
+  promise: Promise<ReviewResult>
+}
+
+const activeReviews = new Map<string, ReviewDedupeEntry>()
+
+const REVIEW_DEDUPE_TTL_MS = 5 * 60 * 1000
+
+function getDedupeKey(installationId: number, owner: string, repo: string, pullNumber: number, headSha: string): string {
+  return `${installationId}:${owner}/${repo}:${pullNumber}:${headSha}`
+}
+
+function cleanStaleReviews(): void {
+  const now = Date.now()
+  for (const [key, entry] of activeReviews.entries()) {
+    if (now - entry.timestamp > REVIEW_DEDUPE_TTL_MS) {
+      activeReviews.delete(key)
+    }
+  }
+}
+
 type HandlePullRequestEventArgs = {
   payload: unknown
   deliveryId: string
@@ -552,6 +574,28 @@ export const handlePullRequestEvent = async ({
     return null
   }
 
+  const headSha = body.pull_request?.head?.sha
+
+  let dedupeKey: string | null = null
+
+  if (headSha) {
+    cleanStaleReviews()
+    dedupeKey = getDedupeKey(installationId, ownerRepo.owner, ownerRepo.repo, pullRequestNumber, headSha)
+    const existing = activeReviews.get(dedupeKey)
+    if (existing) {
+      console.info('[github-webhook] pull_request review already in progress, skipping duplicate', {
+        deliveryId,
+        action: body.action,
+        installationId,
+        owner: ownerRepo.owner,
+        repo: ownerRepo.repo,
+        pullRequestNumber,
+        headSha,
+      })
+      return null
+    }
+  }
+
   const [pullRequest, files] = await Promise.all([
     getPullRequest(installationId, {
       owner: ownerRepo.owner,
@@ -657,16 +701,32 @@ export const handlePullRequestEvent = async ({
       })
     : null
 
+  const reviewPromise = (async (): Promise<ReviewResult> => {
+    try {
+      const review: ReviewResult = await runPullRequestReview({
+        installationId,
+        owner: ownerRepo.owner,
+        repo: ownerRepo.repo,
+        headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
+        baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
+        initialDiff,
+        diffSummary: diffSummary ?? undefined,
+      })
+
+      return review
+    } finally {
+      if (dedupeKey) {
+        activeReviews.delete(dedupeKey)
+      }
+    }
+  })()
+
+  if (dedupeKey) {
+    activeReviews.set(dedupeKey, { timestamp: Date.now(), promise: reviewPromise })
+  }
+
   try {
-    const review: ReviewResult = await runPullRequestReview({
-      installationId,
-      owner: ownerRepo.owner,
-      repo: ownerRepo.repo,
-      headRef: body.pull_request?.head?.ref ?? pullRequest.headRef,
-      baseRef: body.pull_request?.base?.ref ?? pullRequest.baseRef,
-      initialDiff,
-      diffSummary: diffSummary ?? undefined,
-    })
+    const review: ReviewResult = await reviewPromise
 
     if (checkRun) {
       await updateCheckRun(installationId, {

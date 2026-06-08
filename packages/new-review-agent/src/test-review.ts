@@ -1,4 +1,4 @@
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
+import { createReviewModel } from "@pfe-monorepo/opencode-go-provider";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { runReviewAgent } from "./index";
@@ -16,7 +16,7 @@ async function main() {
     );
   }
 
-  const model = createOpenCodeGoModel(process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash", { apiKey });
+  const model = createReviewModel(process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash", { apiKey });
 
   // const client = await getGitHubClient(120638931);
   const client = await getGitHubClient(115597577);

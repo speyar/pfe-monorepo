@@ -1,46 +1,54 @@
-import { streamText, type LanguageModel } from "ai";
-import { reviewResultSchema } from "../schema/review-result";
+import { generateText, type LanguageModel } from "ai";
 import type { OrchestratorResult } from "../schema/review-result";
 import type { RunSubAgentOutput } from "../sub-agents/base";
 import { ORCHESTRATOR_SYSTEM_PROMPT } from "./orchestrator-prompt";
 import { addUsageTelemetry } from "../telemetry/usage-telemetry";
 
-function truncateText(value: string | undefined, maxLength: number): string {
-  if (!value) return "";
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength)}...`;
+interface MergeDecision {
+  keep: string;
+  dupes: string[];
 }
 
-function parseFindingsJson(text: string): {
-  findings: import("../schema/review-result").ReviewFinding[] | null;
-  reason: string;
-} {
+interface OrchestratorDecisions {
+  merges: MergeDecision[];
+  removals: string[];
+}
+
+function parseDecisionsJson(text: string): OrchestratorDecisions | null {
   const cleaned = text.trim();
-  if (!cleaned) return { findings: null, reason: "empty-text" };
+  if (!cleaned) return null;
 
-  const withoutFences = cleaned
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-
-  const jsonMatch = withoutFences.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return { findings: null, reason: "no-json-object-found" };
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
 
   try {
     const parsed = JSON.parse(jsonMatch[0]);
-    const validated = reviewResultSchema.safeParse(parsed);
-    if (!validated.success) {
-      const firstIssue = validated.error.issues[0];
-      return {
-        findings: null,
-        reason: `schema-parse-failed:${firstIssue?.path.join(".") ?? "unknown"}:${firstIssue?.message ?? "invalid"}`,
-      };
+    const merges: MergeDecision[] = [];
+    if (Array.isArray(parsed.merges)) {
+      for (const merge of parsed.merges) {
+        if (
+          merge &&
+          typeof merge.keep === "string" &&
+          Array.isArray(merge.dupes)
+        ) {
+          merges.push({
+            keep: merge.keep,
+            dupes: merge.dupes.filter(
+              (d: unknown) => typeof d === "string",
+            ),
+          });
+        }
+      }
     }
-    return { findings: validated.data.findings, reason: "ok" };
-  } catch (jsonError) {
-    const message = jsonError instanceof Error ? jsonError.message : String(jsonError);
-    return { findings: null, reason: `json-parse-failed:${message.split("\n")[0]}` };
+    const removals: string[] = [];
+    if (Array.isArray(parsed.removals)) {
+      for (const r of parsed.removals) {
+        if (typeof r === "string") removals.push(r);
+      }
+    }
+    return { merges, removals };
+  } catch {
+    return null;
   }
 }
 
@@ -66,39 +74,54 @@ function deterministicDeduplicate(
   });
 }
 
-function buildOrchestratorPrompt(results: RunSubAgentOutput[]): string {
-  const agentsText = results
-    .map((result) => {
-      const findingsText = result.findings
-        .map(
-          (finding) =>
-            `- [${finding.severity}] ${finding.file}${finding.line ? `:${finding.line}` : ""}: ${finding.title}
-  Message: ${truncateText(finding.message, 600)}
-  Quote: ${truncateText(finding.quote, 200)}
-  Suggestion: ${truncateText(finding.suggestion, 400)}`,
-        )
-        .join("\n");
+function truncateForPrompt(
+  value: string | undefined,
+  maxLength: number,
+): string {
+  if (!value) return "";
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength)}...`;
+}
 
-      return [
-        `### ${result.agentId}`,
-        `Summary: ${result.summary}`,
-        `Total: ${result.findings.length} findings`,
-        findingsText || "(no findings)",
-      ].join("\n");
-    })
-    .join("\n\n");
-
+function buildDecisionPrompt(findingsList: string): string {
   return [
-    "Sub-agent findings:",
-    agentsText,
+    "Findings to review:",
     "",
-    "Merge findings that describe the EXACT SAME issue (same file, same root cause).",
-    "Sort by severity (P0 first).",
-    "Preserve ALL original text exactly — do NOT rewrite, reformat, or improve anything.",
-    'Return ONLY JSON object with a single "findings" key.',
-    "No markdown, no code fences.",
+    findingsList,
+    "",
+    "Which findings describe the EXACT SAME issue (same file, same root cause)?",
+    "",
+    'Return ONLY this JSON (no markdown, no fences):',
+    '{ "merges": [{ "keep": "<id>", "dupes": ["<id>", ...] }], "removals": ["<id>", ...] }',
+    "",
+    '- merges: group duplicate findings. "keep" = preserve this one, "dupes" = drop these.',
+    "- removals: drop these findings as wrong or not actionable.",
+    '- If no merges/removals needed: { "merges": [], "removals": [] }',
+    "- Only merge findings about the EXACT SAME root cause, not just the same file.",
+    "- When in doubt, do NOT merge. Keeping separate findings is always safe.",
   ].join("\n");
 }
+
+type SeverityLevel = "P0" | "P1" | "P2" | "P3" | "P4";
+
+interface FindingWithId {
+  id: string;
+  severity: SeverityLevel;
+  file?: string;
+  line?: number;
+  quote?: string;
+  title: string;
+  message: string;
+  suggestion?: string;
+}
+
+const SEVERITY_ORDER: Record<string, number> = {
+  P0: 0,
+  P1: 1,
+  P2: 2,
+  P3: 3,
+  P4: 4,
+};
 
 export async function runOrchestrator(input: {
   model: LanguageModel;
@@ -107,86 +130,163 @@ export async function runOrchestrator(input: {
 }): Promise<OrchestratorResult> {
   const dedupedResults = deterministicDeduplicate(input.results);
 
-  const totalFindings = dedupedResults.reduce((sum, r) => sum + r.findings.length, 0);
+  const totalFindings = dedupedResults.reduce(
+    (sum, r) => sum + r.findings.length,
+    0,
+  );
 
   if (totalFindings === 0) {
-    console.log("[orchestrator] no findings from any sub-agent, skipping LLM merge");
+    console.log(
+      "[orchestrator] no findings from any sub-agent, skipping LLM merge",
+    );
     return {
       findings: [],
-      agentSummaries: dedupedResults.map((r) => ({ agentId: r.agentId, summary: r.summary })),
+      agentSummaries: dedupedResults.map((r) => ({
+        agentId: r.agentId,
+        summary: r.summary,
+      })),
     };
   }
 
+  const allFindings: FindingWithId[] = [];
+  let idCounter = 0;
+  for (const result of dedupedResults) {
+    for (const finding of result.findings) {
+      allFindings.push({
+        id: `f${idCounter}`,
+        severity: finding.severity,
+        file: finding.file,
+        line: finding.line,
+        quote: finding.quote,
+        title: finding.title,
+        message: finding.message,
+        suggestion: finding.suggestion,
+      });
+      idCounter++;
+    }
+  }
+
+  const findingsById = new Map(allFindings.map((f) => [f.id, f]));
+
+  const findingsList = allFindings
+    .map((f) => {
+      const location = f.file
+        ? `${f.file}${f.line ? `:${f.line}` : ""}`
+        : "unknown";
+      const msg = truncateForPrompt(f.message, 200);
+      const quote = f.quote
+        ? `\n     quote: ${truncateForPrompt(f.quote, 100)}`
+        : "";
+      return `[${f.id}] [${f.severity}] ${location} \u2014 ${f.title}\n     ${msg}${quote}`;
+    })
+    .join("\n\n");
+
+  const prompt = buildDecisionPrompt(findingsList);
   const attemptStart = Date.now();
-  const prompt = buildOrchestratorPrompt(dedupedResults);
-  const modelLabel = (input.model as { modelId?: string }).modelId ?? "unknown";
+  const modelLabel =
+    (input.model as { modelId?: string }).modelId ?? "unknown";
 
   console.log(
-    `[orchestrator] calling ${modelLabel} — prompt=${prompt.length}chars ${totalFindings}findings from ${dedupedResults.length}agents`,
+    `[orchestrator] calling ${modelLabel} \u2014 ${allFindings.length} findings from ${dedupedResults.length} agents (decision mode, prompt=${prompt.length}chars)`,
   );
 
   try {
-    const streamResp = streamText({
+    const result = await generateText({
       model: input.model,
       system: ORCHESTRATOR_SYSTEM_PROMPT,
       prompt,
       abortSignal: input.signal,
     });
-
-    let fullText = "";
-    let chunkCount = 0;
-    const firstTokenWait = Date.now();
-    let ttfbMs = 0;
-
-    for await (const chunk of streamResp.textStream) {
-      if (chunkCount === 0) {
-        ttfbMs = Date.now() - firstTokenWait;
-        console.log(`[orchestrator] 🔴 ttfb=${ttfbMs}ms`);
-      }
-      if (chunk.length > 0) {
-        process.stdout.write(chunk);
-      }
-      fullText += chunk;
-      chunkCount++;
-    }
+    addUsageTelemetry(result.usage as unknown);
 
     const totalMs = Date.now() - attemptStart;
-    const usage = await streamResp.usage;
-    const finishReason = await streamResp.finishReason;
-    addUsageTelemetry(usage);
-
+    const resultText = result.text ?? "";
     console.log(
-      `\n[orchestrator] stream done — ${totalMs}ms ttfb=${ttfbMs}ms chunks=${chunkCount} textLen=${fullText.length} finish=${JSON.stringify(finishReason)}`,
+      `[orchestrator] decision done \u2014 ${totalMs}ms textLen=${resultText.length}`,
     );
 
-    const parsed = parseFindingsJson(fullText);
-    console.log(`[orchestrator] parseResult=${parsed.reason}`);
+    const decisions = parseDecisionsJson(resultText);
+    if (decisions) {
+      const mergedIds = new Set<string>();
+      const removedIds = new Set<string>();
 
-    if (parsed.findings) {
-      console.log(`[orchestrator] merge complete — ${parsed.findings.length} findings (${totalMs}ms)`);
+      for (const removal of decisions.removals) {
+        if (findingsById.has(removal)) {
+          removedIds.add(removal);
+        }
+      }
+
+      for (const merge of decisions.merges) {
+        if (!findingsById.has(merge.keep)) continue;
+        for (const dupeId of merge.dupes) {
+          if (findingsById.has(dupeId)) {
+            mergedIds.add(dupeId);
+          }
+        }
+      }
+
+      const finalFindings = allFindings
+        .filter((f) => !mergedIds.has(f.id) && !removedIds.has(f.id))
+        .map(({ severity, file, line, quote, title, message, suggestion }) => ({
+          severity,
+          file,
+          line,
+          quote,
+          title,
+          message,
+          suggestion,
+        }));
+
+      finalFindings.sort(
+        (a, b) =>
+          (SEVERITY_ORDER[a.severity] ?? 5) -
+          (SEVERITY_ORDER[b.severity] ?? 5),
+      );
+
+      console.log(
+        `[orchestrator] merge complete \u2014 ${finalFindings.length} findings (${decisions.merges.length} merges, ${decisions.removals.length} removals, ${totalMs}ms)`,
+      );
+
       return {
-        findings: parsed.findings,
-        agentSummaries: dedupedResults.map((r) => ({ agentId: r.agentId, summary: r.summary })),
+        findings: finalFindings,
+        agentSummaries: dedupedResults.map((r) => ({
+          agentId: r.agentId,
+          summary: r.summary,
+        })),
       };
     }
 
-    console.warn("[orchestrator] LLM output not parseable, using deterministic fallback");
+    console.warn(
+      "[orchestrator] could not parse decisions, using deterministic sort",
+    );
   } catch (error) {
     const elapsed = Date.now() - attemptStart;
     console.warn(
-      `[orchestrator] LLM merge failed after ${elapsed}ms, using deterministic fallback`,
+      `[orchestrator] LLM failed after ${elapsed}ms, using deterministic sort`,
       { error: error instanceof Error ? error.message : String(error) },
     );
   }
 
-  const allFindings = dedupedResults.flatMap((r) => r.findings);
-  allFindings.sort((a, b) => {
-    const severityOrder: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3, P4: 4 };
-    return (severityOrder[a.severity] ?? 5) - (severityOrder[b.severity] ?? 5);
-  });
+  const allFindingsSorted = [...allFindings].sort(
+    (a, b) =>
+      (SEVERITY_ORDER[a.severity] ?? 5) - (SEVERITY_ORDER[b.severity] ?? 5),
+  );
 
   return {
-    findings: allFindings,
-    agentSummaries: dedupedResults.map((r) => ({ agentId: r.agentId, summary: r.summary })),
+    findings: allFindingsSorted.map(
+      ({ severity, file, line, quote, title, message, suggestion }) => ({
+        severity,
+        file,
+        line,
+        quote,
+        title,
+        message,
+        suggestion,
+      }),
+    ),
+    agentSummaries: dedupedResults.map((r) => ({
+      agentId: r.agentId,
+      summary: r.summary,
+    })),
   };
 }

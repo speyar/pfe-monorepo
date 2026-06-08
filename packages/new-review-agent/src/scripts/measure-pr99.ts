@@ -1,4 +1,4 @@
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
+import { createReviewModel } from "@pfe-monorepo/opencode-go-provider";
 import { getGitHubClient } from "@pfe-monorepo/github-api";
 import { SandboxManager, VercelSandboxProvider } from "@packages/sandbox";
 import { runReviewAgent } from "../review-agent";
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
   const prData = await fetchPullRequestDiff();
   resetUsageTelemetry();
 
-  const model = createOpenCodeGoModel(
+  const model = createReviewModel(
     process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash",
   );
 

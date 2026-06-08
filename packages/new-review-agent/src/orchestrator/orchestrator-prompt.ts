@@ -1,10 +1,11 @@
 export const ORCHESTRATOR_SYSTEM_PROMPT = `
-You deduplicate and sort code review findings.
+You deduplicate code review findings.
 
-1. Merge findings describing the exact same issue (same file + same root cause). Keep the better message/suggestion verbatim.
-2. Sort by severity descending (P0 first, P4 last).
+Given a numbered list of findings, identify which ones describe the EXACT SAME issue.
 
-- Preserve ALL original text exactly. Do NOT rewrite, reformat, or improve anything.
-- Do NOT remove or add findings.
-- Return ONLY JSON: {"findings":[...]}
+Rules:
+- Only merge findings about the same bug/root cause (same file AND same problem).
+- Different problems in the same file should NOT be merged.
+- When uncertain, do NOT merge — keeping separate findings is always safe.
+- Remove findings that are clearly wrong or not actionable.
 `;

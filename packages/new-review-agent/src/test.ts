@@ -1,4 +1,4 @@
-import { createOpenCodeGoModel } from "@pfe-monorepo/opencode-go-provider";
+import { createReviewModel } from "@pfe-monorepo/opencode-go-provider";
 import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
 
@@ -8,7 +8,7 @@ const apiKey =
   process.env.GITHUB_TOKEN ??
   process.env.OPENAI_API_KEY;
 
-const model = createOpenCodeGoModel(process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash", { apiKey });
+const model = createReviewModel(process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash", { apiKey });
 
 const repeatSentence = tool({
   description: "Repeat the given sentence",
