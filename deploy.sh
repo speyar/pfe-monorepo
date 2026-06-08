@@ -19,7 +19,7 @@ cd "$APP_DIR"
 node /var/www/falcon/node_modules/.bin/prisma generate
 
 echo "==> Syncing Prisma schema..."
-node /var/www/falcon/node_modules/.bin/prisma db push --skip-generate
+node /var/www/falcon/node_modules/.bin/prisma db push
 
 echo "==> Building..."
 cd "$DEPLOY_DIR"
