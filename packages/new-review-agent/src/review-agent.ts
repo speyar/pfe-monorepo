@@ -434,20 +434,12 @@ IMMEDIATE ACTION REQUIRED:
       if (step.text) {
         finalText = step.text;
       }
-      const toolNames =
-        step.toolCalls.map((toolCall) => toolCall.toolName).join(",") || "-";
-      console.log(
-        `[fallback:step ${step.stepNumber}] finish=${JSON.stringify(step.finishReason)} rawFinish=${JSON.stringify(step.rawFinishReason)} toolCalls=${step.toolCalls.length} toolNames=${toolNames} toolSteps=${toolStepCount}/${minToolSteps} textLen=${(step.text ?? "").length}`,
-      );
     },
   });
   addUsageTelemetry(generation.usage as unknown);
 
   const text = finalText || generation.text || "";
   const parsed = parseJsonResponseWithReason(text);
-  console.log(
-    `[fallback] done — steps=${generation.steps.length} finish=${JSON.stringify(generation.finishReason)} rawFinish=${JSON.stringify(generation.rawFinishReason)} warnings=${generation.warnings?.length ?? 0} toolSteps=${toolStepCount}/${minToolSteps} textLen=${text.length} parseReason=${parsed.reason}`,
-  );
 
   return capFindings(parsed.output, options.maxFindings ?? 200);
 }

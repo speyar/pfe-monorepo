@@ -79,9 +79,43 @@ function extractCodeFromSuggestion(text: string): string | null {
   return null
 }
 
-function formatSuggestionSection(suggestion: string): string {
+function normalizeWhitespace(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function shouldRejectSuggestion(suggestion: string, quote?: string): boolean {
   const normalized = suggestion.trim()
   if (!normalized) {
+    return true
+  }
+
+  if (normalized.length < 10) {
+    return true
+  }
+
+  if (quote && normalizeWhitespace(normalized) === normalizeWhitespace(quote)) {
+    return true
+  }
+
+  const startsWithSentence = /^[A-Z][a-z]+\s/.test(normalized)
+  const isProse =
+    startsWithSentence &&
+    !/[;{}()\[\]]/.test(normalized) &&
+    normalized.split(/\s+/).length >= 4
+  if (isProse) {
+    return true
+  }
+
+  return false
+}
+
+function formatSuggestionSection(suggestion: string, quote?: string): string {
+  const normalized = suggestion.trim()
+  if (!normalized) {
+    return ''
+  }
+
+  if (shouldRejectSuggestion(normalized, quote)) {
     return ''
   }
 
@@ -140,9 +174,10 @@ export const getOwnerRepo = (
 
 export const toMarkdownReview = (review: ReviewResult): string => {
   const findingLines = review.findings.map((finding) => {
-    const suggestionLine = finding.suggestion ? formatSuggestionSection(finding.suggestion) : ''
+    const severityBadge = `**[${finding.severity}]**`
+    const suggestionLine = finding.suggestion ? formatSuggestionSection(finding.suggestion, finding.quote) : ''
 
-    return [finding.message, suggestionLine].filter(Boolean).join('\n\n')
+    return [[severityBadge, finding.message].join(' '), suggestionLine].filter(Boolean).join('\n\n')
   })
 
   const agentSummaryLines = review.agentSummaries?.length
@@ -154,7 +189,7 @@ export const toMarkdownReview = (review: ReviewResult): string => {
 
   const severityLegend = [
     '---',
-    '> Severity: **P0** Data leak | **P1** Access control | **P2** Logic bug | **P3** Performance | **P4** Style',
+    '> **P0** Production-breaking | **P1** Behavioral regression | **P2** Latent risk | **P3** Operational gap | **P4** Hygiene waste',
     '',
   ].join('\n')
 

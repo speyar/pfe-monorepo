@@ -201,9 +201,6 @@ export async function runOrchestrator(input: {
 
     const totalMs = Date.now() - attemptStart;
     const resultText = result.text ?? "";
-    console.log(
-      `[orchestrator] decision done \u2014 ${totalMs}ms textLen=${resultText.length}`,
-    );
 
     const decisions = parseDecisionsJson(resultText);
     if (decisions) {

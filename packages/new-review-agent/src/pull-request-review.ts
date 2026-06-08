@@ -194,7 +194,6 @@ export async function runPullRequestReview(
     const graphPath = `${workingDir}/codebase-graph.json`;
     let resolvedGraphPath: string | undefined;
 
-    console.log("Generating codebase graph...");
     try {
       const graphResult = await generateCodebaseGraph(manager, sandbox.id, {
         rootPath: workingDir,
@@ -202,9 +201,6 @@ export async function runPullRequestReview(
         pretty: true,
       });
       resolvedGraphPath = graphResult.graphPath;
-      console.log(
-        `Codebase graph generated — packages=${graphResult.packageCount}, files=${graphResult.fileCount}, nodes=${graphResult.nodeCount}, edges=${graphResult.edgeCount}, elapsedMs=${graphResult.elapsedMs}`,
-      );
     } catch (error) {
       console.warn(
         "Codebase graph generation failed; continuing without graph context",
@@ -239,8 +235,8 @@ export async function runPullRequestReview(
       agentSummaries: review.agentSummaries,
     };
   } catch (error) {
-    console.error("Error during pull request review", {
-      error,
+    console.error("[review] pull request review failed", {
+      error: error instanceof Error ? error.message : String(error),
     });
 
     return {

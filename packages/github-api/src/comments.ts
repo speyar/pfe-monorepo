@@ -77,10 +77,6 @@ export const createPullRequestReviewComment = async (
       side: input.side,
     });
 
-    console.log("createPullRequestReviewComment response", {
-      data: response.data,
-    });
-
     return {
       commentId: response.data.id,
       body: response.data.body ?? "",

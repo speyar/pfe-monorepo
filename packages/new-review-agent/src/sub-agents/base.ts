@@ -70,13 +70,6 @@ function parseJsonResponseWithReason(text: string): {
     .filter((r): r is { success: true; data: SubAgentResult["findings"][number] } => r.success)
     .map((r) => r.data);
 
-  const dropped = rawFindings.length - valid.length;
-  if (dropped > 0) {
-    console.log(
-      `[parseJson] dropped ${dropped}/${rawFindings.length} invalid findings`,
-    );
-  }
-
   return {
     output: { findings: valid },
     reason: valid.length > 0 ? "ok" : "all-findings-invalid",
@@ -124,9 +117,6 @@ async function generateWithFallback(input: {
 
     const text = result.text ?? "";
     const parsed = parseJsonResponseWithReason(text);
-    console.log(
-      `[generateWithFallback] done — ${parsed.output?.findings?.length ?? 0} findings (${parsed.reason})`,
-    );
 
     if (parsed.output && parsed.output.findings.length > 0) {
       return { output: parsed.output, text };
@@ -135,13 +125,6 @@ async function generateWithFallback(input: {
     return { output: null, text };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const name =
-      typeof error === "object" && error !== null && "name" in error
-        ? String((error as { name?: unknown }).name)
-        : "UnknownError";
-    console.log(
-      `[generateWithFallback] fallback generation failed: ${name}: ${message}`,
-    );
     return { output: null, text: "" };
   }
 }
@@ -242,11 +225,6 @@ Return ONLY this JSON object, nothing else.`,
         if (step.text) {
           finalText += step.text;
         }
-        const toolNames =
-          step.toolCalls.map((toolCall) => toolCall.toolName).join(",") || "-";
-        console.log(
-          `[${input.agentId}:step ${step.stepNumber}] finish=${JSON.stringify(step.finishReason)} rawFinish=${JSON.stringify(step.rawFinishReason)} toolCalls=${step.toolCalls.length} toolNames=${toolNames} toolSteps=${toolStepCount}/${minToolSteps} textLen=${(step.text ?? "").length}`,
-        );
       },
     });
     addUsageTelemetry(generation.usage as unknown);
@@ -255,24 +233,13 @@ Return ONLY this JSON object, nothing else.`,
     const parsed = parseJsonResponseWithReason(text);
     const parsedOutput = parsed.output;
 
-    console.log(
-      `[${input.agentId}] primary done — steps=${generation.steps.length} finish=${JSON.stringify(generation.finishReason)} rawFinish=${JSON.stringify(generation.rawFinishReason)} warnings=${generation.warnings?.length ?? 0} toolSteps=${toolStepCount}/${minToolSteps} textLen=${text.length} parseReason=${parsed.reason} textPreview=${JSON.stringify(text.length > 300 ? text.slice(0, 300) + "..." : text)}`,
-    );
-
     if (parsedOutput && Array.isArray(parsedOutput.findings)) {
-      console.log(
-        `[${input.agentId}] completed — ${parsedOutput.findings.length} findings`,
-      );
       return {
         agentId: input.agentId,
         findings: parsedOutput.findings,
         summary: `${input.agentId} review found ${parsedOutput.findings.length} issues.`,
       };
     }
-
-    console.log(
-      `[${input.agentId}] primary output not parsable, trying fallback generation`,
-    );
 
     const fallback = await generateWithFallback({
       model: input.model,
@@ -285,9 +252,6 @@ Return ONLY this JSON object, nothing else.`,
     });
 
     if (fallback.output && Array.isArray(fallback.output.findings)) {
-      console.log(
-        `[${input.agentId}] fallback completed — ${fallback.output.findings.length} findings`,
-      );
       return {
         agentId: input.agentId,
         findings: fallback.output.findings,
@@ -315,9 +279,6 @@ Return ONLY this JSON object, nothing else.`,
     });
 
     if (fallback.output && Array.isArray(fallback.output.findings)) {
-      console.log(
-        `[${input.agentId}] fallback completed after error — ${fallback.output.findings.length} findings`,
-      );
       return {
         agentId: input.agentId,
         findings: fallback.output.findings,

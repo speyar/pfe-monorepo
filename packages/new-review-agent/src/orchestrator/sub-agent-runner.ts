@@ -50,7 +50,6 @@ async function runSingleSubAgent(
   input: SubAgentRunnerInput,
 ): Promise<RunSubAgentOutput> {
   const startedAt = Date.now();
-  console.log(`[sub-agent-runner] starting ${definition.agentId}`);
 
   const agentModel = input.agentModelOverrides?.[definition.agentId] ?? input.model;
 

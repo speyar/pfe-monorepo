@@ -161,9 +161,43 @@ function extractCodeFromSuggestion(text: string): string | null {
   return null
 }
 
-function formatSuggestionSection(suggestion: string): string {
+function normalizeWhitespace(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function shouldRejectSuggestion(suggestion: string, quote?: string): boolean {
   const normalized = suggestion.trim()
   if (!normalized) {
+    return true
+  }
+
+  if (normalized.length < 10) {
+    return true
+  }
+
+  if (quote && normalizeWhitespace(normalized) === normalizeWhitespace(quote)) {
+    return true
+  }
+
+  const startsWithSentence = /^[A-Z][a-z]+\s/.test(normalized)
+  const isProse =
+    startsWithSentence &&
+    !/[;{}()\[\]]/.test(normalized) &&
+    normalized.split(/\s+/).length >= 4
+  if (isProse) {
+    return true
+  }
+
+  return false
+}
+
+function formatSuggestionSection(suggestion: string, quote?: string): string {
+  const normalized = suggestion.trim()
+  if (!normalized) {
+    return ''
+  }
+
+  if (shouldRejectSuggestion(normalized, quote)) {
     return ''
   }
 
@@ -396,9 +430,10 @@ function buildSnippet(sideMap: Map<number, string>, targetLine: number): string[
 }
 
 function buildInlineCommentBody(finding: ReviewFinding, target: InlineTarget): string {
-  const suggestionSection = finding.suggestion ? formatSuggestionSection(finding.suggestion) : ''
+  const severityBadge = `**[${finding.severity}]**`
+  const suggestionSection = finding.suggestion ? formatSuggestionSection(finding.suggestion, finding.quote) : ''
 
-  return [finding.message, suggestionSection].filter(Boolean).join('\n\n')
+  return [[severityBadge, finding.message].join(' '), suggestionSection].filter(Boolean).join('\n\n')
 }
 
 function scoreInlineConfidence(finding: ReviewFinding, target: InlineTarget): number {

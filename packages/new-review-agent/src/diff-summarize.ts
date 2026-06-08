@@ -545,13 +545,6 @@ async function orchestratorMerge(input: {
     )
     .join("\n");
 
-  console.log("[diff-summarizer] orchestrator merge start", {
-    partialSummaries: input.summaries.length,
-    totalBatches: input.totalBatches,
-    coveredFiles,
-    totalFiles: input.totalFiles,
-  });
-
   const mergeSystem = [
     "You merge partial PR diff summaries produced by parallel subagents.",
     "Keep only high-signal changes and avoid duplicates.",
@@ -584,15 +577,6 @@ async function orchestratorMerge(input: {
 
     const parsed = parseJsonObjectFromText(result.text ?? "");
     const merged = normalizeCandidateSummary(parsed);
-
-    console.log("[diff-summarizer] orchestrator merge finish", {
-      partialSummaries: input.summaries.length,
-      totalBatches: input.totalBatches,
-      intent: merged?.intent,
-      keyChanges: merged?.keyChanges,
-      riskPoints: merged?.riskPoints,
-      evidenceCount: merged?.evidence.length,
-    });
 
     if (merged) {
       return merged;
@@ -658,13 +642,6 @@ async function summarizeDiffByFileBatches(input: {
 
   const batches = groupFilesIntoBatches(normalizedFiles, maxBatchTokens);
 
-  console.log("[diff-summarizer] subagent orchestration planned", {
-    files: normalizedFiles.length,
-    batches: batches.length,
-    concurrency,
-    maxBatchTokens,
-  });
-
   const batchResults = await mapWithConcurrency({
     items: batches,
     concurrency,
@@ -672,11 +649,6 @@ async function summarizeDiffByFileBatches(input: {
       const uniquePaths = Array.from(
         new Set(batch.entries.map((entry) => entry.path)),
       );
-      console.log("[diff-summarizer][subagent] start", {
-        batchId: batch.id,
-        fileCount: uniquePaths.length,
-        estimatedTokens: batch.estimatedTokens,
-      });
 
       try {
         const result = await summarizeFileBatch({
@@ -685,21 +657,10 @@ async function summarizeDiffByFileBatches(input: {
           signal: input.signal,
         });
 
-        console.log("[diff-summarizer][subagent] finish", {
-          batchId: batch.id,
-          fileCount: result.filePaths.length,
-          files: result.filePaths,
-          intent: result.summary.intent,
-          keyChanges: result.summary.keyChanges,
-          riskPoints: result.summary.riskPoints,
-          evidenceCount: result.summary.evidence.length,
-        });
-
         return result;
       } catch (error) {
-        console.warn("[diff-summarizer][subagent] failed", {
+        console.warn("[diff-summarizer] batch failed", {
           batchId: batch.id,
-          fileCount: uniquePaths.length,
           error: error instanceof Error ? error.message : String(error),
         });
         return null;
@@ -710,12 +671,6 @@ async function summarizeDiffByFileBatches(input: {
   const successfulResults = batchResults.filter(
     (result): result is NonNullable<typeof result> => result !== null,
   );
-
-  console.log("[diff-summarizer] subagent orchestration completed", {
-    totalBatches: batches.length,
-    successfulBatches: successfulResults.length,
-    failedBatches: batches.length - successfulResults.length,
-  });
 
   if (successfulResults.length === 0) {
     return null;
@@ -822,14 +777,6 @@ async function summarizeDiffChunked(
   const sections = toSections(diff, maxChunkTokens);
   const allChunks = packSectionsIntoChunks(sections, maxChunkTokens);
   const selectedChunks = allChunks.slice(0, maxChunks);
-
-  console.log("[diff-summarizer] chunked mode", {
-    totalSections: sections.length,
-    totalChunks: allChunks.length,
-    selectedChunks: selectedChunks.length,
-    maxChunks,
-    maxChunkTokens,
-  });
 
   const partialSummaries: DiffSummary[] = [];
   for (const chunk of selectedChunks) {
@@ -952,12 +899,6 @@ export async function summarizeDiffWithDefaultModel(
     );
 
     if (estimatedTokensFromFiles >= fileBatchTriggerTokens) {
-      console.log("[diff-summarizer] switching to subagent orchestrator mode", {
-        estimatedTokens: estimatedTokensFromFiles,
-        fileBatchTriggerTokens,
-        files: normalizedFiles.length,
-      });
-
       return summarizeDiffByFileBatches({
         model,
         files: normalizedFiles,
@@ -974,11 +915,6 @@ export async function summarizeDiffWithDefaultModel(
   );
 
   if (estimatedTokens >= chunkTriggerTokens) {
-    console.log("[diff-summarizer] switching to chunked mode", {
-      estimatedTokens,
-      chunkTriggerTokens,
-    });
-
     return summarizeDiffChunked({
       model,
       diff,
