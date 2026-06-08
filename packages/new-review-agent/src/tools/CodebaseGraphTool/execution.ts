@@ -479,16 +479,10 @@ export function createCodebaseGraphExecutor(
         },
       });
 
-      console.log(
-        `[codebaseGraph] query=${input.query} name=${input.name ?? ""} filePath=${input.filePath ?? ""} elapsedMs=${elapsedMs} resultChars=${result.length}`,
-      );
-
       return truncated;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.log(
-        `[codebaseGraph] ERROR query=${input.query} error=${message}`,
-      );
+      console.warn("[codebaseGraph] error", { query: input.query, error: message });
       return `Error querying codebase graph: ${message}`;
     }
   };

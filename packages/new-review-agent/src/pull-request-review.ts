@@ -149,7 +149,7 @@ export async function runPullRequestReview(
     agentModelOverrides[agentId] = createReviewModel(mName);
   }
   if (!agentModelOverrides["orchestrator"]) {
-    agentModelOverrides["orchestrator"] = createReviewModel("deepseek-v4-flash");
+    agentModelOverrides["orchestrator"] = createReviewModel("kimi-k2.6");
   }
 
   const providerOptions = {

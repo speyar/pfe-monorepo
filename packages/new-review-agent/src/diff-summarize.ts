@@ -899,11 +899,23 @@ export async function summarizeDiffWithDefaultModel(
     );
 
     if (estimatedTokensFromFiles >= fileBatchTriggerTokens) {
-      return summarizeDiffByFileBatches({
+      console.log("[summarizer] starting (subagent mode)", {
+        files: normalizedFiles.length,
+        tokens: estimatedTokensFromFiles,
+      });
+
+      const result = await summarizeDiffByFileBatches({
         model,
         files: normalizedFiles,
         signal: input.signal,
       });
+
+      console.log("[summarizer] completed", {
+        intent: result?.intent?.slice(0, 80),
+        keyChanges: result?.keyChanges?.length ?? 0,
+      });
+
+      return result;
     }
   }
 
@@ -915,16 +927,38 @@ export async function summarizeDiffWithDefaultModel(
   );
 
   if (estimatedTokens >= chunkTriggerTokens) {
-    return summarizeDiffChunked({
+    console.log("[summarizer] starting (chunked mode)", {
+      tokens: estimatedTokens,
+    });
+
+    const result = await summarizeDiffChunked({
       model,
       diff,
       signal: input.signal,
     });
+
+    console.log("[summarizer] completed", {
+      intent: result?.intent?.slice(0, 80),
+      keyChanges: result?.keyChanges?.length ?? 0,
+    });
+
+    return result;
   }
 
-  return summarizeDiff({
+  console.log("[summarizer] starting (simple mode)", {
+    tokens: estimatedTokens,
+  });
+
+  const result = await summarizeDiff({
     model,
     diff,
     signal: input.signal,
   });
+
+  console.log("[summarizer] completed", {
+    intent: result?.intent?.slice(0, 80),
+    keyChanges: result?.keyChanges?.length ?? 0,
+  });
+
+  return result;
 }
