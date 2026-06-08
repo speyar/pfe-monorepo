@@ -1,5 +1,5 @@
 import { generateText, type LanguageModel, type Tool } from "ai";
-import { orchestratorResultSchema } from "../schema/review-result";
+import { reviewResultSchema } from "../schema/review-result";
 import type { OrchestratorResult } from "../schema/review-result";
 import type { RunSubAgentOutput } from "../sub-agents/base";
 import type { SharedContext } from "./shared-context";
@@ -16,13 +16,13 @@ function truncateText(value: string | undefined, maxLength: number): string {
   return `${value.slice(0, maxLength)}...`;
 }
 
-function parseOrchestratorJsonWithReason(text: string): {
-  output: OrchestratorResult | null;
+function parseFindingsJson(text: string): {
+  findings: import("../schema/review-result").ReviewFinding[] | null;
   reason: string;
 } {
   const cleaned = text.trim();
   if (!cleaned) {
-    return { output: null, reason: "empty-text" };
+    return { findings: null, reason: "empty-text" };
   }
 
   const withoutFences = cleaned
@@ -33,26 +33,26 @@ function parseOrchestratorJsonWithReason(text: string): {
 
   const jsonMatch = withoutFences.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    return { output: null, reason: "no-json-object-found" };
+    return { findings: null, reason: "no-json-object-found" };
   }
 
   try {
     const parsed = JSON.parse(jsonMatch[0]);
-    const validated = orchestratorResultSchema.safeParse(parsed);
+    const validated = reviewResultSchema.safeParse(parsed);
     if (!validated.success) {
       const firstIssue = validated.error.issues[0];
       return {
-        output: null,
+        findings: null,
         reason: `schema-parse-failed:${firstIssue?.path.join(".") ?? "unknown"}:${firstIssue?.message ?? "invalid"}`,
       };
     }
 
-    return { output: validated.data, reason: "ok" };
+    return { findings: validated.data.findings, reason: "ok" };
   } catch (jsonError) {
     const message =
       jsonError instanceof Error ? jsonError.message : String(jsonError);
     return {
-      output: null,
+      findings: null,
       reason: `json-parse-failed:${message.split("\n")[0]}`,
     };
   }
@@ -125,9 +125,11 @@ function buildOrchestratorPrompt(input: {
     "Sub-agent results (ALL findings, NOT truncated):",
     agentsText,
     "",
-    "Refine these findings. Merge duplicates, fix severities, improve messages.",
-    "Add cross-cutting findings if you see higher-order issues across agents.",
-    'Return ONLY JSON object with keys "findings" and "agentSummaries".',
+    "Deduplicate and sort these findings.",
+    "Merge findings that describe the EXACT SAME issue (same file, same root cause).",
+    "Sort by severity (P0 first).",
+    "Preserve ALL original text exactly — do NOT rewrite, reformat, or improve anything.",
+    'Return ONLY JSON object with a single "findings" key.',
     "Do not return markdown or code fences.",
   ].join("\n");
 }
@@ -175,7 +177,7 @@ export async function runOrchestrator(input: {
           basePrompt,
           "",
           "Your previous attempt failed to parse. Return ONLY valid JSON.",
-          'JSON shape: {"findings":[...],"agentSummaries":[{"agentId":"...","summary":"..."}]}',
+          'JSON shape: {"findings":[...]}',
         ].join("\n"),
         [
           basePrompt,
@@ -183,7 +185,7 @@ export async function runOrchestrator(input: {
           "CRITICAL: Your output MUST be parseable JSON.",
           "No markdown fences. No trailing commas. No comments.",
           "Use strict JSON only.",
-          '{"findings":[],"agentSummaries":[]}',
+          '{"findings":[]}',
         ].join("\n"),
       ];
 
@@ -206,18 +208,24 @@ export async function runOrchestrator(input: {
       addUsageTelemetry((generation as { usage?: unknown }).usage);
 
       const text = generation.text ?? "";
-      const parsed = parseOrchestratorJsonWithReason(text);
+      const parsed = parseFindingsJson(text);
       const preview = text.length > 280 ? `${text.slice(0, 280)}...` : text;
 
       console.log(
         `[orchestrator] attempt=${attemptIndex + 1}/3 done steps=${generation.steps.length} finish=${JSON.stringify(generation.finishReason)} rawFinish=${JSON.stringify(generation.rawFinishReason)} warnings=${generation.warnings?.length ?? 0} textLen=${text.length} parseReason=${parsed.reason} preview=${JSON.stringify(preview)}`,
       );
 
-      if (parsed.output) {
+      if (parsed.findings) {
         console.log(
-          `[orchestrator] merge complete — ${parsed.output.findings.length} findings after dedup (attempt ${attemptIndex + 1})`,
+          `[orchestrator] merge complete — ${parsed.findings.length} findings after dedup (attempt ${attemptIndex + 1})`,
         );
-        return parsed.output;
+        return {
+          findings: parsed.findings,
+          agentSummaries: dedupedResults.map((r) => ({
+            agentId: r.agentId,
+            summary: r.summary,
+          })),
+        };
       }
     } catch (attemptError) {
       const errorName =
