@@ -87,6 +87,8 @@ export function createCopilotModel(
   const model =
     options?.model ?? modelId ?? process.env.COPILOT_MODEL ?? COPILOT_DEFAULT_MODEL;
 
+  console.log("[createCopilotModel] model:", model);
+
   return provider.chat(model) as unknown as LanguageModel;
 }
 
@@ -95,10 +97,11 @@ export function createReviewModel(
   options?: { apiKey?: string; baseURL?: string; model?: string; headers?: Record<string, string> },
 ): LanguageModel {
   const provider = process.env.REVIEW_PROVIDER ?? "copilot";
+  console.log("[createReviewModel] provider:", provider, "modelId:", modelId);
 
   if (provider === "opencode") {
     return createOpenCodeGoModel(modelId, options);
   }
 
-  return createCopilotModel(modelId, options);
+  return createCopilotModel(undefined, options);
 }
