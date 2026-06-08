@@ -138,12 +138,14 @@ export async function runPullRequestReview(
   }
 
   const modelName =
-    options.modelName ?? process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash";
+    options.modelName ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.6";
 
   const model = createOpenCodeGoModel(modelName);
 
   const agentModelOverrides: Record<string, LanguageModel> = {};
-  for (const [agentId, mName] of Object.entries(options.agentModelNames ?? {})) {
+  for (const [agentId, mName] of Object.entries(
+    options.agentModelNames ?? {},
+  )) {
     agentModelOverrides[agentId] = createOpenCodeGoModel(mName);
   }
 
