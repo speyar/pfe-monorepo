@@ -450,7 +450,7 @@ export default function PullDetailPage() {
                 <>
                   <FindingsSummaryBar findings={data.findings} />
                   <Separator />
-                  <Tabs defaultValue="severity">
+                  <Tabs defaultValue="all">
                     <TabsList>
                       <TabsTrigger value="all">
                         All <span className="text-xs text-muted-foreground">({data.findings.length})</span>
