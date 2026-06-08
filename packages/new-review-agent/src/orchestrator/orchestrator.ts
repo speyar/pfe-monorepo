@@ -1,4 +1,4 @@
-import { generateText, type LanguageModel } from "ai";
+import { streamText, type LanguageModel } from "ai";
 import { reviewResultSchema } from "../schema/review-result";
 import type { OrchestratorResult } from "../schema/review-result";
 import type { RunSubAgentOutput } from "../sub-agents/base";
@@ -126,24 +126,46 @@ export async function runOrchestrator(input: {
   );
 
   try {
-    const generation = await (generateText as any)({
+    const streamResp = streamText({
       model: input.model,
       system: ORCHESTRATOR_SYSTEM_PROMPT,
       prompt,
       abortSignal: input.signal,
     });
-    addUsageTelemetry((generation as { usage?: unknown }).usage);
 
-    const elapsed = Date.now() - attemptStart;
-    const text = generation.text ?? "";
-    const parsed = parseFindingsJson(text);
+    let fullText = "";
+    let chunkCount = 0;
+    const firstTokenWait = Date.now();
+    let ttfbMs = 0;
+
+    for await (const chunk of streamResp.textStream) {
+      if (chunkCount === 0) {
+        ttfbMs = Date.now() - firstTokenWait;
+        console.log(`[orchestrator] first token after ${ttfbMs}ms`);
+      }
+      fullText += chunk;
+      chunkCount++;
+    }
+
+    const totalMs = Date.now() - attemptStart;
+    const usage = await streamResp.usage;
+    const finishReason = await streamResp.finishReason;
+    addUsageTelemetry(usage);
 
     console.log(
-      `[orchestrator] done — ${elapsed}ms textLen=${text.length} steps=${generation.steps.length} finish=${JSON.stringify(generation.finishReason)} parseReason=${parsed.reason}`,
+      `[orchestrator] stream done — ${totalMs}ms ttfb=${ttfbMs}ms chunks=${chunkCount} textLen=${fullText.length} finish=${JSON.stringify(finishReason)}`,
     );
 
+    if (fullText.length > 0 && chunkCount > 0) {
+      const preview = fullText.length > 500 ? fullText.slice(0, 500) + "..." : fullText;
+      console.log(`[orchestrator] raw text preview:\n${preview}`);
+    }
+
+    const parsed = parseFindingsJson(fullText);
+    console.log(`[orchestrator] parseResult=${parsed.reason}`);
+
     if (parsed.findings) {
-      console.log(`[orchestrator] merge complete — ${parsed.findings.length} findings (${elapsed}ms)`);
+      console.log(`[orchestrator] merge complete — ${parsed.findings.length} findings (${totalMs}ms)`);
       return {
         findings: parsed.findings,
         agentSummaries: dedupedResults.map((r) => ({ agentId: r.agentId, summary: r.summary })),
