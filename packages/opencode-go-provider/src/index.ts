@@ -52,7 +52,7 @@ export function createOpenCodeGoModel(
 }
 
 const COPILOT_DEFAULT_BASE_URL = "https://api.githubcopilot.com";
-const COPILOT_DEFAULT_MODEL = "gpt-5.4-mini";
+const COPILOT_DEFAULT_MODEL = "gpt-5-mini";
 
 function createCopilotProvider(options?: { apiKey?: string; baseURL?: string; headers?: Record<string, string> }) {
   const apiKey =
