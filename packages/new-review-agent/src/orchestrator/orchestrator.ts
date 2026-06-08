@@ -141,7 +141,10 @@ export async function runOrchestrator(input: {
     for await (const chunk of streamResp.textStream) {
       if (chunkCount === 0) {
         ttfbMs = Date.now() - firstTokenWait;
-        console.log(`[orchestrator] first token after ${ttfbMs}ms`);
+        console.log(`[orchestrator] 🔴 ttfb=${ttfbMs}ms`);
+      }
+      if (chunk.length > 0) {
+        process.stdout.write(chunk);
       }
       fullText += chunk;
       chunkCount++;
@@ -153,13 +156,8 @@ export async function runOrchestrator(input: {
     addUsageTelemetry(usage);
 
     console.log(
-      `[orchestrator] stream done — ${totalMs}ms ttfb=${ttfbMs}ms chunks=${chunkCount} textLen=${fullText.length} finish=${JSON.stringify(finishReason)}`,
+      `\n[orchestrator] stream done — ${totalMs}ms ttfb=${ttfbMs}ms chunks=${chunkCount} textLen=${fullText.length} finish=${JSON.stringify(finishReason)}`,
     );
-
-    if (fullText.length > 0 && chunkCount > 0) {
-      const preview = fullText.length > 500 ? fullText.slice(0, 500) + "..." : fullText;
-      console.log(`[orchestrator] raw text preview:\n${preview}`);
-    }
 
     const parsed = parseFindingsJson(fullText);
     console.log(`[orchestrator] parseResult=${parsed.reason}`);
