@@ -1,4 +1,4 @@
-import { generateText, Output, stepCountIs, type LanguageModel } from "ai";
+import { generateText, stepCountIs, type LanguageModel } from "ai";
 import type { SandboxManager } from "@packages/sandbox";
 import { fixResultSchema } from "./schema/fix-result";
 import type { FixResult, ChangedFile } from "./schema/fix-result";
@@ -51,17 +51,37 @@ async function runCommand(
 }
 
 function parseJsonResponse(text: string): FixResult | null {
-  const cleaned = text.trim();
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    return null;
+  const cleaned = text
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  if (!cleaned) return null;
+
+  function tryParse(raw: string): unknown {
+    try { return JSON.parse(raw); } catch { return undefined; }
   }
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    return fixResultSchema.parse(parsed);
-  } catch {
-    return null;
+
+  function fixJson(raw: string): string {
+    return raw
+      .replace(/,\s*([}\]])/g, "$1")
+      .replace(/'/g, '"')
+      .replace(/(\w+):/g, '"$1":')
+      .replace(/\/\/.*$/gm, "");
   }
+
+  let parsed: unknown = tryParse(cleaned);
+  if (parsed === undefined) {
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    if (match) {
+      parsed = tryParse(match[0]) ?? tryParse(fixJson(match[0]));
+    }
+  }
+  if (parsed === undefined) return null;
+
+  const result = fixResultSchema.safeParse(parsed);
+  return result.success ? result.data : null;
 }
 
 export async function runMechanicAgent(
@@ -137,18 +157,30 @@ IMPORTANT SAFETY RULES:
 - Do NOT make changes outside the scope of the bug fix
 ${graphContextInfo}`;
 
+  const forceFinalizeStep = Math.max(minToolSteps + 1, maxSteps - 3);
+
+  const jsonSchemaHint = [
+    'Return ONLY valid JSON matching this schema and nothing else:',
+    '{"summary": "...", "rootCause": "...", "verificationPassed": true/false, "verificationNotes": "...", "filesChanged": [{"path": "...", "description": "..."}], "confident": true/false}',
+  ].join("\n");
+
   const generation = await generateText({
     model: options.model,
     system: systemPrompt,
     prompt: options.sentryContextPrompt,
     tools,
     stopWhen: stepCountIs(maxSteps),
-    output: Output.object({
-      schema: fixResultSchema,
-      name: "fix_result",
-      description: "Structured bug fix result.",
-    }),
     abortSignal: options.signal,
+    prepareStep: ({ stepNumber }) => {
+      if (stepNumber >= forceFinalizeStep) {
+        return {
+          toolChoice: "none",
+          activeTools: [],
+          system: `${systemPrompt}\n\nYou must now output ONLY valid JSON with NO surrounding text or markdown fences.\n${jsonSchemaHint}`,
+        };
+      }
+      return undefined;
+    },
     onStepFinish: (step) => {
       console.log(
         `[mechanic-agent] step ${step.stepNumber} finish=${step.finishReason} toolCalls=${step.toolCalls.length}`,
@@ -158,7 +190,13 @@ ${graphContextInfo}`;
 
   console.log("[mechanic-agent] fix generation completed");
 
-  const parsed = generation.output ?? parseJsonResponse(generation.text ?? "");
+  let finalText = "";
+  for (const step of generation.steps) {
+    if (step.text) finalText += step.text;
+  }
+  finalText = finalText || generation.text || "";
+
+  const parsed = parseJsonResponse(finalText);
   return parsed ?? {
     summary: "Agent failed to produce a valid fix result.",
     rootCause: "Unable to parse LLM output.",

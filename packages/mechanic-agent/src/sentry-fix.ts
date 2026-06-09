@@ -120,7 +120,7 @@ export async function runSentryFix(
   }
 
   const modelName =
-    options.modelName ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.6";
+    options.modelName ?? process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash";
 
   const model = createReviewModel(modelName);
 
