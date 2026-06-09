@@ -138,7 +138,7 @@ export async function runPullRequestReview(
   }
 
   const modelName =
-    options.modelName ?? process.env.OPENCODEGO_MODEL ?? "deepseek-v4-flash";
+    options.modelName ?? process.env.OPENCODEGO_MODEL ?? "kimi-k2.6";
 
   const model = createReviewModel(modelName);
 
@@ -149,7 +149,7 @@ export async function runPullRequestReview(
     agentModelOverrides[agentId] = createReviewModel(mName);
   }
   if (!agentModelOverrides["orchestrator"]) {
-    agentModelOverrides["orchestrator"] = createReviewModel("deepseek-v4-flash");
+    agentModelOverrides["orchestrator"] = createReviewModel("kimi-k2.6");
   }
 
   const providerOptions = {
